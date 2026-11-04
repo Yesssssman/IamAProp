@@ -1,4 +1,5 @@
 using Unity.Netcode;
+using Unity.Netcode.Components;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
@@ -8,11 +9,21 @@ public class TestController : NetworkBehaviour
 
     private Keyboard _keyboard;
 
+    [SerializeField] private Animator _animator;
+    [SerializeField] private Rigidbody _rb;
+
+    [SerializeField] private Transform _transform;
     private Vector3 _moveDir;
 
     private void Awake()
     {
         _keyboard = Keyboard.current;
+
+        _animator = GetComponent<Animator>();
+        _rb = GetComponent<Rigidbody>();
+        _transform = GetComponent<Transform>();
+
+
     }
 
     void Start()
@@ -23,55 +34,26 @@ public class TestController : NetworkBehaviour
  
     void Update()
     {
-        if (_keyboard.wKey.isPressed)
+        if(_keyboard.wKey.isPressed )
         {
-            Move();
-        }
+            // 자기 소유의 오브젝트가 아니면 RPC 호출 아예 원천 차단
+            if (!IsOwner) return;
 
-
-
-        if (_keyboard.pKey.wasPressedThisFrame)
-        {
-            if (IsClient) return;
-
-            StartHost();
-            print("Host : " + IsHost);
-        }
-
-        if (_keyboard.oKey.wasPressedThisFrame)
-        {
-            if (IsHost) return;
-
-            StartClient();
-            print("Client : " + IsClient);
+            MoveServerRpc();
         }
     }
 
-    void StartHost()
-    {
-        NetworkManager.Singleton.StartHost();
 
-        ulong myLocalClientId = NetworkManager.Singleton.LocalClientId;
-        print($"내 로컬 ClientId: {myLocalClientId}");
-    }
-
-    void StartClient()
-    {
-        NetworkManager.Singleton.StartClient();
-        ulong myLocalClientId = NetworkManager.Singleton.LocalClientId;
-        print($"내 로컬 ClientId: {myLocalClientId}");
-    }
-
-
-    void Move()
-    {
-        if (_keyboard.wKey.isPressed)
-        {
-            _moveDir += Vector3.forward;
-        }
-    }
 
     [ServerRpc]
+    void MoveServerRpc()
+    {
+            transform.Translate(Vector3.forward * 1f * Time.deltaTime);
+            _animator.SetFloat("MoveX",1f);
+        
+    }
+
+    [Rpc(SendTo.ClientsAndHost)]
     void MoveServerRpc(Vector3 moveDir)
     {
         
