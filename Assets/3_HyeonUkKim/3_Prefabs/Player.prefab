@@ -241,10 +241,10 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 0.16
+  m_Radius: 0.04
   m_Height: 0.58
   m_Direction: 1
-  m_Center: {x: 0, y: 0.27, z: 0}
+  m_Center: {x: 0, y: 0.3, z: -0.05}
 --- !u!95 &1318769562746983641
 Animator:
   serializedVersion: 7
@@ -290,6 +290,10 @@ MonoBehaviour:
       NameHash: 675470966
       Synchronize: 1
       ParameterType: 1
+    - name: isAttack
+      NameHash: -2035800095
+      Synchronize: 1
+      ParameterType: 4
   AnimatorParametersExpanded: 0
 --- !u!114 &3927385308437247932
 MonoBehaviour:
@@ -306,5 +310,4 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   moveSpeed: 5
   rotationSmoothTime: 0.1
-  gravity: -9.81
   cameraTransform: {fileID: 0}
