@@ -1,2 +1,14 @@
 fileFormatVersion: 2
 guid: 429fda2cb638a1c49a08bb486dcd4ac9
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - _spawnPos: {instanceID: 0}
+  - _spawnPreFab: {fileID: 754652342871467732, guid: 1771b1cb01e39ff428fd18c001d6b1ba, type: 3}
+  - _cineCam: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

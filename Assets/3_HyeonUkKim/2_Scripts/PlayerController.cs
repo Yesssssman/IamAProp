@@ -127,7 +127,7 @@ public class PlayerController : NetworkBehaviour
     {
         Vector3 direction = new Vector3(moveInput.x, 0f, moveInput.y).normalized;
 
-        if (direction.magnitude >= 0.1f)
+        if (direction.magnitude >= 0.5f)
         {
             // 클라이언트 측에서 목표 각도만 계산
             float targetAngle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg + cameraTransform.eulerAngles.y;
