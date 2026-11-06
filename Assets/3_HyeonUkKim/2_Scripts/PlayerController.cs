@@ -1,7 +1,12 @@
+using System;
 using Unity.Cinemachine;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
+
+enum EWeaponType {Hide =0, KnifeMode = 1, Pistol = 2, Ak = 3 }
+
+public enum EPlayerState { Idle, Attack, Air, Die }
 
 public class PlayerController : NetworkBehaviour
 {
@@ -9,8 +14,22 @@ public class PlayerController : NetworkBehaviour
     [SerializeField] private float moveSpeed = 5.0f;
     [SerializeField] private float rotationSmoothTime = 0.1f;
 
+    [SerializeField] private float _JumpForce = 5f;
+
+
     [Header("참조")]
     [SerializeField] private Transform cameraTransform;
+
+    [Header("바닥 체크")]
+    [SerializeField] private Transform groundCheck; // 발밑에 빈 GameObject 배치 후 연결
+    [SerializeField] private float checkRadius = 0.2f;
+    [SerializeField] private LayerMask groundLayer;  // 바닥 오브젝트들의 Layer
+
+    [Header("애니메이터 오버라이드")]
+    [SerializeField] private RuntimeAnimatorController[] weaponAnimControllers;
+
+    public bool _wasGrounded; // 이전 프레임의 땅 접촉여부
+    public bool _isGrounded; // 현재 프레임의 땅 접촉여부
 
     private PlayerControls inputActions; // 입력 액션
 
@@ -21,13 +40,26 @@ public class PlayerController : NetworkBehaviour
     private Vector3 verticalVelocity; 
     private float turnSmoothVelocity;
 
+    private EWeaponType _EweaponType;
+
+    private EPlayerState _EplayerState;
+
+    /*
+     Animator 변수
+     */
     private static readonly int MoveX = Animator.StringToHash("MoveX");
     private static readonly int isAttack = Animator.StringToHash("isAttack");
+    private static readonly int isAir = Animator.StringToHash("isAir");
+
+    private static readonly int _weaponMode = Animator.StringToHash("WeaponMode");
 
     private void Awake()
     {
         _rb = GetComponent<Rigidbody>();
         _animator = GetComponent<Animator>();
+        _EweaponType = EWeaponType.Hide;
+        _EplayerState = EPlayerState.Idle;
+
     }
 
     // 네트워크 상에서 오브젝트가 스폰될 때 호출 (Awake/Start 대체)
@@ -36,14 +68,18 @@ public class PlayerController : NetworkBehaviour
         // 플레이어 통제권 여부 검사
         if(IsOwner)
         {
+            // 키 이벤트 등록
             inputActions = new PlayerControls();
             inputActions.Enable();
             inputActions.Player.Move.performed += OnMovePerformed;
             inputActions.Player.Move.canceled += OnMoveCanceled;
 
-            inputActions.Player.Attack.started += OnAttack;
+            inputActions.Player.Attack.started += OnAttackStarted;
             inputActions.Player.Attack.canceled += OnAttackEnd;
 
+            inputActions.Player.Jump.started += OnJump;
+
+            inputActions.Player.ChgWeapon.started += ChangeWeaponMode;
 
             CinemachineCamera cam = FindAnyObjectByType<CinemachineCamera>();
             if (cam != null)
@@ -93,7 +129,18 @@ public class PlayerController : NetworkBehaviour
     {
         // 내 캐릭터가 아니면 early Exit;
         if (!IsOwner) return;
-        
+
+        // 바닥 체크
+        _isGrounded = Physics.CheckSphere(groundCheck.position, checkRadius, groundLayer);
+        // 착지 순간 판정 (이전엔 공중이었는데 지금은 땅일때)
+        if(!_wasGrounded && _isGrounded )
+        {
+            print("땅 착지!");
+            OnJumpEnd(); // 땅에 닿을 떄 구독된 이벤트 함수들 호출
+        }
+
+        _wasGrounded = _isGrounded;
+
         HandleMovement();
     }
 
@@ -109,7 +156,28 @@ public class PlayerController : NetworkBehaviour
         moveInput = Vector2.zero;
     }
 
-    void OnAttack(InputAction.CallbackContext context)
+    void OnJump(InputAction.CallbackContext context)
+    {
+        // 내 캐릭터가 아니면 early Exit;
+        if (!IsOwner) return;
+        // 공중에서 점프 불가능하게 처리
+        if (!_isGrounded) return;
+
+        // 서버에 점프 RPC 요청
+        HandleJumpRpc();
+        print("OnJump");
+    }
+
+    void OnJumpEnd()
+    {
+        // 여전히 공중이라면 return
+        if (!_isGrounded) return;
+        // 서버에 점프END RPC 요청
+        HandleJumpEndRpc();
+        print("OnJumpEnd");
+    }
+
+    void OnAttackStarted(InputAction.CallbackContext context)
     {
         if (!IsOwner) return;
         HandleAttackRpc();
@@ -142,6 +210,36 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
+    private void ChangeWeaponMode(InputAction.CallbackContext context)
+    {
+        float weaponType = context.ReadValue<float>();
+        _EweaponType = (EWeaponType)(int)weaponType;
+
+        ChangeWeaponModeRpc();
+    }
+
+    [Rpc(SendTo.Server, Delivery = RpcDelivery.Unreliable)]
+    void ChangeWeaponModeRpc()
+    {
+        if (weaponAnimControllers[(int)_EweaponType] != null)
+        {
+            _animator.runtimeAnimatorController = weaponAnimControllers[(int)_EweaponType];
+        }
+    }
+
+    // 에디터 씬 뷰에서 체크 반경 시각화
+    private void OnDrawGizmosSelected()
+    {
+        if (groundCheck == null) return;
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(groundCheck.position, checkRadius);
+    }
+
+    /*
+    RPC 함수 목록
+    RPC는 무조건 서버에서 실행되어지는 함수    
+    */
+
     // 이동 RPC 함수
     [Rpc(SendTo.Server,Delivery = RpcDelivery.Unreliable)]
     void HandleMovementRpc(float targetAngle)
@@ -158,12 +256,28 @@ public class PlayerController : NetworkBehaviour
         _animator.SetFloat(MoveX, 1f);
     }
 
+    // 점프 RPC 함수
+    [Rpc(SendTo.Server,Delivery =RpcDelivery.Unreliable)]
+    void HandleJumpRpc()
+    {
+        _rb.AddForce(Vector3.up * _JumpForce, ForceMode.Impulse);
+        _animator.SetBool(isAir, true);
+    }
+    // 점프 END RPC 함수
+    [Rpc(SendTo.Server,Delivery =RpcDelivery.Unreliable)]
+    void HandleJumpEndRpc()
+    {
+        _animator.SetBool(isAir, false);
+    }
+
+    // 이동 정지 RPC 함수
     [Rpc(SendTo.Server, Delivery = RpcDelivery.Unreliable)]
     void HandleMoveStopRpc()
     {
         _animator.SetFloat(MoveX, 0f);
     }
 
+    // 공격 RPC 함수
     [Rpc(SendTo.Server, Delivery = RpcDelivery.Unreliable)]
     void HandleAttackRpc()
     {
@@ -171,6 +285,7 @@ public class PlayerController : NetworkBehaviour
         _animator.SetBool(isAttack, true);
     }
 
+    // 공격 END RPC 함수
     [Rpc(SendTo.Server, Delivery = RpcDelivery.Unreliable)]
     void HandleAttackEndRpc()
     {
