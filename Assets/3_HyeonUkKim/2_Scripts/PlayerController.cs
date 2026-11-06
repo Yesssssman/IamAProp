@@ -127,7 +127,8 @@ public class PlayerController : NetworkBehaviour
     {
         Vector3 direction = new Vector3(moveInput.x, 0f, moveInput.y).normalized;
 
-        if (direction.magnitude >= 0.5f)
+        // 이동값이 0.1f 이상일떄만 RPC 호출
+        if (direction.magnitude >= 0.1f)
         {
             // 클라이언트 측에서 목표 각도만 계산
             float targetAngle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg + cameraTransform.eulerAngles.y;
@@ -141,7 +142,7 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
-    // 이동
+    // 이동 RPC 함수
     [Rpc(SendTo.Server,Delivery = RpcDelivery.Unreliable)]
     void HandleMovementRpc(float targetAngle)
     {
