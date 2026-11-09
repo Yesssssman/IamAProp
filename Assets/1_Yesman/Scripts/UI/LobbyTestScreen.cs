@@ -83,6 +83,19 @@ namespace UI
             UpdateButtons();
         }
 
+        private async void Start()
+        {
+            // 인게임에서 돌아온 경우: 방장이 게임을 끝냈으면 대기실, 방을 나왔으면 방 목록
+            if (LobbyManager.CurrentLobby != null)
+            {
+                AddChatLine("Game ended. Back to " + LobbyManager.CurrentLobby.lobbyName);
+            }
+            else
+            {
+                await RefreshLobbyList();
+            }
+        }
+
         private void OnDestroy()
         {
             LobbyManager.MemberJoined -= HandleMemberJoined;
