@@ -3,20 +3,24 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
-// Unity's Humanoid auto-mapper picks the top-most bone that has the spine and both
-// legs under it as "Hips". Our rigs have an extra "root" bone above Hips, so it maps
-// Hips=root and the avatar fails ("Required human bone ... not found").
-// This maps human bones by name instead, on every (re)import of a model in Folder.
-// It needs one extra reimport: the skeleton pose is only known after the first import.
+/// <summary>
+/// <see cref="Folder"/> 안의 모델을 (재)임포트할 때마다 휴먼 본을 이름으로 매핑한다.
+///
+/// Unity의 Humanoid 자동 매핑은 척추와 양쪽 다리를 모두 자식으로 가진 가장 위쪽 본을 "Hips"로 고른다.
+/// 우리 리그는 Hips 위에 "root" 본이 하나 더 있어서 Hips=root로 매핑되고 아바타 생성이 실패한다
+/// ("Required human bone ... not found").
+/// 스켈레톤 포즈는 첫 임포트가 끝나야 알 수 있으므로 재임포트가 한 번 더 필요하다.
+/// </summary>
 public class HumanoidAutoMap : AssetPostprocessor
 {
+    /// <summary>처리할 모델이 있는 폴더 (프로젝트 기준 경로).</summary>
     const string Folder = "Assets/1_Yesman/Models/";
 
     public override uint GetVersion() { return 1; }
 
-    // Run after ResetToBindPose so the stored skeleton is the bind (T-)pose.
-    public override int GetPostprocessOrder() { return 100; }
+    public override int GetPostprocessOrder() { return 100; } // ResetToBindPose (0) 이후
 
+    /// <summary>이름으로 만든 휴먼 본 매핑이 임포터의 현재 매핑과 다르면 <see cref="Pending"/>에 넣는다.</summary>
     void OnPostprocessModel(GameObject root)
     {
         if (!assetPath.StartsWith(Folder)) return;
@@ -25,7 +29,7 @@ public class HumanoidAutoMap : AssetPostprocessor
         if (importer.avatarSetup != ModelImporterAvatarSetup.CreateFromThisModel) return;
 
         var human = BuildHumanMap(root.transform);
-        if (human.Count == 0) return; // not one of our named rigs; leave it to Unity
+        if (human.Count == 0) return; // 우리 이름 규칙의 리그가 아니면 Unity에 맡긴다
 
         var current = importer.humanDescription;
         bool sameMap = current.human != null && current.skeleton != null && current.skeleton.Length > 0
@@ -41,13 +45,17 @@ public class HumanoidAutoMap : AssetPostprocessor
             scale = t.localScale,
         }).ToArray();
 
-        // Importer settings can't be changed mid-import; apply them once the import finishes.
         Pending[assetPath] = (human.ToArray(), skeleton);
     }
 
+    /// <summary>
+    /// 임포트가 끝난 뒤 임포터에 적용할 휴먼 본 매핑과 스켈레톤 (키: 에셋 경로).
+    /// 임포트 도중에는 임포터 설정을 바꿀 수 없다.
+    /// </summary>
     static readonly Dictionary<string, (HumanBone[] human, SkeletonBone[] skeleton)> Pending =
         new Dictionary<string, (HumanBone[], SkeletonBone[])>();
 
+    /// <summary><see cref="Pending"/>의 매핑을 임포터에 저장하고 다시 임포트한다.</summary>
     static void OnPostprocessAllAssets(string[] imported, string[] deleted, string[] moved, string[] movedFrom)
     {
         if (Pending.Count == 0) return;
@@ -66,13 +74,15 @@ public class HumanoidAutoMap : AssetPostprocessor
         }
     }
 
+    /// <summary>본 이름으로 휴먼 본 매핑을 만든다.</summary>
+    /// <returns>필수 휴먼 본을 모두 찾았으면 매핑 목록, 하나라도 없으면 빈 목록.</returns>
     static List<HumanBone> BuildHumanMap(Transform root)
     {
-        // "Left Thumb Proximal" -> "LeftThumbProximal", "LeftUpperLeg" -> "LeftUpperLeg", ...
+        // 공백을 뺀 휴먼 본 이름으로 찾는다 ("Left Thumb Proximal" -> "LeftThumbProximal")
         var byName = new Dictionary<string, string>();
         foreach (var h in HumanTrait.BoneName) byName[h.Replace(" ", "")] = h;
 
-        // Rig-specific aliases: 3-segment Thumb and Mitten (mapped to Index) fingers.
+        // 리그 전용 별칭: 3마디 Thumb, Index로 매핑하는 Mitten
         string[] seg = { "Proximal", "Intermediate", "Distal" };
         foreach (var side in new[] { "Left", "Right" })
             for (int i = 0; i < 3; i++)
@@ -89,7 +99,6 @@ public class HumanoidAutoMap : AssetPostprocessor
             result.Add(new HumanBone { humanName = humanName, boneName = t.name, limit = new HumanLimit { useDefaultValues = true } });
         }
 
-        // Only take over when every required bone was found by name.
         var required = Enumerable.Range(0, HumanTrait.BoneCount).Where(HumanTrait.RequiredBone).Select(i => HumanTrait.BoneName[i]);
         return required.All(used.Contains) ? result : new List<HumanBone>();
     }
