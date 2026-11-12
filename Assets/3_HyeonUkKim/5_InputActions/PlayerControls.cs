@@ -136,10 +136,20 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""name"": ""ChgWeapon"",
                     ""type"": ""Value"",
                     ""id"": ""600c005d-ea78-41ff-a7fe-674f3d77c530"",
-                    ""expectedControlType"": ""Integer"",
+                    ""expectedControlType"": ""Axis"",
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": true,
+                    ""priority"": 0
+                },
+                {
+                    ""name"": ""ChangeView"",
+                    ""type"": ""Button"",
+                    ""id"": ""1410d73c-7dc7-4445-a859-ee9bef0b8373"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false,
                     ""priority"": 0
                 }
             ],
@@ -215,7 +225,7 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""id"": ""40e0816e-a583-4560-889f-c7890a4e57a3"",
                     ""path"": ""<Pointer>/delta"",
                     ""interactions"": """",
-                    ""processors"": ""InvertVector2(invertX=false),ScaleVector2(x=0.5,y=0.5)"",
+                    ""processors"": ""InvertVector2(invertX=false),ScaleVector2(x=50,y=50)"",
                     ""groups"": """",
                     ""action"": ""Look"",
                     ""isComposite"": false,
@@ -248,7 +258,7 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""id"": ""a935495d-e1ee-4e5a-8c5f-c118513bcb81"",
                     ""path"": ""<Keyboard>/1"",
                     ""interactions"": """",
-                    ""processors"": ""Scale"",
+                    ""processors"": ""Scale(factor=0)"",
                     ""groups"": """",
                     ""action"": ""ChgWeapon"",
                     ""isComposite"": false,
@@ -259,9 +269,42 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""id"": ""5ec3b289-e135-46ff-8b99-1bb714129577"",
                     ""path"": ""<Keyboard>/2"",
                     ""interactions"": """",
+                    ""processors"": ""Scale"",
+                    ""groups"": """",
+                    ""action"": ""ChgWeapon"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""1d0a3a94-a077-41d1-98dc-77e0b876aa46"",
+                    ""path"": ""<Keyboard>/3"",
+                    ""interactions"": """",
                     ""processors"": ""Scale(factor=2)"",
                     ""groups"": """",
                     ""action"": ""ChgWeapon"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""7223a33b-ec55-42c5-a83c-8bd1db8f087c"",
+                    ""path"": ""<Keyboard>/4"",
+                    ""interactions"": """",
+                    ""processors"": ""Scale(factor=3)"",
+                    ""groups"": """",
+                    ""action"": ""ChgWeapon"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""b10563e7-f4a1-4068-a727-96fa2e973cc7"",
+                    ""path"": ""<Keyboard>/v"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""ChangeView"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 }
@@ -277,6 +320,7 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         m_Player_Attack = m_Player.FindAction("Attack", throwIfNotFound: true);
         m_Player_Jump = m_Player.FindAction("Jump", throwIfNotFound: true);
         m_Player_ChgWeapon = m_Player.FindAction("ChgWeapon", throwIfNotFound: true);
+        m_Player_ChangeView = m_Player.FindAction("ChangeView", throwIfNotFound: true);
     }
 
     ~@PlayerControls()
@@ -362,6 +406,7 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
     private readonly InputAction m_Player_Attack;
     private readonly InputAction m_Player_Jump;
     private readonly InputAction m_Player_ChgWeapon;
+    private readonly InputAction m_Player_ChangeView;
     /// <summary>
     /// Provides access to input actions defined in input action map "Player".
     /// </summary>
@@ -393,6 +438,10 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         /// Provides access to the underlying input action "Player/ChgWeapon".
         /// </summary>
         public InputAction @ChgWeapon => m_Wrapper.m_Player_ChgWeapon;
+        /// <summary>
+        /// Provides access to the underlying input action "Player/ChangeView".
+        /// </summary>
+        public InputAction @ChangeView => m_Wrapper.m_Player_ChangeView;
         /// <summary>
         /// Provides access to the underlying input action map instance.
         /// </summary>
@@ -434,6 +483,9 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
             @ChgWeapon.started += instance.OnChgWeapon;
             @ChgWeapon.performed += instance.OnChgWeapon;
             @ChgWeapon.canceled += instance.OnChgWeapon;
+            @ChangeView.started += instance.OnChangeView;
+            @ChangeView.performed += instance.OnChangeView;
+            @ChangeView.canceled += instance.OnChangeView;
         }
 
         /// <summary>
@@ -460,6 +512,9 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
             @ChgWeapon.started -= instance.OnChgWeapon;
             @ChgWeapon.performed -= instance.OnChgWeapon;
             @ChgWeapon.canceled -= instance.OnChgWeapon;
+            @ChangeView.started -= instance.OnChangeView;
+            @ChangeView.performed -= instance.OnChangeView;
+            @ChangeView.canceled -= instance.OnChangeView;
         }
 
         /// <summary>
@@ -535,5 +590,12 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnChgWeapon(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "ChangeView" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnChangeView(InputAction.CallbackContext context);
     }
 }

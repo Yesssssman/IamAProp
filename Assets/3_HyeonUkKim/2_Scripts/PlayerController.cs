@@ -4,7 +4,7 @@ using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-enum EWeaponType {Hide =0, KnifeMode = 1, Pistol = 2, Ak = 3 }
+enum EWeaponType { Hide = 0, KnifeMode = 1, Pistol = 2, Ak = 3 }
 
 public enum EPlayerState { Idle, Attack, Air, Die }
 
@@ -21,9 +21,9 @@ public class PlayerController : NetworkBehaviour
     [SerializeField] private Transform cameraTransform;
 
     [Header("바닥 체크")]
-    [SerializeField] private Transform groundCheck; // 발밑에 빈 GameObject 배치 후 연결
+    [SerializeField] private Transform _groundCheck; // 발밑에 빈 GameObject 배치 후 연결
     [SerializeField] private float checkRadius = 0.2f;
-    [SerializeField] private LayerMask groundLayer;  // 바닥 오브젝트들의 Layer
+    [SerializeField] private LayerMask _groundLayer;  // 바닥 오브젝트들의 Layer
 
     [Header("애니메이터 오버라이드")]
     [SerializeField] private RuntimeAnimatorController[] weaponAnimControllers;
@@ -31,13 +31,12 @@ public class PlayerController : NetworkBehaviour
     public bool _wasGrounded; // 이전 프레임의 땅 접촉여부
     public bool _isGrounded; // 현재 프레임의 땅 접촉여부
 
-    private PlayerControls inputActions; // 입력 액션
+    private PlayerControls _inputActions; // 입력 액션
 
     private Rigidbody _rb;
-
     private Animator _animator;
     private Vector2 moveInput; // 현재 이동값
-    private Vector3 verticalVelocity; 
+    private Vector3 verticalVelocity;
     private float turnSmoothVelocity;
 
     private EWeaponType _EweaponType;
@@ -50,8 +49,9 @@ public class PlayerController : NetworkBehaviour
     private static readonly int MoveX = Animator.StringToHash("MoveX");
     private static readonly int isAttack = Animator.StringToHash("isAttack");
     private static readonly int isAir = Animator.StringToHash("isAir");
-
     private static readonly int _weaponMode = Animator.StringToHash("WeaponMode");
+    private static readonly int _isJumped = Animator.StringToHash("isJumped");
+
 
     private void Awake()
     {
@@ -59,27 +59,27 @@ public class PlayerController : NetworkBehaviour
         _animator = GetComponent<Animator>();
         _EweaponType = EWeaponType.Hide;
         _EplayerState = EPlayerState.Idle;
-
+        _groundCheck = transform.Find("GroundCheck");
     }
 
     // 네트워크 상에서 오브젝트가 스폰될 때 호출 (Awake/Start 대체)
     public override void OnNetworkSpawn()
     {
         // 플레이어 통제권 여부 검사
-        if(IsOwner)
+        if (IsOwner)
         {
             // 키 이벤트 등록
-            inputActions = new PlayerControls();
-            inputActions.Enable();
-            inputActions.Player.Move.performed += OnMovePerformed;
-            inputActions.Player.Move.canceled += OnMoveCanceled;
+            _inputActions = new PlayerControls();
+            _inputActions.Enable();
+            _inputActions.Player.Move.performed += OnMovePerformed;
+            _inputActions.Player.Move.canceled += OnMoveCanceled;
 
-            inputActions.Player.Attack.started += OnAttackStarted;
-            inputActions.Player.Attack.canceled += OnAttackEnd;
+            _inputActions.Player.Attack.started += OnAttackStarted;
+            _inputActions.Player.Attack.canceled += OnAttackEnd;
 
-            inputActions.Player.Jump.started += OnJump;
+            _inputActions.Player.Jump.started += OnJump;
 
-            inputActions.Player.ChgWeapon.started += ChangeWeaponMode;
+            _inputActions.Player.ChgWeapon.started += ChangeWeaponMode;
 
             CinemachineCamera cam = FindAnyObjectByType<CinemachineCamera>();
             if (cam != null)
@@ -108,9 +108,9 @@ public class PlayerController : NetworkBehaviour
     // 오브젝트가 파괴되거나 디스폰될 때 구독 해제
     public override void OnNetworkDespawn()
     {
-        if (IsOwner && inputActions != null)
+        if (IsOwner && _inputActions != null)
         {
-            inputActions.Player.Disable();
+            _inputActions.Player.Disable();
         }
     }
 
@@ -122,18 +122,17 @@ public class PlayerController : NetworkBehaviour
 
     void Update()
     {
-        
+
     }
 
     private void FixedUpdate()
     {
         // 내 캐릭터가 아니면 early Exit;
         if (!IsOwner) return;
-
         // 바닥 체크
-        _isGrounded = Physics.CheckSphere(groundCheck.position, checkRadius, groundLayer);
+        _isGrounded = Physics.CheckSphere(_groundCheck.position, checkRadius, _groundLayer);
         // 착지 순간 판정 (이전엔 공중이었는데 지금은 땅일때)
-        if(!_wasGrounded && _isGrounded )
+        if (!_wasGrounded && _isGrounded)
         {
             print("땅 착지!");
             OnJumpEnd(); // 땅에 닿을 떄 구독된 이벤트 함수들 호출
@@ -230,9 +229,9 @@ public class PlayerController : NetworkBehaviour
     // 에디터 씬 뷰에서 체크 반경 시각화
     private void OnDrawGizmosSelected()
     {
-        if (groundCheck == null) return;
+        if (_groundCheck == null) return;
         Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(groundCheck.position, checkRadius);
+        Gizmos.DrawWireSphere(_groundCheck.position, checkRadius);
     }
 
     /*
@@ -241,7 +240,7 @@ public class PlayerController : NetworkBehaviour
     */
 
     // 이동 RPC 함수
-    [Rpc(SendTo.Server,Delivery = RpcDelivery.Unreliable)]
+    [Rpc(SendTo.Server, Delivery = RpcDelivery.Unreliable)]
     void HandleMovementRpc(float targetAngle)
     {
         // 서버의 현재 Rigidbody 각도를 기준으로 부드러운 회전
@@ -257,17 +256,19 @@ public class PlayerController : NetworkBehaviour
     }
 
     // 점프 RPC 함수
-    [Rpc(SendTo.Server,Delivery =RpcDelivery.Unreliable)]
+    [Rpc(SendTo.Server, Delivery = RpcDelivery.Unreliable)]
     void HandleJumpRpc()
     {
         _rb.AddForce(Vector3.up * _JumpForce, ForceMode.Impulse);
         _animator.SetBool(isAir, true);
+        _animator.SetBool(_isJumped, true);
     }
     // 점프 END RPC 함수
-    [Rpc(SendTo.Server,Delivery =RpcDelivery.Unreliable)]
+    [Rpc(SendTo.Server, Delivery = RpcDelivery.Unreliable)]
     void HandleJumpEndRpc()
     {
         _animator.SetBool(isAir, false);
+        _animator.SetBool(_isJumped, false);
     }
 
     // 이동 정지 RPC 함수

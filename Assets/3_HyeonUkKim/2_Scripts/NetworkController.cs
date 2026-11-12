@@ -13,30 +13,29 @@ using Unity.Services.Relay.Models;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-public class NetworkTestController : NetworkBehaviour
+public class NetworkController : NetworkBehaviour
 {
     private Keyboard _keyboard;
-    private const int MAX_CONNECTIONS = 6; 
+    private const int MAX_CONNECTIONS = 6;
 
-    
+
 
     private string DedicatedServerEndPoint;
     private string HostServerEndPoint;
 
 
-    [SerializeField] private string testJoinCode;
+    [SerializeField] private string JoinCode;
     [SerializeField] private Transform _spawnPos;
     [SerializeField] private GameObject _spawnPreFab;
 
-    
+
 
 
     private void Awake()
     {
         _keyboard = Keyboard.current;
-        
     }
-    
+
     private async void Start()
     {
         await UnityServices.InitializeAsync();
@@ -137,7 +136,7 @@ public class NetworkTestController : NetworkBehaviour
         // p키 누르면 호스트 시작
         if (_keyboard.pKey.wasPressedThisFrame)
         {
-            Task<string> result = StartHostWithRelay(maxConnections:MAX_CONNECTIONS);
+            Task<string> result = StartHostWithRelay(maxConnections: MAX_CONNECTIONS);
 
             //PlayerSpawn();
             print(result);
@@ -146,7 +145,7 @@ public class NetworkTestController : NetworkBehaviour
         // o키 누르면 클라이언트 시작 (testJoinCode 세팅 필요)
         if (_keyboard.oKey.wasPressedThisFrame)
         {
-            JoinClientWithRelay(testJoinCode);
+            JoinClientWithRelay(JoinCode);
         }
 
         // 연결 종료

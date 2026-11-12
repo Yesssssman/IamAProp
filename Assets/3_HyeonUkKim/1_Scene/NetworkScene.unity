@@ -185,7 +185,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: -3531755143040495288, guid: a0afc4c4c02bd8840ad5aa29aa0897bb, type: 3}
+  - {fileID: -876546973899608171, guid: a2407126e3372f64cacb75ed466a5621, type: 3}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -228,81 +228,6 @@ Transform:
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 10, y: 10, z: 10}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &75527703
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 75527705}
-  - component: {fileID: 75527704}
-  m_Layer: 0
-  m_Name: FPSCineCamera
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &75527704
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 75527703}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f9dfa5b682dcd46bda6128250e975f58, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Unity.Cinemachine::Unity.Cinemachine.CinemachineCamera
-  Priority:
-    Enabled: 1
-    m_Value: 0
-  OutputChannel: 1
-  StandbyUpdate: 2
-  m_StreamingVersion: 20241001
-  m_LegacyPriority: 0
-  Target:
-    TrackingTarget: {fileID: 0}
-    LookAtTarget: {fileID: 0}
-    CustomLookAtTarget: 0
-  Lens:
-    FieldOfView: 61.999996
-    OrthographicSize: 10
-    NearClipPlane: 0.1
-    FarClipPlane: 5000
-    Dutch: 0
-    ModeOverride: 0
-    PhysicalProperties:
-      GateFit: 2
-      SensorSize: {x: 21.946, y: 16.002}
-      LensShift: {x: 0, y: 0}
-      FocusDistance: 10
-      Iso: 200
-      ShutterSpeed: 0.005
-      Aperture: 16
-      BladeCount: 5
-      Curvature: {x: 2, y: 11}
-      BarrelClipping: 0.25
-      Anamorphism: 0
-  BlendHint: 0
---- !u!4 &75527705
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 75527703}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0.18283668, y: 0.7023553, z: -0.19461651, w: -0.6598426}
-  m_LocalPosition: {x: 17.854027, y: 9.992788, z: -2.7010145}
-  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -553,7 +478,7 @@ GameObject:
   - component: {fileID: 524514070}
   - component: {fileID: 524514072}
   m_Layer: 0
-  m_Name: testConnect
+  m_Name: GameManager
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -587,7 +512,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkTestController
   ShowTopMostFoldoutHeaderGroup: 1
-  testJoinCode: 
+  JoinCode: 
   _spawnPos: {fileID: 1431756741}
   _spawnPreFab: {fileID: 754652342871467732, guid: 1771b1cb01e39ff428fd18c001d6b1ba, type: 3}
 --- !u!114 &524514071
@@ -629,7 +554,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9e9878d9a38648a49b3f371d61cdf790, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DynamicSpawner
-  playerPrefab: {fileID: 5655309208562026874, guid: dfcf4ef65b8cd874fbc63dee4692ff64, type: 3}
+  playerPrefab: {fileID: 3957024930634641414, guid: 25d3a66e4f93a41a4992585ebd96909d, type: 3}
 --- !u!1 &1260776925
 GameObject:
   m_ObjectHideFlags: 0
@@ -717,8 +642,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1260776925}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.02817966, y: -0.96054953, z: 0.105904415, w: -0.25560677}
-  m_LocalPosition: {x: -0.8379989, y: 2.494, z: 2.0980003}
+  m_LocalRotation: {x: -0.1483438, y: -0.33835024, z: -0.054105174, w: 0.9276777}
+  m_LocalPosition: {x: -9.478311, y: 0.46141163, z: 3.296496}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -954,7 +879,8 @@ GameObject:
   - component: {fileID: 1729122832}
   - component: {fileID: 1729122831}
   - component: {fileID: 1729122835}
-  - component: {fileID: 1729122834}
+  - component: {fileID: 1729122836}
+  - component: {fileID: 1729122837}
   - component: {fileID: 1729122833}
   m_Layer: 0
   m_Name: TPSCineCamera
@@ -1014,8 +940,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1729122830}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.02817966, y: -0.96054953, z: 0.105904415, w: -0.25560677}
-  m_LocalPosition: {x: -0.838, y: 2.494, z: 2.098}
+  m_LocalRotation: {x: -0.1483438, y: -0.33835024, z: -0.054105148, w: 0.9276777}
+  m_LocalPosition: {x: -9.478311, y: 0.46141163, z: 3.296496}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1073,19 +999,6 @@ MonoBehaviour:
         DecelTime: 0
   PlayerIndex: -1
   AutoEnableInputs: 1
---- !u!114 &1729122834
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1729122830}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1e8b78ac948f05a46a6d8339a503172b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Unity.Cinemachine::Unity.Cinemachine.CinemachineHardLookAt
-  LookAtOffset: {x: 0, y: 0.5, z: -0.4}
 --- !u!114 &1729122835
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1098,7 +1011,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3b5d7c088409d9a40b7b09aa707777f8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Cinemachine::Unity.Cinemachine.CinemachineOrbitalFollow
-  TargetOffset: {x: 0, y: 0, z: 0}
+  TargetOffset: {x: 0.24, y: -0.54, z: 0}
   TrackerSettings:
     BindingMode: 4
     PositionDamping: {x: 0, y: 0, z: 0}
@@ -1106,7 +1019,7 @@ MonoBehaviour:
     RotationDamping: {x: 1, y: 1, z: 1}
     QuaternionDamping: 1
   OrbitStyle: 0
-  Radius: 5
+  Radius: 2.5
   Orbits:
     Top:
       Radius: 2
@@ -1131,8 +1044,8 @@ MonoBehaviour:
     Restrictions: 0
   VerticalAxis:
     Value: 17.5
-    Center: 17.5
-    Range: {x: -10, y: 45}
+    Center: 30
+    Range: {x: -10, y: 70}
     Wrap: 0
     Recentering:
       Enabled: 0
@@ -1149,6 +1062,65 @@ MonoBehaviour:
       Wait: 1
       Time: 2
     Restrictions: 0
+--- !u!114 &1729122836
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1729122830}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f38bda98361e1de48a4ca2bd86ea3c17, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Cinemachine::Unity.Cinemachine.CinemachineRotationComposer
+  Composition:
+    ScreenPosition: {x: 0, y: 0}
+    DeadZone:
+      Enabled: 0
+      Size: {x: 0.2, y: 0.2}
+    HardLimits:
+      Enabled: 0
+      Size: {x: 0.8, y: 0.8}
+      Offset: {x: 0, y: 0}
+  CenterOnActivate: 1
+  TargetOffset: {x: 0, y: 0, z: 0}
+  Damping: {x: 0.1, y: 0.1}
+  Lookahead:
+    Enabled: 0
+    Time: 0
+    Smoothing: 0
+    IgnoreY: 0
+--- !u!114 &1729122837
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1729122830}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ca7de3aefa901374ba29464584a3109a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Cinemachine::Unity.Cinemachine.CinemachineDecollider
+  CameraRadius: 0.3
+  Decollision:
+    Enabled: 1
+    ObstacleLayers:
+      serializedVersion: 2
+      m_Bits: 9
+    UseFollowTarget:
+      Enabled: 0
+      YOffset: 0
+    Damping: 0.5
+    SmoothingTime: 0
+  TerrainResolution:
+    Enabled: 1
+    TerrainLayers:
+      serializedVersion: 2
+      m_Bits: 1
+    MaximumRaycast: 10
+    Damping: 0.5
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -1161,4 +1133,3 @@ SceneRoots:
   - {fileID: 1431756741}
   - {fileID: 1729122832}
   - {fileID: 1637299186}
-  - {fileID: 75527705}
