@@ -11,7 +11,7 @@ using UnityEngine;
 public class ResetToBindPose : AssetPostprocessor
 {
     /// <summary>처리할 모델이 있는 폴더 (프로젝트 기준 경로).</summary>
-    const string Folder = "Assets/1_Yesman/Models/";
+    const string Folder = "Assets/";
 
     public override uint GetVersion() { return 1; }
 
