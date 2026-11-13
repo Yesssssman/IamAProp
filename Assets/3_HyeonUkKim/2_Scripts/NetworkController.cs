@@ -137,7 +137,6 @@ public class NetworkController : NetworkBehaviour
         if (_keyboard.pKey.wasPressedThisFrame)
         {
             Task<string> result = StartHostWithRelay(maxConnections: MAX_CONNECTIONS);
-
             //PlayerSpawn();
             print(result);
         }
