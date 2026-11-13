@@ -150,6 +150,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 5a9b244b31dd4e24da42d4f29ed8158c, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2070328220091570088}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 5a9b244b31dd4e24da42d4f29ed8158c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4588156390618512503}
     - targetCorrespondingSourceObject: {fileID: -2797438304536095601, guid: 5a9b244b31dd4e24da42d4f29ed8158c, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1535181496681091687}
@@ -200,14 +203,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.Components.NetworkAnimator
   ShowTopMostFoldoutHeaderGroup: 1
   NetworkAnimatorExpanded: 0
-  AuthorityMode: 0
+  AuthorityMode: 1
   m_Animator: {fileID: 7728688566638358726}
   TransitionStateInfoList: []
   AnimatorParameterEntries:
     ParameterEntries:
     - name: MoveX
       NameHash: 675470966
-      Synchronize: 1
+      Synchronize: 0
       ParameterType: 1
     - name: isAttack
       NameHash: -2035800095
@@ -254,7 +257,7 @@ MonoBehaviour:
   RotationMaxInterpolationTime: 0.1
   ScaleLerpSmoothing: 1
   ScaleMaxInterpolationTime: 0.1
-  AuthorityMode: 0
+  AuthorityMode: 1
   TickSyncChildren: 0
   UseUnreliableDeltas: 0
   SyncPositionX: 1
@@ -302,7 +305,7 @@ Rigidbody:
   m_IsKinematic: 0
   m_Interpolate: 1
   m_Constraints: 80
-  m_CollisionDetection: 2
+  m_CollisionDetection: 3
 --- !u!114 &5474041315513234333
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -336,19 +339,35 @@ MonoBehaviour:
   moveSpeed: 5
   rotationSmoothTime: 0.1
   _JumpForce: 5
+  reconciliationThreshold: 0.5
+  proxyVelocitySmoothSpeed: 15
   cameraTransform: {fileID: 0}
   _groundCheck: {fileID: 0}
   checkRadius: 0.2
   _groundLayer:
     serializedVersion: 2
     m_Bits: 8
-  weaponAnimControllers:
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
   _wasGrounded: 0
   _isGrounded: 0
+--- !u!114 &4588156390618512503
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3957024930634641414}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e6a0b53b9c2504337a5ac9b0198a0427, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerAnim
+  ShowTopMostFoldoutHeaderGroup: 1
+  moveDampTime: 0.1
+  weaponAnimControllers:
+  - {fileID: 9100000, guid: 35f3afcc8fb1db74cbb61a2feaf60bd0, type: 2}
+  - {fileID: 22100000, guid: fba730741413445a5a4ca132aec9a29b, type: 2}
+  - {fileID: 22100000, guid: 859b8d3168edb496db4193a614ee4699, type: 2}
+  - {fileID: 22100000, guid: e097ffe330722492fac5ed0b3b98d997, type: 2}
 --- !u!4 &4441109541528529596 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 5a9b244b31dd4e24da42d4f29ed8158c, type: 3}
@@ -378,10 +397,10 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 0.04
+  m_Radius: 0.1
   m_Height: 0.42
   m_Direction: 1
-  m_Center: {x: 0, y: 0.18, z: 0}
+  m_Center: {x: 0, y: 0.21, z: 0}
 --- !u!95 &7728688566638358726 stripped
 Animator:
   m_CorrespondingSourceObject: {fileID: 5866666021909216657, guid: 5a9b244b31dd4e24da42d4f29ed8158c, type: 3}

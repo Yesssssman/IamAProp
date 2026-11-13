@@ -84,7 +84,7 @@ AnimatorState:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: UnArmedBlend
-  m_Speed: 1
+  m_Speed: 1.2
   m_CycleOffset: 0
   m_Transitions:
   - {fileID: -1509018950567646985}
@@ -280,6 +280,9 @@ AnimatorStateTransition:
   m_Conditions:
   - m_ConditionMode: 1
     m_ConditionEvent: isAttack
+    m_EventTreshold: 0
+  - m_ConditionMode: 3
+    m_ConditionEvent: WeaponMode
     m_EventTreshold: 0
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 6999273136631006524}
@@ -554,7 +557,7 @@ AnimatorState:
   m_MirrorParameterActive: 0
   m_CycleOffsetParameterActive: 0
   m_TimeParameterActive: 0
-  m_Motion: {fileID: -1407232826816710048, guid: 69886bc95eb3cd746bff23608215b653, type: 3}
+  m_Motion: {fileID: -1407232826816710048, guid: 5a9b244b31dd4e24da42d4f29ed8158c, type: 3}
   m_Tag: 
   m_SpeedParameter: 
   m_MirrorParameter: 

@@ -111,4 +111,6 @@ InitTestScene*.unity*
 .vsconfig
 .DS_Store
 .vscode
+.agents/
+.agent/
 
