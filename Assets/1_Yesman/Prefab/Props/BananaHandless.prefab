@@ -1,0 +1,107 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &8794549826673134380
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: 4423a156549b4b345b339b00ed2f8844, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 2.3132133
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4423a156549b4b345b339b00ed2f8844, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -0.000000089493156
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4423a156549b4b345b339b00ed2f8844, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 2.355599
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4423a156549b4b345b339b00ed2f8844, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4423a156549b4b345b339b00ed2f8844, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4423a156549b4b345b339b00ed2f8844, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4423a156549b4b345b339b00ed2f8844, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4423a156549b4b345b339b00ed2f8844, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4423a156549b4b345b339b00ed2f8844, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 4423a156549b4b345b339b00ed2f8844, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 4423a156549b4b345b339b00ed2f8844, type: 3}
+      propertyPath: m_Name
+      value: BananaHandless
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 4423a156549b4b345b339b00ed2f8844, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: -2898452282512318805}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 4423a156549b4b345b339b00ed2f8844, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: -1754714685240424884}
+  m_SourcePrefab: {fileID: 100100000, guid: 4423a156549b4b345b339b00ed2f8844, type: 3}
+--- !u!1 &8560759777584379517 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 4423a156549b4b345b339b00ed2f8844, type: 3}
+  m_PrefabInstance: {fileID: 8794549826673134380}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &-2898452282512318805
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8560759777584379517}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9bf72bdcf5ab69546841f574595fd77d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerScript
+  Gun: {fileID: 0}
+  Magazine: {fileID: 0}
+  LeftHand: {fileID: 0}
+--- !u!95 &-1754714685240424884
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8560759777584379517}
+  m_Enabled: 1
+  m_Avatar: {fileID: 9000000, guid: 69886bc95eb3cd746bff23608215b653, type: 3}
+  m_Controller: {fileID: 9100000, guid: 82a61fa5f21a35549bf4ea4925902316, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
