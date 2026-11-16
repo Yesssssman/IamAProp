@@ -45,11 +45,35 @@ public class PlayerAnim : NetworkBehaviour
     /// <summary><see cref="Mathf.SmoothDamp(float, float, ref float, float)"/> 내부 변화율 상태값.</summary>
     private float _moveXVelocity;
 
+    /// <summary>무기 교체 애니메이션 진입 직후 <c>isWeaponSwap</c>을 초기화하기 위한 대기 플래그.</summary>
+    private bool _pendingWeaponSwapReset;
+
+    /// <summary>애니메이터 <c>MoveX</c> 파라미터 해시.</summary>
     private static readonly int MoveX = Animator.StringToHash("MoveX");
+
+    /// <summary>애니메이터 <c>isAttack</c> 파라미터 해시.</summary>
     private static readonly int IsAttack = Animator.StringToHash("isAttack");
+
+    /// <summary>애니메이터 <c>isAir</c> 파라미터 해시.</summary>
     private static readonly int IsAir = Animator.StringToHash("isAir");
+
+    /// <summary>애니메이터 <c>WeaponMode</c> 파라미터 해시.</summary>
     private static readonly int WeaponMode = Animator.StringToHash("WeaponMode");
+
+    /// <summary>애니메이터 <c>isJumped</c> 파라미터 해시.</summary>
     private static readonly int IsJumped = Animator.StringToHash("isJumped");
+
+    /// <summary>애니메이터 <c>isWeaponSwap</c> 파라미터 해시.</summary>
+    private static readonly int IsWeaponSwap = Animator.StringToHash("isWeaponSwap");
+
+    /// <summary>단검 드로우 애니메이션 상태(<c>Knife_Draw</c>) 해시.</summary>
+    private static readonly int KnifeDrawState = Animator.StringToHash("Knife_Draw");
+
+    /// <summary>권총 드로우 애니메이션 상태(<c>M1911_Draw</c>) 해시.</summary>
+    private static readonly int M1911DrawState = Animator.StringToHash("M1911_Draw");
+
+    /// <summary>소총 드로우 애니메이션 상태(<c>AK_Draw</c>) 해시.</summary>
+    private static readonly int AkDrawState = Animator.StringToHash("AK_Draw");
 
     // ***************************************************************
     // MonoBehaviour
@@ -72,6 +96,20 @@ public class PlayerAnim : NetworkBehaviour
             moveDampTime);
 
         _animator.SetFloat(MoveX, _currentMoveX);
+
+        // 드로우 애니메이션 진입이 확인되면 플래그를 내려 반복 전이를 방지한다.
+        if (IsOwner && _pendingWeaponSwapReset)
+        {
+            int currentHash = _animator.GetCurrentAnimatorStateInfo(0).shortNameHash;
+            int nextHash = _animator.IsInTransition(0) ? _animator.GetNextAnimatorStateInfo(0).shortNameHash : 0;
+
+            if (currentHash == KnifeDrawState || currentHash == M1911DrawState || currentHash == AkDrawState
+                || nextHash == KnifeDrawState || nextHash == M1911DrawState || nextHash == AkDrawState)
+            {
+                _animator.SetBool(IsWeaponSwap, false);
+                _pendingWeaponSwapReset = false;
+            }
+        }
     }
 
     // ***************************************************************
@@ -138,9 +176,19 @@ public class PlayerAnim : NetworkBehaviour
         }
 
         _animator.SetInteger(WeaponMode, index);
-        if (IsOwner && newValue == EWeaponType.Hide)
+        if (!IsOwner) return;
+
+        if (newValue == EWeaponType.Hide)
         {
             _animator.SetBool(IsAttack, false);
+            _animator.SetBool(IsWeaponSwap, false);
+            _pendingWeaponSwapReset = false;
+        }
+        else if (previousValue != newValue)
+        {
+            // 무기 교체 시 드로우 애니메이션 상태로 전이하도록 트리거 플래그를 설정한다.
+            _animator.SetBool(IsWeaponSwap, true);
+            _pendingWeaponSwapReset = true;
         }
     }
 }
