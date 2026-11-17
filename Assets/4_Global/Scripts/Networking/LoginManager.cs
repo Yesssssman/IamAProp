@@ -14,8 +14,8 @@ namespace Networking
         private const string AUTH_SERVER = "http://127.0.0.1:5050";
         private const string GAME_CODE = "{}";
 #elif DEV
-        private const string AUTH_SERVER = "http://127.0.0.1/dev"; // PLACEHOLDER: 개발 서버 주소
-        private const string GAME_CODE = "{}"; // PLACEHOLDER: 개발 서버 게임 코드
+        private const string AUTH_SERVER = "http://35.216.2.84:5050";
+        private const string GAME_CODE = "A88E1A9E1F0464D97F0BEC619DA95D37";
 #elif PROD
         private const string AUTH_SERVER = "http://127.0.0.1/prod"; // PLACEHOLDER: 운영 서버 주소
         private const string GAME_CODE = "{}"; // PLACEHOLDER: 운영 서버 게임 코드

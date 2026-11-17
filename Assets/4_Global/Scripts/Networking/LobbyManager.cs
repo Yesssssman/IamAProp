@@ -23,8 +23,8 @@ namespace Networking
         private const string LOBBY_SERVER = "http://127.0.0.1:5050";
         private const string LOBBY_SOCKET = "ws://127.0.0.1:5050/ws/iamaprop/lobby";
 #elif DEV
-        private const string LOBBY_SERVER = "http://127.0.0.1/dev"; // PLACEHOLDER: 개발 서버 주소
-        private const string LOBBY_SOCKET = "ws://127.0.0.1/dev/ws/iamaprop/lobby"; // PLACEHOLDER: 개발 서버 주소
+        private const string LOBBY_SERVER = "http://35.216.2.84:5050"; // PLACEHOLDER: 개발 서버 주소
+        private const string LOBBY_SOCKET = "ws://35.216.2.84:5050/ws/iamaprop/lobby"; // PLACEHOLDER: 개발 서버 주소
 #elif PROD
         private const string LOBBY_SERVER = "http://127.0.0.1/prod"; // PLACEHOLDER: 운영 서버 주소
         private const string LOBBY_SOCKET = "ws://127.0.0.1/prod/ws/iamaprop/lobby"; // PLACEHOLDER: 운영 서버 주소
