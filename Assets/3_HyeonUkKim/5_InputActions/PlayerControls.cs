@@ -151,6 +151,16 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""interactions"": """",
                     ""initialStateCheck"": false,
                     ""priority"": 0
+                },
+                {
+                    ""name"": ""Reload"",
+                    ""type"": ""Button"",
+                    ""id"": ""a7f2d914-6c8b-4e3a-9d12-8f4e5b6c7a89"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false,
+                    ""priority"": 0
                 }
             ],
             ""bindings"": [
@@ -258,7 +268,7 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""id"": ""a935495d-e1ee-4e5a-8c5f-c118513bcb81"",
                     ""path"": ""<Keyboard>/1"",
                     ""interactions"": """",
-                    ""processors"": ""Scale(factor=0)"",
+                    ""processors"": ""Scale"",
                     ""groups"": """",
                     ""action"": ""ChgWeapon"",
                     ""isComposite"": false,
@@ -269,7 +279,7 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""id"": ""5ec3b289-e135-46ff-8b99-1bb714129577"",
                     ""path"": ""<Keyboard>/2"",
                     ""interactions"": """",
-                    ""processors"": ""Scale"",
+                    ""processors"": ""Scale(factor=2)"",
                     ""groups"": """",
                     ""action"": ""ChgWeapon"",
                     ""isComposite"": false,
@@ -280,7 +290,7 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""id"": ""1d0a3a94-a077-41d1-98dc-77e0b876aa46"",
                     ""path"": ""<Keyboard>/3"",
                     ""interactions"": """",
-                    ""processors"": ""Scale(factor=2)"",
+                    ""processors"": ""Scale(factor=3)"",
                     ""groups"": """",
                     ""action"": ""ChgWeapon"",
                     ""isComposite"": false,
@@ -291,7 +301,7 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""id"": ""7223a33b-ec55-42c5-a83c-8bd1db8f087c"",
                     ""path"": ""<Keyboard>/4"",
                     ""interactions"": """",
-                    ""processors"": ""Scale(factor=3)"",
+                    ""processors"": ""Scale(factor=4)"",
                     ""groups"": """",
                     ""action"": ""ChgWeapon"",
                     ""isComposite"": false,
@@ -305,6 +315,17 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""groups"": """",
                     ""action"": ""ChangeView"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""c4e8b321-9f5a-4d7c-8b23-1a2b3c4d5e6f"",
+                    ""path"": ""<Keyboard>/r"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Reload"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 }
@@ -321,6 +342,7 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         m_Player_Jump = m_Player.FindAction("Jump", throwIfNotFound: true);
         m_Player_ChgWeapon = m_Player.FindAction("ChgWeapon", throwIfNotFound: true);
         m_Player_ChangeView = m_Player.FindAction("ChangeView", throwIfNotFound: true);
+        m_Player_Reload = m_Player.FindAction("Reload", throwIfNotFound: true);
     }
 
     ~@PlayerControls()
@@ -407,6 +429,7 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
     private readonly InputAction m_Player_Jump;
     private readonly InputAction m_Player_ChgWeapon;
     private readonly InputAction m_Player_ChangeView;
+    private readonly InputAction m_Player_Reload;
     /// <summary>
     /// Provides access to input actions defined in input action map "Player".
     /// </summary>
@@ -442,6 +465,10 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         /// Provides access to the underlying input action "Player/ChangeView".
         /// </summary>
         public InputAction @ChangeView => m_Wrapper.m_Player_ChangeView;
+        /// <summary>
+        /// Provides access to the underlying input action "Player/Reload".
+        /// </summary>
+        public InputAction @Reload => m_Wrapper.m_Player_Reload;
         /// <summary>
         /// Provides access to the underlying input action map instance.
         /// </summary>
@@ -486,6 +513,9 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
             @ChangeView.started += instance.OnChangeView;
             @ChangeView.performed += instance.OnChangeView;
             @ChangeView.canceled += instance.OnChangeView;
+            @Reload.started += instance.OnReload;
+            @Reload.performed += instance.OnReload;
+            @Reload.canceled += instance.OnReload;
         }
 
         /// <summary>
@@ -515,6 +545,9 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
             @ChangeView.started -= instance.OnChangeView;
             @ChangeView.performed -= instance.OnChangeView;
             @ChangeView.canceled -= instance.OnChangeView;
+            @Reload.started -= instance.OnReload;
+            @Reload.performed -= instance.OnReload;
+            @Reload.canceled -= instance.OnReload;
         }
 
         /// <summary>
@@ -597,5 +630,12 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnChangeView(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "Reload" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnReload(InputAction.CallbackContext context);
     }
 }

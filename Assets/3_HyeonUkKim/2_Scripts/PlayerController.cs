@@ -31,6 +31,9 @@ public class PlayerController : NetworkBehaviour
     /// <summary>점프 시 가하는 수직 임펄스 크기.</summary>
     [SerializeField] private float _JumpForce = 5f;
 
+    /// <summary>맨손 대기 상태 진입 시 쓰러짐을 유도하는 초기 각속도 (초당 라디안).</summary>
+    [SerializeField] private float ragdollToppleSpeed = 3.5f;
+
     /// <summary>서버 보정을 수행할 위치 오차 임계값 (월드 단위).</summary>
     [Header("예측 및 보정 설정")]
     [SerializeField] private float reconciliationThreshold = 0.5f;
@@ -112,6 +115,9 @@ public class PlayerController : NetworkBehaviour
     /// <summary>현재 플레이어 동작 상태.</summary>
     private EPlayerState _EplayerState;
 
+    /// <summary>현재 루트 <see cref="Rigidbody"/> 회전 제약이 해제된 맨손 쓰러짐 대기 상태 여부.</summary>
+    private bool _isRagdollIdle;
+
     // ***************************************************************
     // Properties
     // ***************************************************************
@@ -178,6 +184,11 @@ public class PlayerController : NetworkBehaviour
         if (_groundCheck != null)
         {
             _isGrounded = Physics.CheckSphere(_groundCheck.position, checkRadius, _groundLayer);
+            if (!_isGrounded && _isRagdollIdle && _capsuleCollider != null)
+            {
+                Vector3 capsuleCenterWorld = _capsuleCollider.transform.TransformPoint(_capsuleCollider.center);
+                _isGrounded = Physics.CheckSphere(capsuleCenterWorld, checkRadius, _groundLayer);
+            }
         }
 
         if (!_wasGrounded && _isGrounded)
@@ -192,6 +203,28 @@ public class PlayerController : NetworkBehaviour
         Vector3 inputDirection = new Vector3(moveInput.x, 0f, moveInput.y).normalized;
         Vector3 horizontalVelocity = Vector3.zero;
         float currentRotationY = _rb.rotation.eulerAngles.y;
+        bool shouldRagdoll = _playerAnim != null
+            && _playerAnim.CurrentWeaponType == EWeaponType.Hide
+            && inputDirection.magnitude < 0.1f
+            && _isGrounded
+            && !_jumpRequested;
+
+        if (shouldRagdoll)
+        {
+            if (!_isRagdollIdle)
+            {
+                _isRagdollIdle = true;
+                _rb.constraints = RigidbodyConstraints.None;
+                _rb.angularVelocity = transform.right * ragdollToppleSpeed;
+            }
+        }
+        else if (_isRagdollIdle)
+        {
+            _isRagdollIdle = false;
+            _rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+            _rb.angularVelocity = Vector3.zero;
+            _rb.rotation = Quaternion.Euler(0f, currentRotationY, 0f);
+        }
 
         if (inputDirection.magnitude >= 0.1f)
         {
@@ -301,6 +334,7 @@ public class PlayerController : NetworkBehaviour
         _inputActions.Player.Attack.canceled += OnAttackEnd;
         _inputActions.Player.Jump.started += OnJump;
         _inputActions.Player.ChgWeapon.started += ChangeWeaponMode;
+        _inputActions.Player.Reload.started += OnReloadStarted;
 
         CinemachineCamera cam = FindAnyObjectByType<CinemachineCamera>();
         if (cam != null)
@@ -331,6 +365,7 @@ public class PlayerController : NetworkBehaviour
         _inputActions.Player.Attack.canceled -= OnAttackEnd;
         _inputActions.Player.Jump.started -= OnJump;
         _inputActions.Player.ChgWeapon.started -= ChangeWeaponMode;
+        _inputActions.Player.Reload.started -= OnReloadStarted;
         _inputActions.Player.Disable();
         _inputActions.Dispose();
         _inputActions = null;
@@ -383,8 +418,16 @@ public class PlayerController : NetworkBehaviour
     {
         if (!IsOwner) return;
 
-        int weaponIndex = Mathf.RoundToInt(context.ReadValue<float>());
+        int weaponIndex = Mathf.Clamp(Mathf.RoundToInt(context.ReadValue<float>()) - 1, 0, 3);
         _playerAnim.SetWeaponMode((EWeaponType)weaponIndex);
+    }
+
+    /// <summary>재장전 입력 시 손 재장전 시퀀스를 요청한다.</summary>
+    private void OnReloadStarted(InputAction.CallbackContext context)
+    {
+        if (!IsOwner) return;
+
+        _playerAnim.RequestReload();
     }
 
     // ***************************************************************
@@ -522,6 +565,9 @@ public class PlayerController : NetworkBehaviour
         }
 
         _rb.position = reconciledPosition;
-        _rb.rotation = Quaternion.Euler(0f, reconciledRotationY, 0f);
+        if (!_isRagdollIdle)
+        {
+            _rb.rotation = Quaternion.Euler(0f, reconciledRotationY, 0f);
+        }
     }
 }

@@ -9,19 +9,11 @@ AnimatorOverrideController:
   m_Name: PlayerAnim_Pistol
   m_Controller: {fileID: 9100000, guid: 35f3afcc8fb1db74cbb61a2feaf60bd0, type: 2}
   m_Clips:
-  - m_OriginalClip: {fileID: 6526053492773073719, guid: 5a9b244b31dd4e24da42d4f29ed8158c, type: 3}
+  - m_OriginalClip: {fileID: -3246335567985755239, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
+    m_OverrideClip: {fileID: -257425540449213744, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
+  - m_OriginalClip: {fileID: -428411149401142958, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
+    m_OverrideClip: {fileID: 8023960352433426304, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
+  - m_OriginalClip: {fileID: -6311939953767310088, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
     m_OverrideClip: {fileID: 0}
-  - m_OriginalClip: {fileID: -1582946468911147126, guid: 5a9b244b31dd4e24da42d4f29ed8158c, type: 3}
+  - m_OriginalClip: {fileID: 7390238872845599331, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
     m_OverrideClip: {fileID: 0}
-  - m_OriginalClip: {fileID: 1198958875229925177, guid: 5a9b244b31dd4e24da42d4f29ed8158c, type: 3}
-    m_OverrideClip: {fileID: 0}
-  - m_OriginalClip: {fileID: 7390238872845599331, guid: 5a9b244b31dd4e24da42d4f29ed8158c, type: 3}
-    m_OverrideClip: {fileID: 0}
-  - m_OriginalClip: {fileID: -6311939953767310088, guid: 5a9b244b31dd4e24da42d4f29ed8158c, type: 3}
-    m_OverrideClip: {fileID: 0}
-  - m_OriginalClip: {fileID: -428411149401142958, guid: 5a9b244b31dd4e24da42d4f29ed8158c, type: 3}
-    m_OverrideClip: {fileID: 0}
-  - m_OriginalClip: {fileID: 4379585768092529337, guid: 5a9b244b31dd4e24da42d4f29ed8158c, type: 3}
-    m_OverrideClip: {fileID: 7168828166355852012, guid: 5a9b244b31dd4e24da42d4f29ed8158c, type: 3}
-  - m_OriginalClip: {fileID: -1407232826816710048, guid: 5a9b244b31dd4e24da42d4f29ed8158c, type: 3}
-    m_OverrideClip: {fileID: -6973975077943594433, guid: 5a9b244b31dd4e24da42d4f29ed8158c, type: 3}
