@@ -31,8 +31,15 @@ public class PlayerController : NetworkBehaviour
     /// <summary>점프 시 가하는 수직 임펄스 크기.</summary>
     [SerializeField] private float _JumpForce = 5f;
 
+    [Header("Ragdoll 설정")]
+    [Tooltip("수평으로 밀어내는 힘")]
+    [SerializeField] private float _pushForce = 2.5f;
+
     /// <summary>맨손 대기 상태 진입 시 쓰러짐을 유도하는 초기 각속도 (초당 라디안).</summary>
     [SerializeField] private float ragdollToppleSpeed = 3.5f;
+
+    [Tooltip("넘어질 때 바닥으로 살짝 누르는 하향 힘")]
+    [SerializeField] private float _downwardForce = 0.5f;
 
     /// <summary>서버 보정을 수행할 위치 오차 임계값 (월드 단위).</summary>
     [Header("예측 및 보정 설정")]
@@ -215,7 +222,14 @@ public class PlayerController : NetworkBehaviour
             {
                 _isRagdollIdle = true;
                 _rb.constraints = RigidbodyConstraints.None;
-                _rb.angularVelocity = transform.right * ragdollToppleSpeed;
+                // _rb.angularVelocity = transform.right * ragdollToppleSpeed;
+
+                Vector2 randomCircle = Random.insideUnitCircle.normalized;
+                Vector3 pushDirection = new Vector3(randomCircle.x, 0f, randomCircle.y);
+                Vector3 finalForce = (pushDirection * _pushForce) + (Vector3.down * _downwardForce);
+
+                _rb.AddForce(finalForce, ForceMode.Impulse);
+                _rb.AddTorque(transform.right * ragdollToppleSpeed);
             }
         }
         else if (_isRagdollIdle)

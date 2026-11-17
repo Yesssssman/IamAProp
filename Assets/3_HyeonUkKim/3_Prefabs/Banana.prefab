@@ -437,7 +437,7 @@ Rigidbody:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3957024930634641414}
   serializedVersion: 5
-  m_Mass: 1
+  m_Mass: 3
   m_LinearDamping: 0
   m_AngularDamping: 0.05
   m_CenterOfMass: {x: 0, y: 0, z: 0}
@@ -488,7 +488,10 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   moveSpeed: 5
   rotationSmoothTime: 0.1
-  _JumpForce: 5
+  _JumpForce: 12
+  _pushForce: 2.5
+  ragdollToppleSpeed: 3.5
+  _downwardForce: 0.5
   reconciliationThreshold: 0.5
   proxyVelocitySmoothSpeed: 15
   cameraTransform: {fileID: 0}
