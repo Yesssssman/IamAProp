@@ -114,3 +114,7 @@ InitTestScene*.unity*
 .agents/
 .agent/
 
+# _Recovery(유니티 자동 생성) 디렉토리 제외
+
+_Recovery/
+_Recovery.meta
