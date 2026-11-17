@@ -512,7 +512,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkTestController
   ShowTopMostFoldoutHeaderGroup: 1
-  JoinCode: 
+  JoinCode: DJD7CD
   _spawnPos: {fileID: 1431756741}
   _spawnPreFab: {fileID: 754652342871467732, guid: 1771b1cb01e39ff428fd18c001d6b1ba, type: 3}
 --- !u!114 &524514071

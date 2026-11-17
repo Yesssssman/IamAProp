@@ -438,8 +438,8 @@ Rigidbody:
   m_GameObject: {fileID: 3957024930634641414}
   serializedVersion: 5
   m_Mass: 3
-  m_LinearDamping: 0
-  m_AngularDamping: 0.05
+  m_LinearDamping: 1
+  m_AngularDamping: 0.1
   m_CenterOfMass: {x: 0, y: 0, z: 0}
   m_InertiaTensor: {x: 1, y: 1, z: 1}
   m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
@@ -520,21 +520,25 @@ MonoBehaviour:
   handScript: {fileID: 2804264384151656367}
   weaponSockets:
   - weaponPrefab: {fileID: 0}
+    weaponAnimController: {fileID: 0}
     gripPosition: {x: 0, y: 0, z: 0}
     gripRotation: {x: 0, y: 0, z: 0}
     gripScale: {x: 1, y: 1, z: 1}
     reloadClip: {fileID: 0}
   - weaponPrefab: {fileID: 5489145493786919654, guid: c331d4509e2a94446b4dedf64fcae8dd, type: 3}
+    weaponAnimController: {fileID: 0}
     gripPosition: {x: -0.0139, y: 0.018, z: 0.0018}
     gripRotation: {x: 41.692326, y: 39.301437, z: 304.95862}
     gripScale: {x: 0.4, y: 0.4, z: 0.4}
     reloadClip: {fileID: 0}
-  - weaponPrefab: {fileID: 4682008220005263600, guid: f0e2c531ff33d4940b09f5e67dc70b7d, type: 3}
+  - weaponPrefab: {fileID: 389447474382563802, guid: b27139442064d47fd9b21b582b2fd121, type: 3}
+    weaponAnimController: {fileID: 9100000, guid: 593c2dd6af7de4bd38b08063b27a26a8, type: 2}
     gripPosition: {x: -0.0126, y: 0.0594, z: -0.0227}
     gripRotation: {x: 88.07187, y: 247.8977, z: 71.43641}
     gripScale: {x: 1, y: 1, z: 1}
     reloadClip: {fileID: -7851223266158103639, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
-  - weaponPrefab: {fileID: 2112723291613362656, guid: 4fc18dcd97b9c2f4c88a7e5bda71352d, type: 3}
+  - weaponPrefab: {fileID: 5803435650769594868, guid: 3f3191eb7a96f421a8fa7deafb3c1f96, type: 3}
+    weaponAnimController: {fileID: 9100000, guid: bda809c67aa1b4b13b22130c52b507a9, type: 2}
     gripPosition: {x: -0.026, y: -0.008, z: -0.006}
     gripRotation: {x: 274.24396, y: 222.39346, z: 180.59734}
     gripScale: {x: 1, y: 1, z: 1}

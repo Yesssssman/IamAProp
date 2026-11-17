@@ -11,12 +11,15 @@ public enum EWeaponType
     Ak = 3
 }
 
-/// <summary>무기 종류별 장착 프리팹, 그립 오프셋 및 재장전 클립 설정.</summary>
+/// <summary>무기 종류별 장착 프리팹, 애니메이터 컨트롤러, 그립 오프셋 및 재장전 클립 설정.</summary>
 [Serializable]
 public struct WeaponSocketConfig
 {
     /// <summary>오른손 소켓에 장착할 무기 프리팹.</summary>
     public GameObject weaponPrefab;
+
+    /// <summary>장착된 무기 오브젝트의 <see cref="Animator"/>에 할당할 컨트롤러.</summary>
+    public RuntimeAnimatorController weaponAnimController;
 
     /// <summary>오른손 본 기준 무기 로컬 위치.</summary>
     public Vector3 gripPosition;
@@ -67,6 +70,9 @@ public class PlayerAnim : NetworkBehaviour
     /// <summary>몸통 <see cref="Animator"/> 컴포넌트.</summary>
     private Animator _animator;
 
+    /// <summary>현재 오른손에 장착된 무기의 <see cref="Animator"/> 컴포넌트.</summary>
+    private Animator _weaponAnimator;
+
     /// <summary>이동 상태를 제공하는 <see cref="PlayerController"/> 컴포넌트.</summary>
     private PlayerController _playerController;
 
@@ -81,6 +87,19 @@ public class PlayerAnim : NetworkBehaviour
 
     /// <summary>재장전 애니메이션 진입 직후 <c>isReload</c>를 초기화하기 위한 대기 플래그.</summary>
     private bool _pendingReloadReset;
+
+    private const float HandShotFrames = 17f; // 손 발사 클립(Common_M1911_Shot, Common_AK_Shot) 총 프레임 수
+    private const float WeaponShotFrames = 9f; // 총기 발사 클립(M1911_Rig|Shot, AK74Rig|Shot) 총 프레임 수
+    private const float M1911ReloadHandFrames = 107f; // 권총 손 재장전 클립(Common_M1911_Reload) 총 프레임 수
+    private const float M1911ReloadWeaponStartFrame = 78f; // 권총 재장전 중 슬라이드 후퇴 시작 프레임
+    private const float M1911DrawHandFrames = 47f; // 권총 손 드로우 클립(Common_M1911_Draw) 총 프레임 수
+    private const float M1911DrawWeaponStartFrame = 19f; // 권총 드로우 중 슬라이드 후퇴 시작 프레임
+    private const float M1911ReloadWeaponFrames = 9f; // 권총 슬라이드 후퇴 클립(M1911_Rig|Reload) 총 프레임 수
+    private const float AkReloadHandFrames = 179f; // 소총 손 재장전 클립(Common_AK_Reload) 총 프레임 수
+    private const float AkReloadWeaponStartFrame = 130f; // 소총 재장전 중 노리쇠 후퇴 시작 프레임
+    private const float AkDrawHandFrames = 69f; // 소총 손 드로우 클립(Common_AK_Draw) 총 프레임 수
+    private const float AkDrawWeaponStartFrame = 15f; // 소총 드로우 중 노리쇠 후퇴 시작 프레임
+    private const float AkReloadWeaponFrames = 16f; // 소총 노리쇠 후퇴 클립(AK74Rig|Reload) 총 프레임 수
 
     /// <summary>애니메이터 <c>MoveX</c> 파라미터 해시.</summary>
     private static readonly int MoveX = Animator.StringToHash("MoveX");
@@ -112,6 +131,12 @@ public class PlayerAnim : NetworkBehaviour
     /// <summary>소총 드로우 애니메이션 상태(<c>AK_Draw</c>) 해시.</summary>
     private static readonly int AkDrawState = Animator.StringToHash("AK_Draw");
 
+    /// <summary>권총 발사 애니메이션 상태(<c>M1911_Shot</c>) 해시.</summary>
+    private static readonly int M1911ShotState = Animator.StringToHash("M1911_Shot");
+
+    /// <summary>소총 발사 애니메이션 상태(<c>AK_Shot</c>) 해시.</summary>
+    private static readonly int AkShotState = Animator.StringToHash("AK_Shot");
+
     /// <summary>권총 재장전 애니메이션 상태(<c>M1911_Reload</c>) 해시.</summary>
     private static readonly int M1911ReloadState = Animator.StringToHash("M1911_Reload");
 
@@ -123,6 +148,15 @@ public class PlayerAnim : NetworkBehaviour
 
     /// <summary>맨손 달리기 애니메이션 상태(<c>Run</c>) 해시.</summary>
     private static readonly int UnarmedRunState = Animator.StringToHash("Run");
+
+    /// <summary>총기 기본 대기 애니메이션 상태(<c>Idle</c>) 해시.</summary>
+    private static readonly int WeaponIdleState = Animator.StringToHash("Idle");
+
+    /// <summary>총기 발사 애니메이션 상태(<c>Shot</c>) 해시.</summary>
+    private static readonly int WeaponShotState = Animator.StringToHash("Shot");
+
+    /// <summary>총기 재장전 애니메이션 상태(<c>Reload</c>) 해시.</summary>
+    private static readonly int WeaponReloadState = Animator.StringToHash("Reload");
 
     // ***************************************************************
     // Properties
@@ -230,6 +264,110 @@ public class PlayerAnim : NetworkBehaviour
             }
             _pendingReloadReset = false;
         }
+
+        // 손 애니메이터의 발사, 재장전 및 드로우 프레임에 맞춰 총기 애니메이터를 동기화한다.
+        if (_weaponAnimator != null && _weaponAnimator.runtimeAnimatorController != null)
+        {
+            bool useNextState = nextHash == M1911ShotState
+                || nextHash == AkShotState
+                || nextHash == M1911ReloadState
+                || nextHash == AkReloadState
+                || nextHash == M1911DrawState
+                || nextHash == AkDrawState;
+            AnimatorStateInfo activeHandState = useNextState
+                ? handAnimator.GetNextAnimatorStateInfo(0)
+                : handAnimator.GetCurrentAnimatorStateInfo(0);
+            int activeHash = activeHandState.shortNameHash;
+
+            if (activeHash == M1911ShotState || activeHash == AkShotState)
+            {
+                float handFrame = Mathf.Repeat(activeHandState.normalizedTime, 1f) * HandShotFrames;
+                if (handFrame < WeaponShotFrames)
+                {
+                    _weaponAnimator.SetBool(IsAttack, true);
+                    _weaponAnimator.SetBool(IsReload, false);
+                    _weaponAnimator.Play(WeaponShotState, 0, handFrame / WeaponShotFrames);
+                }
+                else
+                {
+                    _weaponAnimator.SetBool(IsAttack, false);
+                    _weaponAnimator.Play(WeaponIdleState, 0, 0f);
+                }
+            }
+            else if (activeHash == M1911ReloadState)
+            {
+                float handFrame = Mathf.Clamp01(activeHandState.normalizedTime) * M1911ReloadHandFrames;
+                float weaponFrame = handFrame - M1911ReloadWeaponStartFrame;
+                if (weaponFrame >= 0f && weaponFrame < M1911ReloadWeaponFrames)
+                {
+                    _weaponAnimator.SetBool(IsReload, true);
+                    _weaponAnimator.SetBool(IsAttack, false);
+                    _weaponAnimator.Play(WeaponReloadState, 0, weaponFrame / M1911ReloadWeaponFrames);
+                }
+                else
+                {
+                    _weaponAnimator.SetBool(IsReload, false);
+                    _weaponAnimator.Play(WeaponIdleState, 0, 0f);
+                }
+            }
+            else if (activeHash == AkReloadState)
+            {
+                float handFrame = Mathf.Clamp01(activeHandState.normalizedTime) * AkReloadHandFrames;
+                float weaponFrame = handFrame - AkReloadWeaponStartFrame;
+                if (weaponFrame >= 0f && weaponFrame < AkReloadWeaponFrames)
+                {
+                    _weaponAnimator.SetBool(IsReload, true);
+                    _weaponAnimator.SetBool(IsAttack, false);
+                    _weaponAnimator.Play(WeaponReloadState, 0, weaponFrame / AkReloadWeaponFrames);
+                }
+                else
+                {
+                    _weaponAnimator.SetBool(IsReload, false);
+                    _weaponAnimator.Play(WeaponIdleState, 0, 0f);
+                }
+            }
+            else if (activeHash == M1911DrawState)
+            {
+                float handFrame = Mathf.Clamp01(activeHandState.normalizedTime) * M1911DrawHandFrames;
+                float weaponFrame = handFrame - M1911DrawWeaponStartFrame;
+                if (weaponFrame >= 0f && weaponFrame < M1911ReloadWeaponFrames)
+                {
+                    _weaponAnimator.SetBool(IsReload, true);
+                    _weaponAnimator.SetBool(IsAttack, false);
+                    _weaponAnimator.Play(WeaponReloadState, 0, weaponFrame / M1911ReloadWeaponFrames);
+                }
+                else
+                {
+                    _weaponAnimator.SetBool(IsReload, false);
+                    _weaponAnimator.Play(WeaponIdleState, 0, 0f);
+                }
+            }
+            else if (activeHash == AkDrawState)
+            {
+                float handFrame = Mathf.Clamp01(activeHandState.normalizedTime) * AkDrawHandFrames;
+                float weaponFrame = handFrame - AkDrawWeaponStartFrame;
+                if (weaponFrame >= 0f && weaponFrame < AkReloadWeaponFrames)
+                {
+                    _weaponAnimator.SetBool(IsReload, true);
+                    _weaponAnimator.SetBool(IsAttack, false);
+                    _weaponAnimator.Play(WeaponReloadState, 0, weaponFrame / AkReloadWeaponFrames);
+                }
+                else
+                {
+                    _weaponAnimator.SetBool(IsReload, false);
+                    _weaponAnimator.Play(WeaponIdleState, 0, 0f);
+                }
+            }
+            else
+            {
+                _weaponAnimator.SetBool(IsAttack, false);
+                _weaponAnimator.SetBool(IsReload, false);
+                if (_weaponAnimator.GetCurrentAnimatorStateInfo(0).shortNameHash != WeaponIdleState)
+                {
+                    _weaponAnimator.Play(WeaponIdleState, 0, 0f);
+                }
+            }
+        }
     }
 
     // ***************************************************************
@@ -278,6 +416,11 @@ public class PlayerAnim : NetworkBehaviour
         {
             handAnimator.SetBool(IsAttack, canAttack);
         }
+
+        if (_weaponAnimator != null && _weaponAnimator.runtimeAnimatorController != null)
+        {
+            _weaponAnimator.SetBool(IsAttack, canAttack);
+        }
     }
 
     /// <summary>장착 무기 모드를 변경하고 네트워크에 동기화한다.</summary>
@@ -307,6 +450,10 @@ public class PlayerAnim : NetworkBehaviour
 
         _animator.SetBool(IsReload, true);
         handAnimator.SetBool(IsReload, true);
+        if (_weaponAnimator != null && _weaponAnimator.runtimeAnimatorController != null)
+        {
+            _weaponAnimator.SetBool(IsReload, true);
+        }
         _pendingReloadReset = true;
         TriggerReloadRpc();
     }
@@ -322,6 +469,10 @@ public class PlayerAnim : NetworkBehaviour
         if (handAnimator == null) return;
 
         handAnimator.SetBool(IsReload, true);
+        if (_weaponAnimator != null && _weaponAnimator.runtimeAnimatorController != null)
+        {
+            _weaponAnimator.SetBool(IsReload, true);
+        }
         _pendingReloadReset = true;
     }
 
@@ -356,6 +507,13 @@ public class PlayerAnim : NetworkBehaviour
 
         if (handScript != null)
         {
+            if (_weaponAnimator != null && _weaponAnimator.runtimeAnimatorController != null)
+            {
+                _weaponAnimator.SetBool(IsAttack, false);
+                _weaponAnimator.SetBool(IsReload, false);
+            }
+            _weaponAnimator = null;
+
             GameObject prevLeft = handScript.GetLeftHandItem();
             if (prevLeft != null)
             {
@@ -407,6 +565,25 @@ public class PlayerAnim : NetworkBehaviour
                     if (handAnimator != null)
                     {
                         handAnimator.Update(0f);
+                    }
+                }
+
+                _weaponAnimator = weaponObject.GetComponent<Animator>();
+                if (_weaponAnimator != null)
+                {
+                    if (socket.weaponAnimController != null
+                        && _weaponAnimator.runtimeAnimatorController != socket.weaponAnimController)
+                    {
+                        _weaponAnimator.runtimeAnimatorController = socket.weaponAnimController;
+                    }
+
+                    if (_weaponAnimator.runtimeAnimatorController != null)
+                    {
+                        _weaponAnimator.Rebind();
+                        _weaponAnimator.SetBool(IsAttack, false);
+                        _weaponAnimator.SetBool(IsReload, false);
+                        _weaponAnimator.Play(WeaponIdleState, 0, 0f);
+                        _weaponAnimator.Update(0f);
                     }
                 }
             }
