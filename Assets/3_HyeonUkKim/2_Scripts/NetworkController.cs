@@ -1,11 +1,11 @@
-
-using System.ComponentModel;
+using System.Collections.Generic;
 using System.Threading.Tasks;
-using Unity.Cinemachine;
-using Unity.Netcode;
-using Unity.Netcode.Transports.UTP;
+using FishNet;
+using FishNet.Connection;
+using FishNet.Managing;
+using FishNet.Transporting;
+using FishNet.Transporting.UTP;
 using Unity.Networking.Transport.Relay;
-using Unity.Services;
 using Unity.Services.Authentication;
 using Unity.Services.Core;
 using Unity.Services.Relay;
@@ -13,23 +13,33 @@ using Unity.Services.Relay.Models;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-public class NetworkController : NetworkBehaviour
+/// <summary>Unity Relay 세션을 생성/참가하고 FishNet 호스트 및 클라이언트 연결을 제어한다.</summary>
+public class NetworkController : MonoBehaviour
 {
+    // ***************************************************************
+    // Fields
+    // ***************************************************************
+
+    private const int MAX_CONNECTIONS = 6; // 호스트 1명 + 클라이언트 5명
+
+    /// <summary>로컬 키보드 입력 장치 참조.</summary>
     private Keyboard _keyboard;
-    private const int MAX_CONNECTIONS = 6;
 
-
-
-    private string DedicatedServerEndPoint;
-    private string HostServerEndPoint;
-
-
+    /// <summary>클라이언트 참가 테스트에 사용할 Relay 참여 코드.</summary>
     [SerializeField] private string JoinCode;
+
+    /// <summary>테스트 스폰 위치 트랜스폼.</summary>
     [SerializeField] private Transform _spawnPos;
+
+    /// <summary>테스트 스폰 프리팹.</summary>
     [SerializeField] private GameObject _spawnPreFab;
 
+    /// <summary>연결 상태 콜백을 구독한 <see cref="NetworkManager"/> 참조.</summary>
+    private NetworkManager _networkManager;
 
-
+    // ***************************************************************
+    // MonoBehaviour
+    // ***************************************************************
 
     private void Awake()
     {
@@ -38,6 +48,12 @@ public class NetworkController : NetworkBehaviour
 
     private async void Start()
     {
+        _networkManager = InstanceFinder.NetworkManager;
+        if (_networkManager != null)
+        {
+            _networkManager.ClientManager.OnClientConnectionState += OnClientConnectionStateChanged;
+        }
+
         await UnityServices.InitializeAsync();
         if (!AuthenticationService.Instance.IsSignedIn)
         {
@@ -46,26 +62,51 @@ public class NetworkController : NetworkBehaviour
         }
     }
 
-    private void OnEnable()
+    private void OnDestroy()
     {
-        // 내 클라이언트가 서버로부터 연결이 끊겼을 때 실행될 콜백 등록
-        if (NetworkManager.Singleton != null)
+        if (_networkManager != null)
         {
-            NetworkManager.Singleton.OnClientDisconnectCallback += OnDisconnectedFromServer;
+            _networkManager.ClientManager.OnClientConnectionState -= OnClientConnectionStateChanged;
         }
     }
 
-    private void OnDisable()
+    private void Update()
     {
-        if (NetworkManager.Singleton != null)
+        if (_keyboard == null) return;
+
+        // P 키: 호스트 시작
+        if (_keyboard.pKey.wasPressedThisFrame)
         {
-            NetworkManager.Singleton.OnClientDisconnectCallback -= OnDisconnectedFromServer;
+            _ = StartHostWithRelay(maxConnections: MAX_CONNECTIONS);
+        }
+
+        // O 키: 클라이언트 참가 (JoinCode 설정 필요)
+        if (_keyboard.oKey.wasPressedThisFrame)
+        {
+            JoinClientWithRelay(JoinCode);
+        }
+
+        // I 키: 연결 종료
+        if (_keyboard.iKey.wasPressedThisFrame)
+        {
+            Disconnect();
+        }
+
+        // T 키: 서버에 접속 중인 클라이언트 목록 출력
+        if (_keyboard.tKey.wasPressedThisFrame && InstanceFinder.ServerManager != null)
+        {
+            foreach (KeyValuePair<int, NetworkConnection> clientPair in InstanceFinder.ServerManager.Clients)
+            {
+                print($"ClientKey : {clientPair.Key} ClientId : {clientPair.Value.ClientId}, {clientPair.Value}");
+            }
         }
     }
 
-    /// <summary>
-    /// 호스트로 방 생성 (최대 접속 인원 3명 예시)
-    /// </summary>
+    // ***************************************************************
+    // Public Control API
+    // ***************************************************************
+
+    /// <summary>Unity Relay 할당을 생성하고 FishNet 서버와 로컬 클라이언트를 순차 시작한다.</summary>
     public async Task<string> StartHostWithRelay(int maxConnections = MAX_CONNECTIONS)
     {
         try
@@ -74,11 +115,24 @@ public class NetworkController : NetworkBehaviour
             string joinCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
             Debug.Log("방 생성 완료! 참여 코드: " + joinCode);
 
-            // [중요 변경점] 과거의 new RelayServerData() 대신 확장 메서드를 사용합니다.
             RelayServerData relayServerData = allocation.ToRelayServerData("dtls");
-            NetworkManager.Singleton.GetComponent<UnityTransport>().SetRelayServerData(relayServerData);
+            UnityTransport transport = InstanceFinder.TransportManager != null
+                ? InstanceFinder.TransportManager.GetTransport<UnityTransport>()
+                : null;
+            if (transport == null)
+            {
+                Debug.LogError("FishyUnityTransport(UnityTransport) 컴포넌트를 찾을 수 없습니다.");
+                return null;
+            }
 
-            NetworkManager.Singleton.StartHost();
+            transport.SetRelayServerData(relayServerData);
+
+            // 서버 시작 후 로컬 클라이언트를 연달아 시작해 호스트 모드로 동작시킨다.
+            if (InstanceFinder.ServerManager.StartConnection())
+            {
+                InstanceFinder.ClientManager.StartConnection();
+            }
+
             return joinCode;
         }
         catch (RelayServiceException e)
@@ -88,9 +142,7 @@ public class NetworkController : NetworkBehaviour
         }
     }
 
-    /// <summary>
-    /// 발급받은 6자리 참여 코드로 클라이언트 접속
-    /// </summary>
+    /// <summary>전달받은 참여 코드로 Relay 방에 접속해 FishNet 클라이언트를 시작한다.</summary>
     public async void JoinClientWithRelay(string joinCode)
     {
         try
@@ -98,11 +150,18 @@ public class NetworkController : NetworkBehaviour
             Debug.Log(joinCode + " 방에 접속 시도...");
             JoinAllocation joinAllocation = await RelayService.Instance.JoinAllocationAsync(joinCode);
 
-            // [중요 변경점] 클라이언트 역시 확장 메서드를 사용합니다.
             RelayServerData relayServerData = joinAllocation.ToRelayServerData("dtls");
-            NetworkManager.Singleton.GetComponent<UnityTransport>().SetRelayServerData(relayServerData);
+            UnityTransport transport = InstanceFinder.TransportManager != null
+                ? InstanceFinder.TransportManager.GetTransport<UnityTransport>()
+                : null;
+            if (transport == null)
+            {
+                Debug.LogError("FishyUnityTransport(UnityTransport) 컴포넌트를 찾을 수 없습니다.");
+                return;
+            }
 
-            NetworkManager.Singleton.StartClient();
+            transport.SetRelayServerData(relayServerData);
+            InstanceFinder.ClientManager.StartConnection();
         }
         catch (RelayServiceException e)
         {
@@ -110,19 +169,26 @@ public class NetworkController : NetworkBehaviour
         }
     }
 
-    /// <summary>
-    /// 연결을 종료하고 방을 나갑니다. (호스트/클라이언트 공통)
-    /// </summary>
+    /// <summary>활성화된 FishNet 클라이언트 및 서버 연결을 종료한다.</summary>
     public void Disconnect()
     {
-        if (NetworkManager.Singleton != null && (NetworkManager.Singleton.IsClient || NetworkManager.Singleton.IsServer))
-        {
-            // 네트워크 세션을 완전히 종료합니다.
-            NetworkManager.Singleton.Shutdown();
-            Debug.Log("네트워크 연결이 성공적으로 종료되었습니다.");
+        bool stopped = false;
 
-            // TODO: 메인 메뉴 씬으로 이동하거나 UI를 초기화하는 코드를 여기에 추가하세요.
-            // 예: UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
+        if (InstanceFinder.ClientManager != null && InstanceFinder.ClientManager.Started)
+        {
+            InstanceFinder.ClientManager.StopConnection();
+            stopped = true;
+        }
+
+        if (InstanceFinder.ServerManager != null && InstanceFinder.ServerManager.Started)
+        {
+            InstanceFinder.ServerManager.StopConnection(true);
+            stopped = true;
+        }
+
+        if (stopped)
+        {
+            Debug.Log("네트워크 연결이 성공적으로 종료되었습니다.");
         }
         else
         {
@@ -130,61 +196,16 @@ public class NetworkController : NetworkBehaviour
         }
     }
 
-    void Update()
+    // ***************************************************************
+    // Event Handlers
+    // ***************************************************************
+
+    /// <summary>로컬 클라이언트 연결이 끊어졌을 때 로그를 기록한다.</summary>
+    private void OnClientConnectionStateChanged(ClientConnectionStateArgs args)
     {
-
-        // p키 누르면 호스트 시작
-        if (_keyboard.pKey.wasPressedThisFrame)
-        {
-            Task<string> result = StartHostWithRelay(maxConnections: MAX_CONNECTIONS);
-            //PlayerSpawn();
-            print(result);
-        }
-
-        // o키 누르면 클라이언트 시작 (testJoinCode 세팅 필요)
-        if (_keyboard.oKey.wasPressedThisFrame)
-        {
-            JoinClientWithRelay(JoinCode);
-        }
-
-        // 연결 종료
-        if (_keyboard.iKey.wasPressedThisFrame)
-        {
-            Disconnect();
-        }
-
-        if (_keyboard.tKey.wasPressedThisFrame)
-        {
-            var connectedClientId = NetworkManager.Singleton.ConnectedClients;
-
-            foreach (var clientId in connectedClientId)
-            {
-                print($" ClientKey : {clientId.Key} ClientIdValue : {clientId.Value.ClientId}, {clientId.Value}");
-            }
-
-        }
-    }
-    private void OnDisconnectedFromServer(ulong clientId)
-    {
-        // 0은 보통 호스트(서버)를 의미하며, 내 ID와 같은지 체크하여 처리
-        if (clientId == NetworkManager.Singleton.LocalClientId)
+        if (args.ConnectionState == LocalConnectionState.Stopped)
         {
             Debug.Log("서버와의 연결이 끊어졌습니다. (방장 나감 또는 네트워크 오류)");
-            // 에러 팝업을 띄우거나 로비 씬으로 되돌아가는 로직 추가
-            // host가 끊기면 다 끈헝짐
         }
     }
-
-    void PlayerSpawn(ulong clientId)
-    {
-        if (!IsHost) return;
-
-        GameObject playerInstance = Instantiate(_spawnPreFab, _spawnPos.position, _spawnPos.rotation);
-
-        // 핵심: SpawnAsPlayerObject로 해당 클라이언트에게 소유권을 주며 스폰
-        playerInstance.GetComponent<NetworkObject>().SpawnAsPlayerObject(clientId, true);
-
-        print($"Client {clientId} 스폰 완료");
-    }
-
 }

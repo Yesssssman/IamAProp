@@ -1,5 +1,6 @@
 using System;
-using Unity.Netcode;
+using FishNet.Object;
+using FishNet.Object.Synchronizing;
 using UnityEngine;
 
 /// <summary>플레이어 무기 장착 상태.</summary>
@@ -62,10 +63,10 @@ public class PlayerAnim : NetworkBehaviour
     [SerializeField] private RuntimeAnimatorController[] weaponAnimControllers;
 
     /// <summary>현재 장착 중인 무기 종류.</summary>
-    private readonly NetworkVariable<EWeaponType> _weaponType = new(
-        EWeaponType.Hide,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Owner);
+    private readonly SyncVar<EWeaponType> _weaponType = new(EWeaponType.Hide);
+
+    /// <summary>이 오브젝트에 마지막으로 적용된 무기 종류 (초기값 -1로 첫 동기화 보장).</summary>
+    private EWeaponType _appliedWeaponType = (EWeaponType)(-1);
 
     /// <summary>몸통 <see cref="Animator"/> 컴포넌트.</summary>
     private Animator _animator;
@@ -374,15 +375,16 @@ public class PlayerAnim : NetworkBehaviour
     // NetworkBehaviour
     // ***************************************************************
 
-    public override void OnNetworkSpawn()
+    public override void OnStartNetwork()
     {
-        _weaponType.OnValueChanged += OnWeaponTypeChanged;
-        OnWeaponTypeChanged(EWeaponType.Hide, _weaponType.Value);
+        _weaponType.OnChange += OnWeaponTypeChanged;
+        OnWeaponTypeChanged(EWeaponType.Hide, _weaponType.Value, asServer: true);
     }
 
-    public override void OnNetworkDespawn()
+    public override void OnStopNetwork()
     {
-        _weaponType.OnValueChanged -= OnWeaponTypeChanged;
+        _weaponType.OnChange -= OnWeaponTypeChanged;
+        _appliedWeaponType = (EWeaponType)(-1);
     }
 
     // ***************************************************************
@@ -428,7 +430,14 @@ public class PlayerAnim : NetworkBehaviour
     {
         if (!IsOwner) return;
 
-        _weaponType.Value = weaponType;
+        if (IsServerInitialized)
+        {
+            _weaponType.Value = weaponType;
+        }
+        else
+        {
+            SetWeaponModeServerRpc(weaponType);
+        }
     }
 
     /// <summary>총기 장착 상태에서 손 재장전 애니메이션을 요청한다.</summary>
@@ -455,16 +464,38 @@ public class PlayerAnim : NetworkBehaviour
             _weaponAnimator.SetBool(IsReload, true);
         }
         _pendingReloadReset = true;
-        TriggerReloadRpc();
+
+        if (IsServerInitialized)
+        {
+            BroadcastReloadObserversRpc();
+        }
+        else
+        {
+            RequestReloadServerRpc();
+        }
     }
 
     // ***************************************************************
     // Network RPCs
     // ***************************************************************
 
+    /// <summary>소유자 클라이언트의 무기 모드 변경을 서버에 반영한다.</summary>
+    [ServerRpc]
+    private void SetWeaponModeServerRpc(EWeaponType weaponType)
+    {
+        _weaponType.Value = weaponType;
+    }
+
+    /// <summary>소유자 클라이언트의 재장전 요청을 서버를 통해 다른 관전자에게 전달한다.</summary>
+    [ServerRpc]
+    private void RequestReloadServerRpc()
+    {
+        BroadcastReloadObserversRpc();
+    }
+
     /// <summary>원격 프록시 클라이언트의 손 재장전 애니메이션을 트리거한다.</summary>
-    [Rpc(SendTo.NotOwner)]
-    private void TriggerReloadRpc()
+    [ObserversRpc(ExcludeOwner = true)]
+    private void BroadcastReloadObserversRpc()
     {
         if (handAnimator == null) return;
 
@@ -481,8 +512,11 @@ public class PlayerAnim : NetworkBehaviour
     // ***************************************************************
 
     /// <summary><see cref="_weaponType"/> 변경 시 무기 오브젝트와 몸통/손 애니메이터를 갱신한다.</summary>
-    private void OnWeaponTypeChanged(EWeaponType previousValue, EWeaponType newValue)
+    private void OnWeaponTypeChanged(EWeaponType previousValue, EWeaponType newValue, bool asServer)
     {
+        if (!asServer && IsServerInitialized) return;
+        if (_appliedWeaponType == newValue) return;
+        _appliedWeaponType = newValue;
         int index = (int)newValue;
 
         if (_animator != null)

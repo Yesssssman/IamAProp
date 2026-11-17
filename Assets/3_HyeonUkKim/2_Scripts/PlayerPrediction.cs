@@ -1,12 +1,9 @@
-using Unity.Netcode;
+using FishNet.Object.Prediction;
 using UnityEngine;
 
-/// <summary>특정 네트워크 틱의 플레이어 입력 스냅샷.</summary>
-public struct PlayerInputPayload : INetworkSerializable
+/// <summary>플레이어 예측 시뮬레이션에 전달할 네트워크 틱 입력 데이터.</summary>
+public struct PlayerInputData : IReplicateData
 {
-    /// <summary>입력이 샘플링된 네트워크 틱 번호.</summary>
-    public int Tick;
-
     /// <summary>정규화 전 2D 이동 입력 벡터.</summary>
     public Vector2 MoveInput;
 
@@ -16,41 +13,91 @@ public struct PlayerInputPayload : INetworkSerializable
     /// <summary>해당 틱에 점프가 요청되었는지 여부.</summary>
     public bool JumpRequested;
 
-    /// <summary>네트워크 버퍼에 입력 페이로드를 직렬화한다.</summary>
-    public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+    /// <summary>FishNet 런타임이 할당하는 로컬 틱 번호.</summary>
+    private uint _tick;
+
+    /// <summary>지정한 입력 값으로 <see cref="PlayerInputData"/>를 초기화한다.</summary>
+    public PlayerInputData(Vector2 moveInput, float cameraYaw, bool jumpRequested)
     {
-        serializer.SerializeValue(ref Tick);
-        serializer.SerializeValue(ref MoveInput);
-        serializer.SerializeValue(ref CameraYaw);
-        serializer.SerializeValue(ref JumpRequested);
+        MoveInput = moveInput;
+        CameraYaw = cameraYaw;
+        JumpRequested = jumpRequested;
+        _tick = 0;
     }
+
+    /// <inheritdoc/>
+    public void Dispose() { }
+
+    /// <inheritdoc/>
+    public uint GetTick() => _tick;
+
+    /// <inheritdoc/>
+    public void SetTick(uint value) => _tick = value;
 }
 
-/// <summary>특정 네트워크 틱의 플레이어 시뮬레이션 결과 상태 스냅샷.</summary>
-public struct PlayerStatePayload : INetworkSerializable
+/// <summary>서버 권한 물리 상태를 클라이언트에 롤백 적용하기 위한 조정 데이터.</summary>
+public struct PlayerReconcileData : IReconcileData
 {
-    /// <summary>시뮬레이션이 수행된 네트워크 틱 번호.</summary>
-    public int Tick;
-
-    /// <summary>시뮬레이션 직후 월드 위치.</summary>
+    /// <summary>시뮬레이션 직후 <see cref="Rigidbody"/>의 월드 위치.</summary>
     public Vector3 Position;
 
-    /// <summary>시뮬레이션 직후 수평 회전 각도 (도 단위, 월드 Y축).</summary>
-    public float RotationY;
+    /// <summary>시뮬레이션 직후 <see cref="Rigidbody"/>의 월드 회전.</summary>
+    public Quaternion Rotation;
 
-    /// <summary>시뮬레이션 직후 월드 속도 벡터 (초당 월드 단위).</summary>
+    /// <summary>시뮬레이션 직후 <see cref="Rigidbody"/>의 선형 속도 벡터 (초당 월드 단위).</summary>
     public Vector3 Velocity;
 
-    /// <summary>시뮬레이션 직후 바닥 접촉 여부.</summary>
+    /// <summary>시뮬레이션 직후 <see cref="Rigidbody"/>의 각속도 벡터 (초당 라디안).</summary>
+    public Vector3 AngularVelocity;
+
+    /// <summary>시뮬레이션 직후 평면 이동 속력 (초당 월드 단위).</summary>
+    public float PlanarSpeed;
+
+    /// <summary>현재 물리 틱의 바닥 접촉 여부.</summary>
     public bool IsGrounded;
 
-    /// <summary>네트워크 버퍼에 상태 페이로드를 직렬화한다.</summary>
-    public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+    /// <summary>직전 물리 틱의 바닥 접촉 여부.</summary>
+    public bool WasGrounded;
+
+    /// <summary>맨손 쓰러짐 대기 상태 활성화 여부.</summary>
+    public bool IsRagdollIdle;
+
+    /// <summary><see cref="Mathf.SmoothDampAngle"/> 내부 회전 각속도 상태값.</summary>
+    public float TurnSmoothVelocity;
+
+    /// <summary>FishNet 런타임이 할당하는 로컬 틱 번호.</summary>
+    private uint _tick;
+
+    /// <summary>지정한 물리 및 이동 상태로 <see cref="PlayerReconcileData"/>를 초기화한다.</summary>
+    public PlayerReconcileData(
+        Vector3 position,
+        Quaternion rotation,
+        Vector3 velocity,
+        Vector3 angularVelocity,
+        float planarSpeed,
+        bool isGrounded,
+        bool wasGrounded,
+        bool isRagdollIdle,
+        float turnSmoothVelocity)
     {
-        serializer.SerializeValue(ref Tick);
-        serializer.SerializeValue(ref Position);
-        serializer.SerializeValue(ref RotationY);
-        serializer.SerializeValue(ref Velocity);
-        serializer.SerializeValue(ref IsGrounded);
+        Position = position;
+        Rotation = rotation;
+        Velocity = velocity;
+        AngularVelocity = angularVelocity;
+        PlanarSpeed = planarSpeed;
+        IsGrounded = isGrounded;
+        WasGrounded = wasGrounded;
+        IsRagdollIdle = isRagdollIdle;
+        TurnSmoothVelocity = turnSmoothVelocity;
+        _tick = 0;
     }
+
+    /// <inheritdoc/>
+    public void Dispose() { }
+
+    /// <inheritdoc/>
+    public uint GetTick() => _tick;
+
+    /// <inheritdoc/>
+    public void SetTick(uint value) => _tick = value;
 }
