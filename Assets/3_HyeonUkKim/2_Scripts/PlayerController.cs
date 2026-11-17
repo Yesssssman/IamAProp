@@ -1,295 +1,587 @@
-using System;
 using Unity.Cinemachine;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-enum EWeaponType {Hide =0, KnifeMode = 1, Pistol = 2, Ak = 3 }
+/// <summary>플레이어 동작 상태.</summary>
+public enum EPlayerState
+{
+    Idle,
+    Attack,
+    Air,
+    Die
+}
 
-public enum EPlayerState { Idle, Attack, Air, Die }
-
+/// <summary>소유자 권한 기반 이동, 클라이언트 예측/서버 보정 및 입력을 처리한다.</summary>
+[RequireComponent(typeof(Rigidbody))]
+[RequireComponent(typeof(PlayerAnim))]
 public class PlayerController : NetworkBehaviour
 {
+    // ***************************************************************
+    // Fields
+    // ***************************************************************
+
+    /// <summary>평면 이동 속력 (초당 월드 단위).</summary>
     [Header("이동 설정")]
     [SerializeField] private float moveSpeed = 5.0f;
+
+    /// <summary>이동 방향 회전 감쇠 시간 (초 단위).</summary>
     [SerializeField] private float rotationSmoothTime = 0.1f;
 
+    /// <summary>점프 시 가하는 수직 임펄스 크기.</summary>
     [SerializeField] private float _JumpForce = 5f;
 
+    [Header("Ragdoll 설정")]
+    [Tooltip("수평으로 밀어내는 힘")]
+    [SerializeField] private float _pushForce = 2.5f;
 
+    /// <summary>맨손 대기 상태 진입 시 쓰러짐을 유도하는 초기 각속도 (초당 라디안).</summary>
+    [SerializeField] private float ragdollToppleSpeed = 3.5f;
+
+    [Tooltip("넘어질 때 바닥으로 살짝 누르는 하향 힘")]
+    [SerializeField] private float _downwardForce = 0.5f;
+
+    /// <summary>서버 보정을 수행할 위치 오차 임계값 (월드 단위).</summary>
+    [Header("예측 및 보정 설정")]
+    [SerializeField] private float reconciliationThreshold = 0.5f;
+
+    /// <summary>원격 프록시의 복제 속도 보간 계수.</summary>
+    [SerializeField] private float proxyVelocitySmoothSpeed = 15f;
+
+    /// <summary>이동 기준 방향을 계산할 카메라 트랜스폼.</summary>
     [Header("참조")]
     [SerializeField] private Transform cameraTransform;
 
+    /// <summary>발밑 바닥 체크 구체를 캐스팅하는 기준점.</summary>
     [Header("바닥 체크")]
-    [SerializeField] private Transform groundCheck; // 발밑에 빈 GameObject 배치 후 연결
+    [SerializeField] private Transform _groundCheck;
+
+    /// <summary>바닥 체크 구체의 반지름 (월드 단위).</summary>
     [SerializeField] private float checkRadius = 0.2f;
-    [SerializeField] private LayerMask groundLayer;  // 바닥 오브젝트들의 Layer
 
-    [Header("애니메이터 오버라이드")]
-    [SerializeField] private RuntimeAnimatorController[] weaponAnimControllers;
+    /// <summary>바닥으로 판정할 물리 레이어 마스크.</summary>
+    [SerializeField] private LayerMask _groundLayer;
 
-    public bool _wasGrounded; // 이전 프레임의 땅 접촉여부
-    public bool _isGrounded; // 현재 프레임의 땅 접촉여부
+    /// <summary>직전 물리 틱의 바닥 접촉 여부.</summary>
+    public bool _wasGrounded;
 
-    private PlayerControls inputActions; // 입력 액션
+    /// <summary>현재 물리 틱의 바닥 접촉 여부.</summary>
+    public bool _isGrounded;
 
+    /// <summary>소유자가 기록하고 원격 프록시가 읽는 월드 이동 속도 벡터 (초당 월드 단위).</summary>
+    private readonly NetworkVariable<Vector3> _networkVelocity = new(
+        Vector3.zero,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Owner);
+
+    /// <summary>클라이언트 예측 히스토리를 저장할 링 버퍼 크기.</summary>
+    private const int PredictionBufferSize = 1024;
+
+    /// <summary>틱별 입력 스냅샷 링 버퍼.</summary>
+    private readonly PlayerInputPayload[] _inputBuffer = new PlayerInputPayload[PredictionBufferSize];
+
+    /// <summary>틱별 예측 결과 상태 링 버퍼.</summary>
+    private readonly PlayerStatePayload[] _stateBuffer = new PlayerStatePayload[PredictionBufferSize];
+
+    /// <summary>서버 벽 관통 검사에 재사용할 레이캐스트 결과 버퍼.</summary>
+    private readonly RaycastHit[] _wallHits = new RaycastHit[4];
+
+    /// <summary>서버에서 마지막으로 검증 완료한 플레이어 상태 스냅샷.</summary>
+    private PlayerStatePayload _lastServerValidatedState;
+
+    /// <summary>소유자가 마지막으로 서버 검증을 요청한 네트워크 틱 번호.</summary>
+    private int _lastProcessedTick = -1;
+
+    /// <summary>로컬 플레이어 입력 액션 에셋 인스턴스.</summary>
+    private PlayerControls _inputActions;
+
+    /// <summary>캐릭터 물리 <see cref="Rigidbody"/> 컴포넌트.</summary>
     private Rigidbody _rb;
 
-    private Animator _animator;
-    private Vector2 moveInput; // 현재 이동값
-    private Vector3 verticalVelocity; 
+    /// <summary>캐릭터 충돌체 <see cref="CapsuleCollider"/> 컴포넌트.</summary>
+    private CapsuleCollider _capsuleCollider;
+
+    /// <summary>애니메이션 동기화를 담당하는 <see cref="PlayerAnim"/> 컴포넌트.</summary>
+    private PlayerAnim _playerAnim;
+
+    /// <summary>현재 프레임의 2D 이동 입력값.</summary>
+    private Vector2 moveInput;
+
+    /// <summary>다음 물리 틱에 소비할 점프 입력 플래그.</summary>
+    private bool _jumpRequested;
+
+    /// <summary><see cref="Mathf.SmoothDampAngle"/> 내부 회전 각속도 상태값.</summary>
     private float turnSmoothVelocity;
 
-    private EWeaponType _EweaponType;
+    /// <summary>원격 프록시에서 프레임 단위로 보간된 이동 속도 벡터.</summary>
+    private Vector3 _smoothedProxyVelocity;
 
+    /// <summary>소유자의 현재 평면 이동 속력 (초당 월드 단위).</summary>
+    private float _ownerPlanarSpeed;
+
+    /// <summary>현재 플레이어 동작 상태.</summary>
     private EPlayerState _EplayerState;
 
-    /*
-     Animator 변수
-     */
-    private static readonly int MoveX = Animator.StringToHash("MoveX");
-    private static readonly int isAttack = Animator.StringToHash("isAttack");
-    private static readonly int isAir = Animator.StringToHash("isAir");
+    /// <summary>현재 루트 <see cref="Rigidbody"/> 회전 제약이 해제된 맨손 쓰러짐 대기 상태 여부.</summary>
+    private bool _isRagdollIdle;
 
-    private static readonly int _weaponMode = Animator.StringToHash("WeaponMode");
+    // ***************************************************************
+    // Properties
+    // ***************************************************************
+
+    /// <summary><see cref="moveSpeed"/> 대비 정규화된 현재 평면 이동 속력 비율 (0~1).</summary>
+    public float PlanarSpeedRatio
+    {
+        get
+        {
+            if (moveSpeed <= 0f) return 0f;
+
+            float planarSpeed = IsOwner
+                ? _ownerPlanarSpeed
+                : new Vector2(_smoothedProxyVelocity.x, _smoothedProxyVelocity.z).magnitude;
+
+            return Mathf.Clamp01(planarSpeed / moveSpeed);
+        }
+    }
+
+    // ***************************************************************
+    // MonoBehaviour
+    // ***************************************************************
 
     private void Awake()
     {
         _rb = GetComponent<Rigidbody>();
-        _animator = GetComponent<Animator>();
-        _EweaponType = EWeaponType.Hide;
+        _capsuleCollider = GetComponentInChildren<CapsuleCollider>();
+        _playerAnim = GetComponent<PlayerAnim>();
         _EplayerState = EPlayerState.Idle;
 
-    }
-
-    // 네트워크 상에서 오브젝트가 스폰될 때 호출 (Awake/Start 대체)
-    public override void OnNetworkSpawn()
-    {
-        // 플레이어 통제권 여부 검사
-        if(IsOwner)
+        if (_groundCheck == null)
         {
-            // 키 이벤트 등록
-            inputActions = new PlayerControls();
-            inputActions.Enable();
-            inputActions.Player.Move.performed += OnMovePerformed;
-            inputActions.Player.Move.canceled += OnMoveCanceled;
-
-            inputActions.Player.Attack.started += OnAttackStarted;
-            inputActions.Player.Attack.canceled += OnAttackEnd;
-
-            inputActions.Player.Jump.started += OnJump;
-
-            inputActions.Player.ChgWeapon.started += ChangeWeaponMode;
-
-            CinemachineCamera cam = FindAnyObjectByType<CinemachineCamera>();
-            if (cam != null)
-            {
-                Transform target = cameraTransform != null ? cameraTransform : transform;
-                cam.Follow = transform; // 혹은 가슴/머리 위치의 빈 오브젝트
-                cam.LookAt = transform;
-
-                // TPS 시점 강제 정렬 (선택 사항: 스폰 직후 카메라가 캐릭터 뒤로 오도록 초기화)
-                var orbitalFollow = cam.GetComponent<CinemachineOrbitalFollow>();
-                if (orbitalFollow != null)
-                {
-                    // 캐릭터가 바라보는 방향(캐릭터 뒤)으로 카메라 축을 정렬
-                    orbitalFollow.HorizontalAxis.Value = transform.eulerAngles.y;
-                }
-
-            }
-
-            if (Camera.main != null)
-            {
-                cameraTransform = Camera.main.transform;
-            }
-        }
-    }
-
-    // 오브젝트가 파괴되거나 디스폰될 때 구독 해제
-    public override void OnNetworkDespawn()
-    {
-        if (IsOwner && inputActions != null)
-        {
-            inputActions.Player.Disable();
+            _groundCheck = transform.Find("GroundCheck");
         }
     }
 
     private void Start()
     {
+        if (!IsOwner) return;
+
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
     }
 
-    void Update()
+    private void Update()
     {
-        
+        if (!IsSpawned || IsOwner) return;
+
+        _smoothedProxyVelocity = Vector3.Lerp(
+            _smoothedProxyVelocity,
+            _networkVelocity.Value,
+            Time.deltaTime * proxyVelocitySmoothSpeed);
     }
 
     private void FixedUpdate()
     {
-        // 내 캐릭터가 아니면 early Exit;
-        if (!IsOwner) return;
+        if (!IsSpawned || !IsOwner) return;
 
-        // 바닥 체크
-        _isGrounded = Physics.CheckSphere(groundCheck.position, checkRadius, groundLayer);
-        // 착지 순간 판정 (이전엔 공중이었는데 지금은 땅일때)
-        if(!_wasGrounded && _isGrounded )
+        if (cameraTransform == null && Camera.main != null)
         {
-            print("땅 착지!");
-            OnJumpEnd(); // 땅에 닿을 떄 구독된 이벤트 함수들 호출
+            cameraTransform = Camera.main.transform;
+        }
+
+        if (_groundCheck != null)
+        {
+            _isGrounded = Physics.CheckSphere(_groundCheck.position, checkRadius, _groundLayer);
+            if (!_isGrounded && _isRagdollIdle && _capsuleCollider != null)
+            {
+                Vector3 capsuleCenterWorld = _capsuleCollider.transform.TransformPoint(_capsuleCollider.center);
+                _isGrounded = Physics.CheckSphere(capsuleCenterWorld, checkRadius, _groundLayer);
+            }
+        }
+
+        if (!_wasGrounded && _isGrounded)
+        {
+            _EplayerState = EPlayerState.Idle;
+            _playerAnim.SetJumpState(false, false);
         }
 
         _wasGrounded = _isGrounded;
 
-        HandleMovement();
+        float cameraYaw = cameraTransform != null ? cameraTransform.eulerAngles.y : transform.eulerAngles.y;
+        Vector3 inputDirection = new Vector3(moveInput.x, 0f, moveInput.y).normalized;
+        Vector3 horizontalVelocity = Vector3.zero;
+        float currentRotationY = _rb.rotation.eulerAngles.y;
+        bool shouldRagdoll = _playerAnim != null
+            && _playerAnim.CurrentWeaponType == EWeaponType.Hide
+            && inputDirection.magnitude < 0.1f
+            && _isGrounded
+            && !_jumpRequested;
+
+        if (shouldRagdoll)
+        {
+            if (!_isRagdollIdle)
+            {
+                _isRagdollIdle = true;
+                _rb.constraints = RigidbodyConstraints.None;
+                // _rb.angularVelocity = transform.right * ragdollToppleSpeed;
+
+                Vector2 randomCircle = Random.insideUnitCircle.normalized;
+                Vector3 pushDirection = new Vector3(randomCircle.x, 0f, randomCircle.y);
+                Vector3 finalForce = (pushDirection * _pushForce) + (Vector3.down * _downwardForce);
+
+                _rb.AddForce(finalForce, ForceMode.Impulse);
+                _rb.AddTorque(transform.right * ragdollToppleSpeed);
+            }
+        }
+        else if (_isRagdollIdle)
+        {
+            _isRagdollIdle = false;
+            _rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+            _rb.angularVelocity = Vector3.zero;
+            _rb.rotation = Quaternion.Euler(0f, currentRotationY, 0f);
+        }
+
+        if (inputDirection.magnitude >= 0.1f)
+        {
+            float targetAngle = Mathf.Atan2(inputDirection.x, inputDirection.z) * Mathf.Rad2Deg + cameraYaw;
+            currentRotationY = Mathf.SmoothDampAngle(
+                currentRotationY,
+                targetAngle,
+                ref turnSmoothVelocity,
+                rotationSmoothTime);
+
+            _rb.MoveRotation(Quaternion.Euler(0f, currentRotationY, 0f));
+
+            Vector3 moveDirection = (Quaternion.Euler(0f, targetAngle, 0f) * Vector3.forward).normalized;
+            Vector3 targetPosition = _rb.position + moveDirection * (moveSpeed * Time.fixedDeltaTime);
+            _rb.MovePosition(targetPosition);
+
+            horizontalVelocity = moveDirection * moveSpeed;
+        }
+
+        bool jumpedThisTick = false;
+        if (_jumpRequested)
+        {
+            _jumpRequested = false;
+            if (_isGrounded)
+            {
+                _rb.AddForce(Vector3.up * _JumpForce, ForceMode.Impulse);
+                _isGrounded = false;
+                _wasGrounded = false;
+                _EplayerState = EPlayerState.Air;
+                _playerAnim.SetJumpState(true, true);
+                jumpedThisTick = true;
+            }
+        }
+
+        _ownerPlanarSpeed = new Vector2(horizontalVelocity.x, horizontalVelocity.z).magnitude;
+        Vector3 simulatedVelocity = new Vector3(horizontalVelocity.x, _rb.linearVelocity.y, horizontalVelocity.z);
+
+        if ((_networkVelocity.Value - simulatedVelocity).sqrMagnitude > 0.001f)
+        {
+            _networkVelocity.Value = simulatedVelocity;
+        }
+
+        int currentTick = NetworkManager.LocalTime.Tick;
+        int bufferIndex = currentTick % PredictionBufferSize;
+
+        PlayerInputPayload inputPayload = new PlayerInputPayload
+        {
+            Tick = currentTick,
+            MoveInput = moveInput,
+            CameraYaw = cameraYaw,
+            JumpRequested = jumpedThisTick
+        };
+
+        PlayerStatePayload statePayload = new PlayerStatePayload
+        {
+            Tick = currentTick,
+            Position = _rb.position,
+            RotationY = currentRotationY,
+            Velocity = simulatedVelocity,
+            IsGrounded = _isGrounded
+        };
+
+        _inputBuffer[bufferIndex] = inputPayload;
+        _stateBuffer[bufferIndex] = statePayload;
+
+        if (!IsServer && currentTick != _lastProcessedTick)
+        {
+            _lastProcessedTick = currentTick;
+            ValidateMovementServerRpc(inputPayload, statePayload);
+        }
+        else
+        {
+            _lastProcessedTick = currentTick;
+        }
     }
 
-    // 이동값 입력시작
-    void OnMovePerformed(InputAction.CallbackContext context)
+    private void OnDrawGizmosSelected()
+    {
+        if (_groundCheck == null) return;
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(_groundCheck.position, checkRadius);
+    }
+
+    // ***************************************************************
+    // NetworkBehaviour
+    // ***************************************************************
+
+    public override void OnNetworkSpawn()
+    {
+        _lastServerValidatedState = new PlayerStatePayload
+        {
+            Tick = -1,
+            Position = transform.position,
+            RotationY = transform.eulerAngles.y,
+            Velocity = Vector3.zero,
+            IsGrounded = true
+        };
+        _lastProcessedTick = -1;
+
+        if (!IsOwner) return;
+
+        _inputActions = new PlayerControls();
+        _inputActions.Enable();
+        _inputActions.Player.Move.performed += OnMovePerformed;
+        _inputActions.Player.Move.canceled += OnMoveCanceled;
+        _inputActions.Player.Attack.started += OnAttackStarted;
+        _inputActions.Player.Attack.canceled += OnAttackEnd;
+        _inputActions.Player.Jump.started += OnJump;
+        _inputActions.Player.ChgWeapon.started += ChangeWeaponMode;
+        _inputActions.Player.Reload.started += OnReloadStarted;
+
+        CinemachineCamera cam = FindAnyObjectByType<CinemachineCamera>();
+        if (cam != null)
+        {
+            cam.Follow = transform;
+            cam.LookAt = transform;
+
+            CinemachineOrbitalFollow orbitalFollow = cam.GetComponent<CinemachineOrbitalFollow>();
+            if (orbitalFollow != null)
+            {
+                orbitalFollow.HorizontalAxis.Value = transform.eulerAngles.y;
+            }
+        }
+
+        if (Camera.main != null)
+        {
+            cameraTransform = Camera.main.transform;
+        }
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        if (!IsOwner || _inputActions == null) return;
+
+        _inputActions.Player.Move.performed -= OnMovePerformed;
+        _inputActions.Player.Move.canceled -= OnMoveCanceled;
+        _inputActions.Player.Attack.started -= OnAttackStarted;
+        _inputActions.Player.Attack.canceled -= OnAttackEnd;
+        _inputActions.Player.Jump.started -= OnJump;
+        _inputActions.Player.ChgWeapon.started -= ChangeWeaponMode;
+        _inputActions.Player.Reload.started -= OnReloadStarted;
+        _inputActions.Player.Disable();
+        _inputActions.Dispose();
+        _inputActions = null;
+    }
+
+    // ***************************************************************
+    // Input Event Handlers
+    // ***************************************************************
+
+    /// <summary>이동 입력 벡터를 갱신한다.</summary>
+    private void OnMovePerformed(InputAction.CallbackContext context)
     {
         moveInput = context.ReadValue<Vector2>();
     }
 
-    // 이동값 입력종료
-    void OnMoveCanceled(InputAction.CallbackContext context)
+    /// <summary>이동 입력이 해제되면 입력 벡터를 초기화한다.</summary>
+    private void OnMoveCanceled(InputAction.CallbackContext context)
     {
         moveInput = Vector2.zero;
     }
 
-    void OnJump(InputAction.CallbackContext context)
+    /// <summary>바닥에 닿아 있을 때 점프 요청 플래그를 설정한다.</summary>
+    private void OnJump(InputAction.CallbackContext context)
     {
-        // 내 캐릭터가 아니면 early Exit;
-        if (!IsOwner) return;
-        // 공중에서 점프 불가능하게 처리
-        if (!_isGrounded) return;
+        if (!IsOwner || !_isGrounded) return;
 
-        // 서버에 점프 RPC 요청
-        HandleJumpRpc();
-        print("OnJump");
+        _jumpRequested = true;
     }
 
-    void OnJumpEnd()
-    {
-        // 여전히 공중이라면 return
-        if (!_isGrounded) return;
-        // 서버에 점프END RPC 요청
-        HandleJumpEndRpc();
-        print("OnJumpEnd");
-    }
-
-    void OnAttackStarted(InputAction.CallbackContext context)
+    /// <summary>공격 입력 시작 시 상태를 갱신한다.</summary>
+    private void OnAttackStarted(InputAction.CallbackContext context)
     {
         if (!IsOwner) return;
-        HandleAttackRpc();
-        print("OnAttack");
+
+        _EplayerState = EPlayerState.Attack;
+        _playerAnim.SetAttackState(true);
     }
 
-    void OnAttackEnd(InputAction.CallbackContext context)
+    /// <summary>공격 입력 종료 시 상태를 복원한다.</summary>
+    private void OnAttackEnd(InputAction.CallbackContext context)
     {
         if (!IsOwner) return;
-        HandleAttackEndRpc();
-        print("OnAttackEnd");
+
+        _EplayerState = _isGrounded ? EPlayerState.Idle : EPlayerState.Air;
+        _playerAnim.SetAttackState(false);
     }
 
-    private void HandleMovement()
-    {
-        Vector3 direction = new Vector3(moveInput.x, 0f, moveInput.y).normalized;
-
-        // 이동값이 0.1f 이상일떄만 RPC 호출
-        if (direction.magnitude >= 0.1f)
-        {
-            // 클라이언트 측에서 목표 각도만 계산
-            float targetAngle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg + cameraTransform.eulerAngles.y;
-
-            // 서버로 계산된 타겟 각도를 보냄
-            HandleMovementRpc(targetAngle);
-        }
-        else
-        {
-            HandleMoveStopRpc();
-        }
-    }
-
+    /// <summary>무기 전환 입력에 따라 무기 모드를 변경한다.</summary>
     private void ChangeWeaponMode(InputAction.CallbackContext context)
     {
-        float weaponType = context.ReadValue<float>();
-        _EweaponType = (EWeaponType)(int)weaponType;
+        if (!IsOwner) return;
 
-        ChangeWeaponModeRpc();
+        int weaponIndex = Mathf.Clamp(Mathf.RoundToInt(context.ReadValue<float>()) - 1, 0, 3);
+        _playerAnim.SetWeaponMode((EWeaponType)weaponIndex);
     }
 
-    [Rpc(SendTo.Server, Delivery = RpcDelivery.Unreliable)]
-    void ChangeWeaponModeRpc()
+    /// <summary>재장전 입력 시 손 재장전 시퀀스를 요청한다.</summary>
+    private void OnReloadStarted(InputAction.CallbackContext context)
     {
-        if (weaponAnimControllers[(int)_EweaponType] != null)
+        if (!IsOwner) return;
+
+        _playerAnim.RequestReload();
+    }
+
+    // ***************************************************************
+    // Network RPCs
+    // ***************************************************************
+
+    /// <summary>소유자 클라이언트가 예측한 이동 상태를 서버에서 검증한다.</summary>
+    [Rpc(SendTo.Server, Delivery = RpcDelivery.Unreliable)]
+    private void ValidateMovementServerRpc(PlayerInputPayload inputPayload, PlayerStatePayload clientState)
+    {
+        if (_lastServerValidatedState.Tick < 0)
         {
-            _animator.runtimeAnimatorController = weaponAnimControllers[(int)_EweaponType];
+            _lastServerValidatedState = clientState;
+            return;
         }
+
+        int tickDelta = clientState.Tick - _lastServerValidatedState.Tick;
+        if (tickDelta <= 0) return;
+
+        Vector3 validatedPosition = clientState.Position;
+        bool needsReconcile = false;
+
+        float elapsedTime = tickDelta * NetworkManager.ServerTime.FixedDeltaTime;
+        Vector2 prevXZ = new Vector2(_lastServerValidatedState.Position.x, _lastServerValidatedState.Position.z);
+        Vector2 currXZ = new Vector2(validatedPosition.x, validatedPosition.z);
+        float planarDistance = Vector2.Distance(prevXZ, currXZ);
+        float maxAllowedDistance = (moveSpeed * elapsedTime) + reconciliationThreshold;
+
+        if (planarDistance > maxAllowedDistance && planarDistance > Mathf.Epsilon)
+        {
+            Vector2 clampedXZ = Vector2.MoveTowards(prevXZ, currXZ, moveSpeed * elapsedTime);
+            validatedPosition = new Vector3(clampedXZ.x, validatedPosition.y, clampedXZ.y);
+            needsReconcile = true;
+        }
+
+        Vector3 castOffset = _capsuleCollider != null
+            ? Vector3.up * _capsuleCollider.center.y
+            : Vector3.up * 0.18f;
+        Vector3 castStart = _lastServerValidatedState.Position + castOffset;
+        Vector3 castEnd = validatedPosition + castOffset;
+        Vector3 castDelta = castEnd - castStart;
+        float castDistance = castDelta.magnitude;
+
+        if (castDistance > Mathf.Epsilon)
+        {
+            Vector3 castDir = castDelta / castDistance;
+            int hitCount = Physics.RaycastNonAlloc(
+                castStart,
+                castDir,
+                _wallHits,
+                castDistance,
+                Physics.DefaultRaycastLayers,
+                QueryTriggerInteraction.Ignore);
+
+            float closestDistance = castDistance;
+            bool hitWall = false;
+            for (int i = 0; i < hitCount; i++)
+            {
+                RaycastHit hit = _wallHits[i];
+                if (hit.collider == null || hit.collider == _capsuleCollider || hit.transform.IsChildOf(transform))
+                {
+                    continue;
+                }
+
+                if (hit.distance < closestDistance)
+                {
+                    closestDistance = hit.distance;
+                    hitWall = true;
+                }
+            }
+
+            if (hitWall)
+            {
+                float skinRadius = _capsuleCollider != null ? _capsuleCollider.radius : 0.05f;
+                float safeDistance = Mathf.Max(0f, closestDistance - skinRadius);
+                validatedPosition = _lastServerValidatedState.Position + castDir * safeDistance;
+                needsReconcile = true;
+            }
+        }
+
+        if (needsReconcile)
+        {
+            PlayerStatePayload correctedState = clientState;
+            correctedState.Position = validatedPosition;
+            _lastServerValidatedState = correctedState;
+
+            ReconcileMovementOwnerRpc(correctedState);
+            return;
+        }
+
+        _lastServerValidatedState = clientState;
     }
 
-    // 에디터 씬 뷰에서 체크 반경 시각화
-    private void OnDrawGizmosSelected()
+    /// <summary>서버 보정 상태를 소유자에게 적용하고 이후 틱의 입력을 재시뮬레이션한다.</summary>
+    [Rpc(SendTo.Owner, Delivery = RpcDelivery.Reliable)]
+    private void ReconcileMovementOwnerRpc(PlayerStatePayload authoritativeState)
     {
-        if (groundCheck == null) return;
-        Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(groundCheck.position, checkRadius);
-    }
+        int bufferIndex = authoritativeState.Tick % PredictionBufferSize;
+        PlayerStatePayload predictedState = _stateBuffer[bufferIndex];
 
-    /*
-    RPC 함수 목록
-    RPC는 무조건 서버에서 실행되어지는 함수    
-    */
+        if (predictedState.Tick == authoritativeState.Tick
+            && Vector3.Distance(predictedState.Position, authoritativeState.Position) <= reconciliationThreshold)
+        {
+            return;
+        }
 
-    // 이동 RPC 함수
-    [Rpc(SendTo.Server,Delivery = RpcDelivery.Unreliable)]
-    void HandleMovementRpc(float targetAngle)
-    {
-        // 서버의 현재 Rigidbody 각도를 기준으로 부드러운 회전
-        float smoothAngle = Mathf.SmoothDampAngle(_rb.rotation.eulerAngles.y, targetAngle, ref turnSmoothVelocity, rotationSmoothTime);
-        _rb.MoveRotation(Quaternion.Euler(0f, smoothAngle, 0f));
+        Vector3 reconciledPosition = authoritativeState.Position;
+        float reconciledRotationY = authoritativeState.RotationY;
+        _stateBuffer[bufferIndex] = authoritativeState;
 
-        // 서버에서 물리적 이동 처리
-        Vector3 moveDirection = Quaternion.Euler(0f, targetAngle, 0f) * Vector3.forward;
-        Vector3 targetPosition = _rb.position + moveDirection.normalized * (moveSpeed * Time.fixedDeltaTime);
-        _rb.MovePosition(targetPosition);
+        float dt = NetworkManager.LocalTime.FixedDeltaTime;
+        for (int tick = authoritativeState.Tick + 1; tick <= _lastProcessedTick; tick++)
+        {
+            int idx = tick % PredictionBufferSize;
+            PlayerInputPayload input = _inputBuffer[idx];
+            if (input.Tick != tick) continue;
 
-        _animator.SetFloat(MoveX, 1f);
-    }
+            Vector3 dir = new Vector3(input.MoveInput.x, 0f, input.MoveInput.y).normalized;
+            Vector3 horizVel = Vector3.zero;
+            if (dir.magnitude >= 0.1f)
+            {
+                float targetAngle = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg + input.CameraYaw;
+                reconciledRotationY = targetAngle;
+                Vector3 moveDir = (Quaternion.Euler(0f, targetAngle, 0f) * Vector3.forward).normalized;
+                reconciledPosition += moveDir * (moveSpeed * dt);
+                horizVel = moveDir * moveSpeed;
+            }
 
-    // 점프 RPC 함수
-    [Rpc(SendTo.Server,Delivery =RpcDelivery.Unreliable)]
-    void HandleJumpRpc()
-    {
-        _rb.AddForce(Vector3.up * _JumpForce, ForceMode.Impulse);
-        _animator.SetBool(isAir, true);
-    }
-    // 점프 END RPC 함수
-    [Rpc(SendTo.Server,Delivery =RpcDelivery.Unreliable)]
-    void HandleJumpEndRpc()
-    {
-        _animator.SetBool(isAir, false);
-    }
+            PlayerStatePayload replayedState = _stateBuffer[idx];
+            replayedState.Tick = tick;
+            replayedState.Position = reconciledPosition;
+            replayedState.RotationY = reconciledRotationY;
+            replayedState.Velocity = new Vector3(horizVel.x, replayedState.Velocity.y, horizVel.z);
+            _stateBuffer[idx] = replayedState;
+        }
 
-    // 이동 정지 RPC 함수
-    [Rpc(SendTo.Server, Delivery = RpcDelivery.Unreliable)]
-    void HandleMoveStopRpc()
-    {
-        _animator.SetFloat(MoveX, 0f);
-    }
-
-    // 공격 RPC 함수
-    [Rpc(SendTo.Server, Delivery = RpcDelivery.Unreliable)]
-    void HandleAttackRpc()
-    {
-        print("HandleAttackRpc");
-        _animator.SetBool(isAttack, true);
-    }
-
-    // 공격 END RPC 함수
-    [Rpc(SendTo.Server, Delivery = RpcDelivery.Unreliable)]
-    void HandleAttackEndRpc()
-    {
-        print("HandleAttackEndRpc");
-        _animator.SetBool(isAttack, false);
+        _rb.position = reconciledPosition;
+        if (!_isRagdollIdle)
+        {
+            _rb.rotation = Quaternion.Euler(0f, reconciledRotationY, 0f);
+        }
     }
 }

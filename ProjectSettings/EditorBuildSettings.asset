@@ -11,7 +11,7 @@ EditorBuildSettings:
   - enabled: 0
     path: Assets/Scenes/SampleScene.unity
     guid: 99c9720ab356a0642a771bea13969a05
-  - enabled: 1
+  - enabled: 0
     path: Assets/3_HyeonUkKim/1_Scene/NetworkScene.unity
     guid: 70c6240b0f81450449dd035dd468a16d
   - enabled: 1
@@ -21,4 +21,5 @@ EditorBuildSettings:
     path: Assets/1_Yesman/YesmanTestScene.unity
     guid: 7c3ce1303c7ccf64c8702fd6698516aa
   m_configObjects:
+    com.unity.addressableassets: {fileID: 11400000, guid: ae80b06503f4b47f98d8d9cdfb8f85fa, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
