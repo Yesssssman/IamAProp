@@ -1,0 +1,53 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a00a7201de6a242e391a1ae8ef553406, type: 3}
+  m_Name: DefaultPropTemplate
+  m_EditorClassIdentifier: Assembly-CSharp::PropTemplateSO
+  baseBodyController: {fileID: 9100000, guid: 35f3afcc8fb1db74cbb61a2feaf60bd0, type: 2}
+  baseHandController: {fileID: 9100000, guid: bd6715ea4460c46bbb4903de43a0c252, type: 2}
+  baseBodyHideClip: {fileID: -3246335567985755239, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
+  baseBodyRunClip: {fileID: -428411149401142958, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
+  baseBodyJumpClip: {fileID: -6311939953767310088, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
+  baseBodyFallClip: {fileID: 7390238872845599331, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
+  baseHandIdleClip: {fileID: 7400000, guid: ec33dbe564175494c822332a5e5331c3, type: 2}
+  baseHandRunClip: {fileID: 7400000, guid: 804c2a61a792340ceabe0ddbdb2695c3, type: 2}
+  baseHandJumpClip: {fileID: -4048572099551542838, guid: ff93dce0ad71f394288a74544a614b3a, type: 3}
+  baseHandFallClip: {fileID: 5796711387396202308, guid: ff93dce0ad71f394288a74544a614b3a, type: 3}
+  weaponSockets:
+  - weaponPrefab: {fileID: 0}
+    weaponAnimController: {fileID: 0}
+    gripPosition: {x: 0, y: 0, z: 0}
+    gripRotation: {x: 0, y: 0, z: 0}
+    gripScale: {x: 1, y: 1, z: 1}
+    reloadClip: {fileID: 0}
+    usesAimLocomotion: 0
+  - weaponPrefab: {fileID: 5489145493786919654, guid: c331d4509e2a94446b4dedf64fcae8dd, type: 3}
+    weaponAnimController: {fileID: 0}
+    gripPosition: {x: -0.0139, y: 0.018, z: 0.0018}
+    gripRotation: {x: 41.692326, y: 39.301437, z: 304.95862}
+    gripScale: {x: 0.4, y: 0.4, z: 0.4}
+    reloadClip: {fileID: 0}
+    usesAimLocomotion: 0
+  - weaponPrefab: {fileID: 389447474382563802, guid: b27139442064d47fd9b21b582b2fd121, type: 3}
+    weaponAnimController: {fileID: 9100000, guid: 593c2dd6af7de4bd38b08063b27a26a8, type: 2}
+    gripPosition: {x: -0.0126, y: 0.0594, z: -0.0227}
+    gripRotation: {x: 88.07187, y: 247.8977, z: 71.43641}
+    gripScale: {x: 1, y: 1, z: 1}
+    reloadClip: {fileID: -7851223266158103639, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+    usesAimLocomotion: 1
+  - weaponPrefab: {fileID: 5803435650769594868, guid: 3f3191eb7a96f421a8fa7deafb3c1f96, type: 3}
+    weaponAnimController: {fileID: 9100000, guid: bda809c67aa1b4b13b22130c52b507a9, type: 2}
+    gripPosition: {x: -0.026, y: -0.008, z: -0.006}
+    gripRotation: {x: 274.24396, y: 222.39346, z: 180.59734}
+    gripScale: {x: 1, y: 1, z: 1}
+    reloadClip: {fileID: -8794803593805319676, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+    usesAimLocomotion: 1

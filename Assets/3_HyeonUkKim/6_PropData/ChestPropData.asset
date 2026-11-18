@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 206f7b4b0d2364210802cd54d4e90923, type: 3}
+  m_Name: ChestPropData
+  m_EditorClassIdentifier: Assembly-CSharp::PropDataSO
+  propType: 1
+  propTemplate: {fileID: 11400000, guid: c5d7eff3d58dc4967a552d55d104f25d, type: 2}
+  moveSpeed: 5
+  rotationSmoothTime: 0.1
+  jumpForce: 12
+  pushForce: 2.5
+  ragdollToppleSpeed: 3.5
+  downwardForce: 0.5
+  rigidbodyMass: 3
+  rigidbodyLinearDamping: 1
+  rigidbodyAngularDamping: 0.1
+  groundCheckRadius: 0.2
+  groundLayer:
+    serializedVersion: 2
+    m_Bits: 8
+  bodyClips:
+    hideClip: {fileID: 2789470803197123464, guid: d81713e13f6b3b348a8d4a3e282d9933, type: 3}
+    runClip: {fileID: 4111455951213948253, guid: d81713e13f6b3b348a8d4a3e282d9933, type: 3}
+    jumpClip: {fileID: 5623534643051850317, guid: d81713e13f6b3b348a8d4a3e282d9933, type: 3}
+    fallClip: {fileID: -2626643627790658621, guid: d81713e13f6b3b348a8d4a3e282d9933, type: 3}
+    aimIdleClip: {fileID: -2725499644044485199, guid: d81713e13f6b3b348a8d4a3e282d9933, type: 3}
+    aimRunClip: {fileID: -7727173275496773070, guid: d81713e13f6b3b348a8d4a3e282d9933, type: 3}
+  unarmedHandClips:
+    idleClip: {fileID: 0}
+    runClip: {fileID: 1646884068010633961, guid: 0e3cacf20f6c4b549b8a1eafdd3b330e, type: 3}
+    jumpClip: {fileID: -1513343706981453816, guid: 0e3cacf20f6c4b549b8a1eafdd3b330e, type: 3}
+    fallClip: {fileID: -2018133050434979395, guid: 0e3cacf20f6c4b549b8a1eafdd3b330e, type: 3}
