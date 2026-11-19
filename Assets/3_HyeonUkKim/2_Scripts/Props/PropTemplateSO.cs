@@ -21,8 +21,29 @@ public struct PropBodyClips
     /// <summary>무기 장착 대기 상태 클립.</summary>
     public AnimationClip aimIdleClip;
 
-    /// <summary>총기 조준 달리기 상태 클립.</summary>
+    /// <summary>총기 조준 전방 달리기 상태 클립.</summary>
     public AnimationClip aimRunClip;
+
+    /// <summary>총기 조준 후방 달리기 상태 클립.</summary>
+    public AnimationClip aimRunBackwardClip;
+
+    /// <summary>총기 조준 좌후방 달리기 상태 클립.</summary>
+    public AnimationClip aimRunBackwardLeftClip;
+
+    /// <summary>총기 조준 우후방 달리기 상태 클립.</summary>
+    public AnimationClip aimRunBackwardRightClip;
+
+    /// <summary>총기 조준 좌전방 달리기 상태 클립.</summary>
+    public AnimationClip aimRunForwardLeftClip;
+
+    /// <summary>총기 조준 우전방 달리기 상태 클립.</summary>
+    public AnimationClip aimRunForwardRightClip;
+
+    /// <summary>총기 조준 좌측 달리기 상태 클립.</summary>
+    public AnimationClip aimRunLeftClip;
+
+    /// <summary>총기 조준 우측 달리기 상태 클립.</summary>
+    public AnimationClip aimRunRightClip;
 }
 
 /// <summary>프롭별 비무장 손 상태 애니메이션 클립 묶음.</summary>
@@ -70,6 +91,33 @@ public class PropTemplateSO : ScriptableObject
     /// <summary>몸통 베이스 컨트롤러의 낙하 상태 기준 클립.</summary>
     [SerializeField] private AnimationClip baseBodyFallClip;
 
+    /// <summary>몸통 베이스 컨트롤러의 무장 대기 상태 기준 클립.</summary>
+    [SerializeField] private AnimationClip baseBodyAimIdleClip;
+
+    /// <summary>몸통 베이스 컨트롤러의 조준 전방 달리기 기준 클립.</summary>
+    [SerializeField] private AnimationClip baseBodyAimRunClip;
+
+    /// <summary>몸통 베이스 컨트롤러의 조준 후방 달리기 기준 클립.</summary>
+    [SerializeField] private AnimationClip baseBodyAimRunBackwardClip;
+
+    /// <summary>몸통 베이스 컨트롤러의 조준 좌후방 달리기 기준 클립.</summary>
+    [SerializeField] private AnimationClip baseBodyAimRunBackwardLeftClip;
+
+    /// <summary>몸통 베이스 컨트롤러의 조준 우후방 달리기 기준 클립.</summary>
+    [SerializeField] private AnimationClip baseBodyAimRunBackwardRightClip;
+
+    /// <summary>몸통 베이스 컨트롤러의 조준 좌전방 달리기 기준 클립.</summary>
+    [SerializeField] private AnimationClip baseBodyAimRunForwardLeftClip;
+
+    /// <summary>몸통 베이스 컨트롤러의 조준 우전방 달리기 기준 클립.</summary>
+    [SerializeField] private AnimationClip baseBodyAimRunForwardRightClip;
+
+    /// <summary>몸통 베이스 컨트롤러의 조준 좌측 달리기 기준 클립.</summary>
+    [SerializeField] private AnimationClip baseBodyAimRunLeftClip;
+
+    /// <summary>몸통 베이스 컨트롤러의 조준 우측 달리기 기준 클립.</summary>
+    [SerializeField] private AnimationClip baseBodyAimRunRightClip;
+
     /// <summary>손 베이스 컨트롤러의 비무장 대기 상태 기준 클립.</summary>
     [Header("손 오버라이드 기준 클립")]
     [SerializeField] private AnimationClip baseHandIdleClip;
@@ -114,7 +162,7 @@ public class PropTemplateSO : ScriptableObject
             : Enum.GetValues(typeof(EWeaponType)).Length;
 
         RuntimeAnimatorController[] controllers = new RuntimeAnimatorController[weaponCount];
-        List<KeyValuePair<AnimationClip, AnimationClip>> overrides = new(4);
+        List<KeyValuePair<AnimationClip, AnimationClip>> overrides = new(13);
 
         for (int i = 0; i < weaponCount; i++)
         {
@@ -130,12 +178,24 @@ public class PropTemplateSO : ScriptableObject
             AnimationClip moveClip = usesAimLocomotion && bodyClips.aimRunClip != null
                 ? bodyClips.aimRunClip
                 : bodyClips.runClip;
+            AnimationClip aimMoveClip = bodyClips.aimRunClip != null
+                ? bodyClips.aimRunClip
+                : moveClip;
 
             overrides.Clear();
             AddOverrideIfValid(overrides, baseBodyHideClip, idleClip);
             AddOverrideIfValid(overrides, baseBodyRunClip, moveClip);
             AddOverrideIfValid(overrides, baseBodyJumpClip, bodyClips.jumpClip);
             AddOverrideIfValid(overrides, baseBodyFallClip, bodyClips.fallClip);
+            AddOverrideIfValid(overrides, baseBodyAimIdleClip, idleClip);
+            AddOverrideIfValid(overrides, baseBodyAimRunClip, aimMoveClip);
+            AddOverrideIfValid(overrides, baseBodyAimRunBackwardClip, bodyClips.aimRunBackwardClip);
+            AddOverrideIfValid(overrides, baseBodyAimRunBackwardLeftClip, bodyClips.aimRunBackwardLeftClip);
+            AddOverrideIfValid(overrides, baseBodyAimRunBackwardRightClip, bodyClips.aimRunBackwardRightClip);
+            AddOverrideIfValid(overrides, baseBodyAimRunForwardLeftClip, bodyClips.aimRunForwardLeftClip);
+            AddOverrideIfValid(overrides, baseBodyAimRunForwardRightClip, bodyClips.aimRunForwardRightClip);
+            AddOverrideIfValid(overrides, baseBodyAimRunLeftClip, bodyClips.aimRunLeftClip);
+            AddOverrideIfValid(overrides, baseBodyAimRunRightClip, bodyClips.aimRunRightClip);
 
             AnimatorOverrideController overrideController = new AnimatorOverrideController(baseBodyController);
             overrideController.name = $"{baseBodyController.name}_{weaponType}_Runtime";

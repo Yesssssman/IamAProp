@@ -342,6 +342,7 @@ public class PlayerAnim : PropAnimBase
             }
 
             bodyAnimator.SetFloat(MoveX, _currentMoveX);
+            bodyAnimator.SetFloat(MoveZ, _currentMoveZ);
             bodyAnimator.SetBool(IsAir, wasAir);
             bodyAnimator.SetBool(IsJumped, wasJumped);
             bodyAnimator.SetInteger(WeaponMode, index);

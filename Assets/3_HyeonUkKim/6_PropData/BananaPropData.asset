@@ -34,6 +34,13 @@ MonoBehaviour:
     fallClip: {fileID: 7390238872845599331, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
     aimIdleClip: {fileID: -257425540449213744, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
     aimRunClip: {fileID: 8023960352433426304, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
+    aimRunBackwardClip: {fileID: -1716719768532856095, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
+    aimRunBackwardLeftClip: {fileID: -1024284937247996537, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
+    aimRunBackwardRightClip: {fileID: -1761228554331135935, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
+    aimRunForwardLeftClip: {fileID: -2888415027886370010, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
+    aimRunForwardRightClip: {fileID: -536053852124495681, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
+    aimRunLeftClip: {fileID: 8642423905494610406, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
+    aimRunRightClip: {fileID: -7517359698727718693, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
   unarmedHandClips:
     idleClip: {fileID: 7400000, guid: ec33dbe564175494c822332a5e5331c3, type: 2}
     runClip: {fileID: 7400000, guid: 804c2a61a792340ceabe0ddbdb2695c3, type: 2}

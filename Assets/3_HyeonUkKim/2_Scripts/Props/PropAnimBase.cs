@@ -39,11 +39,26 @@ public abstract class PropAnimBase : NetworkBehaviour, IPropAnimController
     /// <summary>프레임 단위로 감쇠 보간된 현재 <c>MoveX</c> 파라미터 값.</summary>
     protected float _currentMoveX;
 
-    /// <summary><see cref="Mathf.SmoothDamp(float, float, ref float, float)"/> 내부 변화율 상태값.</summary>
+    /// <summary>프레임 단위로 감쇠 보간된 현재 <c>MoveZ</c> 파라미터 값.</summary>
+    protected float _currentMoveZ;
+
+    /// <summary>프레임 단위로 감쇠 보간된 현재 손 <c>MoveX</c> 파라미터 값.</summary>
+    protected float _currentHandMoveX;
+
+    /// <summary><see cref="Mathf.SmoothDamp(float, float, ref float, float)"/> 내부 <c>MoveX</c> 변화율 상태값.</summary>
     private float _moveXVelocity;
+
+    /// <summary><see cref="Mathf.SmoothDamp(float, float, ref float, float)"/> 내부 <c>MoveZ</c> 변화율 상태값.</summary>
+    private float _moveZVelocity;
+
+    /// <summary><see cref="Mathf.SmoothDamp(float, float, ref float, float)"/> 내부 손 <c>MoveX</c> 변화율 상태값.</summary>
+    private float _handMoveXVelocity;
 
     /// <summary>애니메이터 <c>MoveX</c> 파라미터 해시.</summary>
     protected static readonly int MoveX = Animator.StringToHash("MoveX");
+
+    /// <summary>애니메이터 <c>MoveZ</c> 파라미터 해시.</summary>
+    protected static readonly int MoveZ = Animator.StringToHash("MoveZ");
 
     /// <summary>애니메이터 <c>isAttack</c> 파라미터 해시.</summary>
     protected static readonly int IsAttack = Animator.StringToHash("isAttack");
@@ -134,25 +149,52 @@ public abstract class PropAnimBase : NetworkBehaviour, IPropAnimController
     {
         if (!IsSpawned || bodyAnimator == null || _propEntity == null) return;
 
+        float speedRatio = _propEntity.PlanarSpeedRatio;
+
         if (CurrentWeaponType == EWeaponType.Hide)
         {
-            _currentMoveX = _propEntity.PlanarSpeedRatio >= 0.1f ? 1f : 0f;
+            _currentMoveX = speedRatio >= 0.1f ? 1f : 0f;
+            _currentMoveZ = 0f;
+            _currentHandMoveX = _currentMoveX;
             _moveXVelocity = 0f;
+            _moveZVelocity = 0f;
+            _handMoveXVelocity = 0f;
         }
         else
         {
+            float targetMoveX = 0f;
+            float targetMoveZ = 0f;
+
+            if (_propEntity.MoveSpeed > 0f)
+            {
+                Vector3 localVelocity = transform.InverseTransformDirection(_propEntity.PlanarVelocity) / _propEntity.MoveSpeed;
+                targetMoveX = Mathf.Clamp(localVelocity.x, -1f, 1f);
+                targetMoveZ = Mathf.Clamp(localVelocity.z, -1f, 1f);
+            }
+
             _currentMoveX = Mathf.SmoothDamp(
                 _currentMoveX,
-                _propEntity.PlanarSpeedRatio,
+                targetMoveX,
                 ref _moveXVelocity,
+                moveDampTime);
+            _currentMoveZ = Mathf.SmoothDamp(
+                _currentMoveZ,
+                targetMoveZ,
+                ref _moveZVelocity,
+                moveDampTime);
+            _currentHandMoveX = Mathf.SmoothDamp(
+                _currentHandMoveX,
+                speedRatio,
+                ref _handMoveXVelocity,
                 moveDampTime);
         }
 
         bodyAnimator.SetFloat(MoveX, _currentMoveX);
+        bodyAnimator.SetFloat(MoveZ, _currentMoveZ);
 
         if (handAnimator == null) return;
 
-        handAnimator.SetFloat(MoveX, _currentMoveX);
+        handAnimator.SetFloat(MoveX, _currentHandMoveX);
 
         if (!IsOwner)
         {

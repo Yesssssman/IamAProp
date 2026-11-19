@@ -144,27 +144,51 @@ public static class PropPrefabSetupTool
         SerializedProperty ignoredParams = netAnimSerialized.FindProperty("IgnoredParameters");
         if (ignoredParams != null)
         {
-            bool hasMoveX = false;
-            for (int i = 0; i < ignoredParams.arraySize; i++)
-            {
-                if (ignoredParams.GetArrayElementAtIndex(i).stringValue == "MoveX")
-                {
-                    hasMoveX = true;
-                    break;
-                }
-            }
-
-            if (!hasMoveX)
-            {
-                int nextIndex = ignoredParams.arraySize;
-                ignoredParams.InsertArrayElementAtIndex(nextIndex);
-                ignoredParams.GetArrayElementAtIndex(nextIndex).stringValue = "MoveX";
-            }
+            EnsureIgnoredParameter(ignoredParams, "MoveX");
+            EnsureIgnoredParameter(ignoredParams, "MoveZ");
         }
         netAnimSerialized.ApplyModifiedPropertiesWithoutUndo();
 
+        Transform aimPivot = null;
+        if (handScript != null)
+        {
+            Transform handsTf = handScript.transform;
+            if (handsTf.parent != null && handsTf.parent.name == "AimPivot")
+            {
+                aimPivot = handsTf.parent;
+            }
+            else if (handsTf.parent != null)
+            {
+                if (PrefabUtility.IsPartOfPrefabInstance(root))
+                {
+                    PrefabUtility.UnpackPrefabInstance(root, PrefabUnpackMode.OutermostRoot, InteractionMode.AutomatedAction);
+                }
+
+                Transform parentBone = handsTf.parent;
+                Vector3 savedPos = handsTf.localPosition;
+                Quaternion savedRot = handsTf.localRotation;
+                Vector3 savedScale = handsTf.localScale;
+
+                GameObject aimPivotObject = new GameObject("AimPivot");
+                aimPivot = aimPivotObject.transform;
+                aimPivot.SetParent(parentBone, false);
+                aimPivot.localPosition = savedPos;
+                aimPivot.localRotation = Quaternion.identity;
+                aimPivot.localScale = Vector3.one;
+
+                handsTf.SetParent(aimPivot, false);
+                handsTf.localPosition = Vector3.zero;
+                handsTf.localRotation = savedRot;
+                handsTf.localScale = savedScale;
+            }
+        }
+
         SerializedObject controllerSerialized = new SerializedObject(controller);
         controllerSerialized.FindProperty("_groundCheck").objectReferenceValue = groundCheck;
+        if (aimPivot != null)
+        {
+            controllerSerialized.FindProperty("aimPitchTarget").objectReferenceValue = aimPivot;
+        }
         if (propData != null)
         {
             controllerSerialized.FindProperty("propData").objectReferenceValue = propData;
@@ -203,5 +227,21 @@ public static class PropPrefabSetupTool
         childObject.transform.SetParent(parent, false);
         childObject.transform.localPosition = defaultLocalPosition;
         return childObject.transform;
+    }
+
+    /// <summary><see cref="NetworkAnimator"/>의 <c>IgnoredParameters</c> 배열에 <paramref name="paramName"/>이 없으면 추가한다.</summary>
+    private static void EnsureIgnoredParameter(SerializedProperty ignoredParams, string paramName)
+    {
+        for (int i = 0; i < ignoredParams.arraySize; i++)
+        {
+            if (ignoredParams.GetArrayElementAtIndex(i).stringValue == paramName)
+            {
+                return;
+            }
+        }
+
+        int nextIndex = ignoredParams.arraySize;
+        ignoredParams.InsertArrayElementAtIndex(nextIndex);
+        ignoredParams.GetArrayElementAtIndex(nextIndex).stringValue = paramName;
     }
 }

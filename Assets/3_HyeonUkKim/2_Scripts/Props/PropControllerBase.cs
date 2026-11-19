@@ -1,5 +1,6 @@
 using FishNet.Object;
 using FishNet.Object.Prediction;
+using FishNet.Object.Synchronizing;
 using FishNet.Transporting;
 using UnityEngine;
 
@@ -28,6 +29,19 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     [Header("바닥 체크")]
     [SerializeField] private Transform _groundCheck;
 
+    /// <summary>1D 상하 조준(Pitch) X축 회전을 적용할 피벗 트랜스폼.</summary>
+    [Header("상하 조준 (Pitch)")]
+    [SerializeField] protected Transform aimPitchTarget;
+
+    /// <summary>상하 조준 시 허용하는 최소(위쪽) 피치 각도 (도 단위).</summary>
+    [SerializeField] private float minAimPitch = -60f;
+
+    /// <summary>상하 조준 시 허용하는 최대(아래쪽) 피치 각도 (도 단위).</summary>
+    [SerializeField] private float maxAimPitch = 60f;
+
+    /// <summary>상하 조준 피치 각도 보간 속력.</summary>
+    [SerializeField] private float aimPitchLerpSpeed = 20f;
+
     /// <summary>직전 물리 틱의 바닥 접촉 여부.</summary>
     public bool _wasGrounded;
 
@@ -49,11 +63,29 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     /// <summary>현재 루트 <see cref="Rigidbody"/> 회전 제약이 해제된 맨손 쓰러짐 대기 상태 여부.</summary>
     protected bool _isRagdollIdle;
 
+    /// <summary>원격 클라이언트에 동기화되는 목표 상하 조준 각도 (도 단위).</summary>
+    private readonly SyncVar<float> _syncedAimPitch = new();
+
+    /// <summary>현재 시뮬레이션된 월드 공간 평면 이동 속도 벡터 (초당 월드 단위).</summary>
+    private Vector3 _planarVelocity;
+
     /// <summary>현재 시뮬레이션된 평면 이동 속력 (초당 월드 단위).</summary>
     private float _currentPlanarSpeed;
 
+    /// <summary>현재 물리 틱의 사격(조준) 상태 활성화 여부.</summary>
+    private bool _isFiring;
+
     /// <summary><see cref="Mathf.SmoothDampAngle"/> 내부 회전 각속도 상태값.</summary>
     private float _turnSmoothVelocity;
+
+    /// <summary>현재 프레임에 보간 적용된 상하 조준 각도 (도 단위).</summary>
+    private float _currentAimPitch;
+
+    /// <summary>서버에 마지막으로 전송한 상하 조준 각도 (도 단위).</summary>
+    private float _lastSentAimPitch;
+
+    /// <summary><see cref="aimPitchTarget"/>의 초기 로컬 회전값.</summary>
+    private Quaternion _aimPitchInitialLocalRotation = Quaternion.identity;
 
     private const float DefaultMoveSpeed = 5f;
     private const float DefaultRotationSmoothTime = 0.1f;
@@ -76,6 +108,12 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     public PropDataSO PropData => propData;
 
     /// <inheritdoc/>
+    public Vector3 PlanarVelocity => _planarVelocity;
+
+    /// <inheritdoc/>
+    public float MoveSpeed => propData != null ? propData.MoveSpeed : DefaultMoveSpeed;
+
+    /// <inheritdoc/>
     public float PlanarSpeedRatio
     {
         get
@@ -92,8 +130,14 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     /// <inheritdoc/>
     public bool IsRagdollIdle => _isRagdollIdle;
 
-    /// <summary>현재 프롭의 평면 이동 속력 (초당 월드 단위).</summary>
-    protected float MoveSpeed => propData != null ? propData.MoveSpeed : DefaultMoveSpeed;
+    /// <inheritdoc/>
+    public bool IsFiring => _isFiring;
+
+    /// <summary>상하 조준 최소 피치 각도 (도 단위).</summary>
+    protected float MinAimPitch => minAimPitch;
+
+    /// <summary>상하 조준 최대 피치 각도 (도 단위).</summary>
+    protected float MaxAimPitch => maxAimPitch;
 
     /// <summary>현재 프롭의 회전 감쇠 시간 (초 단위).</summary>
     protected float RotationSmoothTime => propData != null ? propData.RotationSmoothTime : DefaultRotationSmoothTime;
@@ -139,7 +183,57 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
             _groundCheck = transform.Find("GroundCheck");
         }
 
+        if (aimPitchTarget == null)
+        {
+            HandScript hand = GetComponentInChildren<HandScript>(true);
+            if (hand != null)
+            {
+                aimPitchTarget = hand.transform.parent != null && hand.transform.parent.name == "AimPivot"
+                    ? hand.transform.parent
+                    : hand.transform;
+            }
+        }
+
+        if (aimPitchTarget != null)
+        {
+            _aimPitchInitialLocalRotation = aimPitchTarget.localRotation;
+        }
+
         OnPropAwake();
+    }
+
+    protected virtual void LateUpdate()
+    {
+        if (!IsSpawned) return;
+
+        float targetPitch;
+        if (IsOwner)
+        {
+            targetPitch = Mathf.Clamp(ComputeOwnerTargetAimPitch(), minAimPitch, maxAimPitch);
+            if (Mathf.Abs(targetPitch - _lastSentAimPitch) >= 0.1f
+                || (Mathf.Approximately(targetPitch, 0f) && !Mathf.Approximately(_lastSentAimPitch, 0f)))
+            {
+                _lastSentAimPitch = targetPitch;
+                if (IsServerInitialized)
+                {
+                    _syncedAimPitch.Value = targetPitch;
+                }
+                else
+                {
+                    SetAimPitchServerRpc(targetPitch);
+                }
+            }
+        }
+        else
+        {
+            targetPitch = _syncedAimPitch.Value;
+        }
+
+        _currentAimPitch = Mathf.Lerp(_currentAimPitch, targetPitch, Time.deltaTime * aimPitchLerpSpeed);
+        if (aimPitchTarget != null)
+        {
+            aimPitchTarget.localRotation = _aimPitchInitialLocalRotation * Quaternion.Euler(_currentAimPitch, 0f, 0f);
+        }
     }
 
     private void OnDrawGizmosSelected()
@@ -182,10 +276,12 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
             _rb.rotation,
             _rb.linearVelocity,
             _rb.angularVelocity,
+            _planarVelocity,
             _currentPlanarSpeed,
             _isGrounded,
             _wasGrounded,
             _isRagdollIdle,
+            _isFiring,
             _turnSmoothVelocity);
         PerformReconcile(rd);
     }
@@ -196,6 +292,9 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
 
     /// <summary>네트워크 틱마다 소유자가 전송할 입력 데이터를 수집한다.</summary>
     protected virtual PlayerInputData CollectTickInput() => default;
+
+    /// <summary>소유자 클라이언트의 현재 프레임 목표 상하 조준 각도(도 단위)를 계산한다.</summary>
+    protected virtual float ComputeOwnerTargetAimPitch() => 0f;
 
     /// <summary>기본 컴포넌트 캐싱 이후 하위 클래스 초기화를 수행한다.</summary>
     protected virtual void OnPropAwake() { }
@@ -274,6 +373,9 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
         _wasGrounded = _isGrounded;
 
         Vector3 inputDirection = new Vector3(rd.MoveInput.x, 0f, rd.MoveInput.y).normalized;
+        bool isMoving = inputDirection.magnitude >= 0.1f;
+        bool isFiring = rd.IsFiring && (_propAnim == null || _propAnim.CurrentWeaponType != EWeaponType.Hide);
+        _isFiring = isFiring;
         Vector3 horizontalVelocity = Vector3.zero;
         float currentRotationY = _rb.rotation.eulerAngles.y;
         bool shouldRagdoll = CanEnterRagdollIdle(rd, inputDirection);
@@ -305,10 +407,11 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
             OnRagdollStateChanged(false);
         }
 
-        if (inputDirection.magnitude >= 0.1f)
+        float moveAngle = Mathf.Atan2(inputDirection.x, inputDirection.z) * Mathf.Rad2Deg + rd.CameraYaw;
+
+        if (isFiring || isMoving)
         {
-            float moveSpeed = MoveSpeed;
-            float targetAngle = Mathf.Atan2(inputDirection.x, inputDirection.z) * Mathf.Rad2Deg + rd.CameraYaw;
+            float targetAngle = isFiring ? rd.AimYaw : moveAngle;
             currentRotationY = Mathf.SmoothDampAngle(
                 currentRotationY,
                 targetAngle,
@@ -318,8 +421,12 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
                 delta);
 
             _rb.MoveRotation(Quaternion.Euler(0f, currentRotationY, 0f));
+        }
 
-            Vector3 moveDirection = (Quaternion.Euler(0f, targetAngle, 0f) * Vector3.forward).normalized;
+        if (isMoving)
+        {
+            float moveSpeed = MoveSpeed;
+            Vector3 moveDirection = (Quaternion.Euler(0f, moveAngle, 0f) * Vector3.forward).normalized;
             Vector3 targetPosition = _rb.position + moveDirection * (moveSpeed * delta);
             _rb.MovePosition(targetPosition);
 
@@ -336,6 +443,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
             OnJumped();
         }
 
+        _planarVelocity = horizontalVelocity;
         _currentPlanarSpeed = new Vector2(horizontalVelocity.x, horizontalVelocity.z).magnitude;
     }
 
@@ -361,7 +469,20 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
 
         _isGrounded = rd.IsGrounded;
         _wasGrounded = rd.WasGrounded;
+        _isFiring = rd.IsFiring;
         _turnSmoothVelocity = rd.TurnSmoothVelocity;
+        _planarVelocity = rd.PlanarVelocity;
         _currentPlanarSpeed = rd.PlanarSpeed;
+    }
+
+    // ***************************************************************
+    // Network RPCs
+    // ***************************************************************
+
+    /// <summary>소유자 클라이언트의 목표 상하 조준 각도를 서버 <see cref="_syncedAimPitch"/>에 반영한다.</summary>
+    [ServerRpc]
+    private void SetAimPitchServerRpc(float pitch, Channel channel = Channel.Unreliable)
+    {
+        _syncedAimPitch.Value = Mathf.Clamp(pitch, minAimPitch, maxAimPitch);
     }
 }

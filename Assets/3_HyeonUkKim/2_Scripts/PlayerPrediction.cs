@@ -13,15 +13,28 @@ public struct PlayerInputData : IReplicateData
     /// <summary>해당 틱에 점프가 요청되었는지 여부.</summary>
     public bool JumpRequested;
 
+    /// <summary>해당 틱에 사격(조준) 상태인지 여부.</summary>
+    public bool IsFiring;
+
+    /// <summary>사격 중 캐릭터 몸체가 바라볼 목표 수평 회전 각도 (도 단위, 월드 Y축).</summary>
+    public float AimYaw;
+
     /// <summary>FishNet 런타임이 할당하는 로컬 틱 번호.</summary>
     private uint _tick;
 
     /// <summary>지정한 입력 값으로 <see cref="PlayerInputData"/>를 초기화한다.</summary>
-    public PlayerInputData(Vector2 moveInput, float cameraYaw, bool jumpRequested)
+    public PlayerInputData(
+        Vector2 moveInput,
+        float cameraYaw,
+        bool jumpRequested,
+        bool isFiring = false,
+        float aimYaw = 0f)
     {
         MoveInput = moveInput;
         CameraYaw = cameraYaw;
         JumpRequested = jumpRequested;
+        IsFiring = isFiring;
+        AimYaw = aimYaw;
         _tick = 0;
     }
 
@@ -50,6 +63,9 @@ public struct PlayerReconcileData : IReconcileData
     /// <summary>시뮬레이션 직후 <see cref="Rigidbody"/>의 각속도 벡터 (초당 라디안).</summary>
     public Vector3 AngularVelocity;
 
+    /// <summary>시뮬레이션 직후 월드 공간 평면 이동 속도 벡터 (초당 월드 단위).</summary>
+    public Vector3 PlanarVelocity;
+
     /// <summary>시뮬레이션 직후 평면 이동 속력 (초당 월드 단위).</summary>
     public float PlanarSpeed;
 
@@ -61,6 +77,9 @@ public struct PlayerReconcileData : IReconcileData
 
     /// <summary>맨손 쓰러짐 대기 상태 활성화 여부.</summary>
     public bool IsRagdollIdle;
+
+    /// <summary>현재 물리 틱의 사격(조준) 상태 활성화 여부.</summary>
+    public bool IsFiring;
 
     /// <summary><see cref="Mathf.SmoothDampAngle"/> 내부 회전 각속도 상태값.</summary>
     public float TurnSmoothVelocity;
@@ -74,20 +93,24 @@ public struct PlayerReconcileData : IReconcileData
         Quaternion rotation,
         Vector3 velocity,
         Vector3 angularVelocity,
+        Vector3 planarVelocity,
         float planarSpeed,
         bool isGrounded,
         bool wasGrounded,
         bool isRagdollIdle,
+        bool isFiring,
         float turnSmoothVelocity)
     {
         Position = position;
         Rotation = rotation;
         Velocity = velocity;
         AngularVelocity = angularVelocity;
+        PlanarVelocity = planarVelocity;
         PlanarSpeed = planarSpeed;
         IsGrounded = isGrounded;
         WasGrounded = wasGrounded;
         IsRagdollIdle = isRagdollIdle;
+        IsFiring = isFiring;
         TurnSmoothVelocity = turnSmoothVelocity;
         _tick = 0;
     }

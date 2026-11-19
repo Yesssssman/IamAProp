@@ -62,13 +62,45 @@ Transform:
   m_Children: []
   m_Father: {fileID: 4441109541528529596}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &5755503028143511831
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4591405227334617796}
+  m_Layer: 0
+  m_Name: AimPivot
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4591405227334617796
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5755503028143511831}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0.1, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1866039897034986146}
+  m_Father: {fileID: 3060282697160039737}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &3030905830862203128
 PrefabInstance:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Modification:
     serializedVersion: 3
-    m_TransformParent: {fileID: 3060282697160039737}
+    m_TransformParent: {fileID: 4591405227334617796}
     m_Modifications:
     - target: {fileID: 929236115981877079, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
       propertyPath: player
@@ -84,7 +116,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3740927429322586714, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 3740927429322586714, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
       propertyPath: m_LocalPosition.z
@@ -251,7 +283,7 @@ PrefabInstance:
       addedObject: {fileID: 6977584395267851655}
     - targetCorrespondingSourceObject: {fileID: -8047077104172068754, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 1866039897034986146}
+      addedObject: {fileID: 4591405227334617796}
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
       insertIndex: -1
@@ -363,10 +395,18 @@ MonoBehaviour:
   _networkObjectCache: {fileID: 8263648830346335679}
   propData: {fileID: 11400000, guid: fc6ed4f1e2edd4629a12ddf513e3ed47, type: 2}
   _groundCheck: {fileID: 4062422648760795645}
+  aimPitchTarget: {fileID: 4591405227334617796}
+  minAimPitch: -60
+  maxAimPitch: 60
+  aimPitchLerpSpeed: 20
   _wasGrounded: 0
   _isGrounded: 0
   cameraTransform: {fileID: 0}
   tpsViewPos: {fileID: 6977584395267851655}
+  aimLayerMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  defaultAimDistance: 100
 --- !u!114 &4588156390618512503
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -478,6 +518,7 @@ MonoBehaviour:
   _networkObjectCache: {fileID: 8263648830346335679}
   IgnoredParameters:
   - MoveX
+  - MoveZ
   _animator: {fileID: 7728688566638358726}
   _synchronizeWhenDisabled: 0
   _smoothFloats: 1

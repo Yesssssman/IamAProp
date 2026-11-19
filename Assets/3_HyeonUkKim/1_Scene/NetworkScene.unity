@@ -1175,7 +1175,7 @@ MonoBehaviour:
       Offset: {x: 0, y: 0}
   CenterOnActivate: 1
   TargetOffset: {x: 0, y: 0, z: 0}
-  Damping: {x: 0.1, y: 0.1}
+  Damping: {x: 0, y: 0}
   Lookahead:
     Enabled: 0
     Time: 0
@@ -1211,9 +1211,9 @@ MonoBehaviour:
       YOffset: 0.05
     Strategy: 0
     MaximumEffort: 4
-    SmoothingTime: 0
+    SmoothingTime: 0.25
     Damping: 0.3
-    DampingWhenOccluded: 0
+    DampingWhenOccluded: 0.05
   ShotQualityEvaluation:
     Enabled: 0
     OptimalDistance: 10

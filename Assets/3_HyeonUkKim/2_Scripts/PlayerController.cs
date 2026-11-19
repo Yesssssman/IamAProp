@@ -24,6 +24,16 @@ public class PlayerController : PropControllerBase
     /// <summary>카메라 추적 기준 높이를 결정하는 트랜스폼.</summary>
     [SerializeField] private Transform tpsViewPos;
 
+    /// <summary>크로스헤어 조준 레이캐스트에 포함할 물리 레이어 마스크.</summary>
+    [Header("크로스헤어 조준")]
+    [SerializeField] private LayerMask aimLayerMask = ~0;
+
+    /// <summary>크로스헤어 레이캐스트 미충돌 시 사용할 카메라 전방 기본 조준 거리 (미터).</summary>
+    [SerializeField] private float defaultAimDistance = 100f;
+
+    /// <summary>크로스헤어 레이캐스트 결과를 저장하는 재사용 버퍼.</summary>
+    private readonly RaycastHit[] _aimHits = new RaycastHit[16];
+
     /// <summary>로컬 플레이어 입력 액션 에셋 인스턴스.</summary>
     private PlayerControls _inputActions;
 
@@ -43,11 +53,14 @@ public class PlayerController : PropControllerBase
     // MonoBehaviour
     // ***************************************************************
 
-    private void LateUpdate()
+    protected override void LateUpdate()
     {
-        if (!IsOwner || _cameraAnchor == null) return;
+        if (IsOwner && _cameraAnchor != null)
+        {
+            UpdateCameraAnchorPosition();
+        }
 
-        UpdateCameraAnchorPosition();
+        base.LateUpdate();
     }
 
     // ***************************************************************
@@ -141,9 +154,40 @@ public class PlayerController : PropControllerBase
         }
 
         float cameraYaw = cameraTransform != null ? cameraTransform.eulerAngles.y : transform.eulerAngles.y;
+        bool isAiming = _propAnim != null && _propAnim.CurrentWeaponType != EWeaponType.Hide;
+        float aimYaw = cameraYaw;
+        if (isAiming)
+        {
+            Vector3 aimPoint = CalculateAimPoint();
+            Vector3 toAim = aimPoint - transform.position;
+            toAim.y = 0f;
+            if (toAim.sqrMagnitude > 0.0001f)
+            {
+                aimYaw = Mathf.Atan2(toAim.x, toAim.z) * Mathf.Rad2Deg;
+            }
+        }
+
         bool jumpRequested = _jumpRequested;
         _jumpRequested = false;
-        return new PlayerInputData(_moveInput, cameraYaw, jumpRequested);
+        return new PlayerInputData(_moveInput, cameraYaw, jumpRequested, isAiming, aimYaw);
+    }
+
+    /// <inheritdoc/>
+    protected override float ComputeOwnerTargetAimPitch()
+    {
+        bool isAiming = _propAnim != null && _propAnim.CurrentWeaponType != EWeaponType.Hide;
+        if (!isAiming) return 0f;
+
+        Vector3 aimPoint = CalculateAimPoint();
+        Vector3 pivotPos = aimPitchTarget != null
+            ? aimPitchTarget.position
+            : transform.position + Vector3.up * _tpsViewOffsetY;
+        Vector3 aimDir = aimPoint - pivotPos;
+        float horizontalDist = new Vector2(aimDir.x, aimDir.z).magnitude;
+        if (horizontalDist <= 0.0001f && Mathf.Abs(aimDir.y) <= 0.0001f) return 0f;
+
+        float pitch = -Mathf.Atan2(aimDir.y, horizontalDist) * Mathf.Rad2Deg;
+        return Mathf.Clamp(pitch, MinAimPitch, MaxAimPitch);
     }
 
     // ***************************************************************
@@ -194,7 +238,13 @@ public class PlayerController : PropControllerBase
         if (!IsOwner) return;
 
         int weaponIndex = Mathf.Clamp(Mathf.RoundToInt(context.ReadValue<float>()) - 1, 0, 3);
-        _propAnim?.SetWeaponMode((EWeaponType)weaponIndex);
+        EWeaponType weaponType = (EWeaponType)weaponIndex;
+        if (weaponType == EWeaponType.Hide)
+        {
+            _EplayerState = _isGrounded ? EPlayerState.Idle : EPlayerState.Air;
+        }
+
+        _propAnim?.SetWeaponMode(weaponType);
     }
 
     /// <summary>재장전 입력 시 손 재장전 시퀀스를 요청한다.</summary>
@@ -208,6 +258,48 @@ public class PlayerController : PropControllerBase
     // ***************************************************************
     // Helpers
     // ***************************************************************
+
+    /// <summary>메인 카메라 정중앙(Viewport 0.5, 0.5) 레이캐스트로 조준 월드 좌표를 계산한다.</summary>
+    private Vector3 CalculateAimPoint()
+    {
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null)
+        {
+            Vector3 fallbackForward = Quaternion.Euler(0f, transform.eulerAngles.y, 0f) * Vector3.forward;
+            return transform.position + fallbackForward * defaultAimDistance;
+        }
+
+        Ray ray = mainCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+        Vector3 pivotPos = aimPitchTarget != null
+            ? aimPitchTarget.position
+            : transform.position + Vector3.up * _tpsViewOffsetY;
+        float minDistance = Vector3.Distance(ray.origin, pivotPos);
+
+        int hitCount = Physics.RaycastNonAlloc(
+            ray,
+            _aimHits,
+            defaultAimDistance,
+            aimLayerMask,
+            QueryTriggerInteraction.Ignore);
+
+        float closestDistance = float.MaxValue;
+        Vector3 closestPoint = ray.GetPoint(defaultAimDistance);
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            RaycastHit hit = _aimHits[i];
+            if (hit.transform == null || hit.transform.IsChildOf(transform)) continue;
+            if (hit.distance <= minDistance) continue;
+
+            if (hit.distance < closestDistance)
+            {
+                closestDistance = hit.distance;
+                closestPoint = hit.point;
+            }
+        }
+
+        return closestPoint;
+    }
 
     /// <summary>카메라 추적 앵커의 월드 위치와 수직 회전을 갱신한다.</summary>
     private void UpdateCameraAnchorPosition()
