@@ -87,6 +87,9 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     /// <summary><see cref="aimPitchTarget"/>의 초기 로컬 회전값.</summary>
     private Quaternion _aimPitchInitialLocalRotation = Quaternion.identity;
 
+    /// <summary>원격 클라이언트가 미래 틱 예측에 재사용할 직전 수신 입력 데이터.</summary>
+    private PlayerInputData _lastCreatedInput;
+
     private const float DefaultMoveSpeed = 5f;
     private const float DefaultRotationSmoothTime = 0.1f;
     private const float DefaultJumpForce = 12f;
@@ -259,6 +262,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
 
     public override void OnStopNetwork()
     {
+        _lastCreatedInput = default;
         if (base.TimeManager != null)
         {
             base.TimeManager.OnTick -= TimeManager_OnTick;
@@ -349,6 +353,24 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
 
         float delta = (float)base.TimeManager.TickDelta;
 
+        if (!IsServerStarted && !IsOwner)
+        {
+            if (state.ContainsCreated())
+            {
+                _lastCreatedInput = rd;
+            }
+            else if (state.IsFuture()
+                && _lastCreatedInput.GetTick() != 0
+                && rd.GetTick() > _lastCreatedInput.GetTick()
+                && rd.GetTick() - _lastCreatedInput.GetTick() <= 1)
+            {
+                uint currentTick = rd.GetTick();
+                rd = _lastCreatedInput;
+                rd.JumpRequested = false;
+                rd.SetTick(currentTick);
+            }
+        }
+
         if (_groundCheck != null)
         {
             _isGrounded = Physics.CheckSphere(_groundCheck.position, CheckRadius, GroundLayer);
@@ -378,7 +400,9 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
         _isFiring = isFiring;
         Vector3 horizontalVelocity = Vector3.zero;
         float currentRotationY = _rb.rotation.eulerAngles.y;
-        bool shouldRagdoll = CanEnterRagdollIdle(rd, inputDirection);
+        bool shouldRagdoll = state.ContainsCreated()
+            ? CanEnterRagdollIdle(rd, inputDirection)
+            : _isRagdollIdle;
 
         if (shouldRagdoll)
         {
@@ -393,8 +417,11 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
                 Vector3 pushDirection = new Vector3(Mathf.Cos(angleRad), 0f, Mathf.Sin(angleRad));
                 Vector3 finalForce = (pushDirection * PushForce) + (Vector3.down * DownwardForce);
 
-                _rb.AddForce(finalForce, ForceMode.Impulse);
-                _rb.AddTorque((_rb.rotation * Vector3.right) * RagdollToppleSpeed);
+                if (!_rb.isKinematic)
+                {
+                    _rb.AddForce(finalForce, ForceMode.Impulse);
+                    _rb.AddTorque((_rb.rotation * Vector3.right) * RagdollToppleSpeed);
+                }
                 OnRagdollStateChanged(true);
             }
         }
@@ -402,7 +429,10 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
         {
             _isRagdollIdle = false;
             _rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
-            _rb.angularVelocity = Vector3.zero;
+            if (!_rb.isKinematic)
+            {
+                _rb.angularVelocity = Vector3.zero;
+            }
             _rb.rotation = Quaternion.Euler(0f, currentRotationY, 0f);
             OnRagdollStateChanged(false);
         }
@@ -433,7 +463,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
             horizontalVelocity = moveDirection * moveSpeed;
         }
 
-        if (rd.JumpRequested && _isGrounded)
+        if (rd.JumpRequested && _isGrounded && !_rb.isKinematic)
         {
             _rb.AddForce(Vector3.up * JumpForce, ForceMode.Impulse);
             _isGrounded = false;

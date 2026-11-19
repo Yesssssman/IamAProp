@@ -308,9 +308,6 @@ PrefabInstance:
       addedObject: {fileID: 1166752771365685723}
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
       insertIndex: -1
-      addedObject: {fileID: -6436287547852297829}
-    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
-      insertIndex: -1
       addedObject: {fileID: 8560136747421324743}
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
       insertIndex: -1
@@ -489,7 +486,6 @@ MonoBehaviour:
   - {fileID: 2070328220091570088}
   - {fileID: 4588156390618512503}
   - {fileID: 1166752771365685723}
-  - {fileID: -6436287547852297829}
   InitializedParentNetworkBehaviour: {fileID: 0}
   InitializedNestedNetworkObjects: []
   RuntimeParentNetworkBehaviour: {fileID: 0}
@@ -525,53 +521,6 @@ MonoBehaviour:
   _interpolation: 2
   _clientAuthoritative: 1
   _sendToOwner: 0
---- !u!114 &-6436287547852297829
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3957024930634641414}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a2836e36774ca1c4bbbee976e17b649c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: FishNet.Runtime::FishNet.Component.Transforming.NetworkTransform
-  _componentIndexCache: 3
-  _addedNetworkObject: {fileID: 8263648830346335679}
-  _networkObjectCache: {fileID: 8263648830346335679}
-  _componentConfiguration: 2
-  _synchronizeParent: 0
-  _packing:
-    Position: 1
-    Rotation: 1
-    Scale: 0
-  _useScaledTime: 1
-  _interpolation: 2
-  _extrapolation: 2
-  _enableTeleport: 0
-  _teleportThreshold: 1
-  _clientAuthoritative: 1
-  _sendToOwner: 1
-  _useLevelOfDetail: 0
-  _interval: 1
-  _synchronizePosition: 1
-  _positionSensitivity: 0.001
-  _positionSnapping:
-    X: 0
-    Y: 0
-    Z: 0
-  _synchronizeRotation: 1
-  _rotationSnapping:
-    X: 0
-    Y: 0
-    Z: 0
-  _synchronizeScale: 1
-  _scaleSensitivity: 0.001
-  _scaleSnapping:
-    X: 0
-    Y: 0
-    Z: 0
 --- !u!82 &8560136747421324743
 AudioSource:
   m_ObjectHideFlags: 0
