@@ -3,9 +3,16 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>로컬 플레이어 입력과 카메라 추적 기준을 <see cref="PropControllerBase"/>에 연결한다.</summary>
+[DefaultExecutionOrder(-100)]
 [RequireComponent(typeof(PlayerAnim))]
 public class PlayerController : PropControllerBase
 {
+    // ***************************************************************
+    // Constants
+    // ***************************************************************
+
+    private const float DefaultTpsViewOffsetY = 0.45f; // TpsViewPos가 없을 때 사용할 기본 추적 높이
+
     // ***************************************************************
     // Fields
     // ***************************************************************
@@ -14,14 +21,34 @@ public class PlayerController : PropControllerBase
     [Header("참조")]
     [SerializeField] private Transform cameraTransform;
 
+    /// <summary>카메라 추적 기준 높이를 결정하는 트랜스폼.</summary>
+    [SerializeField] private Transform tpsViewPos;
+
     /// <summary>로컬 플레이어 입력 액션 에셋 인스턴스.</summary>
     private PlayerControls _inputActions;
+
+    /// <summary>래그돌 회전과 무관하게 수직 자세를 유지하는 카메라 추적 앵커.</summary>
+    private Transform _cameraAnchor;
+
+    /// <summary>플레이어 기준 위치에서 앵커까지의 월드 수직 오프셋 (미터).</summary>
+    private float _tpsViewOffsetY;
 
     /// <summary>현재 프레임의 2D 이동 입력값.</summary>
     private Vector2 _moveInput;
 
     /// <summary>다음 네트워크 틱에 소비할 점프 입력 플래그.</summary>
     private bool _jumpRequested;
+
+    // ***************************************************************
+    // MonoBehaviour
+    // ***************************************************************
+
+    private void LateUpdate()
+    {
+        if (!IsOwner || _cameraAnchor == null) return;
+
+        UpdateCameraAnchorPosition();
+    }
 
     // ***************************************************************
     // NetworkBehaviour
@@ -44,11 +71,24 @@ public class PlayerController : PropControllerBase
         _inputActions.Player.ChgWeapon.started += ChangeWeaponMode;
         _inputActions.Player.Reload.started += OnReloadStarted;
 
+        if (tpsViewPos == null)
+        {
+            tpsViewPos = transform.Find("TpsViewPos");
+        }
+
+        _tpsViewOffsetY = tpsViewPos != null
+            ? tpsViewPos.localPosition.y * transform.localScale.y
+            : DefaultTpsViewOffsetY;
+
+        _cameraAnchor = new GameObject("CameraAnchor").transform;
+        _cameraAnchor.SetParent(transform, false);
+        UpdateCameraAnchorPosition();
+
         CinemachineCamera cam = FindAnyObjectByType<CinemachineCamera>();
         if (cam != null)
         {
-            cam.Follow = transform;
-            cam.LookAt = transform;
+            cam.Follow = _cameraAnchor;
+            cam.LookAt = _cameraAnchor;
 
             CinemachineOrbitalFollow orbitalFollow = cam.GetComponent<CinemachineOrbitalFollow>();
             if (orbitalFollow != null)
@@ -67,6 +107,12 @@ public class PlayerController : PropControllerBase
     {
         _moveInput = Vector2.zero;
         _jumpRequested = false;
+
+        if (_cameraAnchor != null)
+        {
+            Destroy(_cameraAnchor.gameObject);
+            _cameraAnchor = null;
+        }
 
         if (_inputActions == null) return;
 
@@ -157,5 +203,15 @@ public class PlayerController : PropControllerBase
         if (!IsOwner) return;
 
         _propAnim?.RequestReload();
+    }
+
+    // ***************************************************************
+    // Helpers
+    // ***************************************************************
+
+    /// <summary>카메라 추적 앵커의 월드 위치와 수직 회전을 갱신한다.</summary>
+    private void UpdateCameraAnchorPosition()
+    {
+        _cameraAnchor.SetPositionAndRotation(transform.position + Vector3.up * _tpsViewOffsetY, Quaternion.identity);
     }
 }

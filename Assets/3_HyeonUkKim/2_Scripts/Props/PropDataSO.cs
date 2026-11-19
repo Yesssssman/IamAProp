@@ -18,7 +18,7 @@ public class PropDataSO : ScriptableObject
 
     /// <summary>평면 이동 속력 (초당 월드 단위).</summary>
     [Header("이동 및 점프 설정")]
-    [SerializeField] private float moveSpeed = 5f;
+    [SerializeField] private float moveSpeed = 3f;
 
     /// <summary>이동 방향 회전 감쇠 시간 (초 단위).</summary>
     [SerializeField] private float rotationSmoothTime = 0.1f;

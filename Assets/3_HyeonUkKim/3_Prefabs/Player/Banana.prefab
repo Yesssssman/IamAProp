@@ -208,9 +208,17 @@ PrefabInstance:
       propertyPath: m_LocalRotation.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: -2797438304536095601, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
+      propertyPath: m_TagString
+      value: Player
+      objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
       propertyPath: m_Name
       value: Banana
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
+      propertyPath: m_TagString
+      value: Player
       objectReference: {fileID: 0}
     - target: {fileID: 3463814280764066711, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
       propertyPath: m_LocalRotation.w
@@ -358,6 +366,7 @@ MonoBehaviour:
   _wasGrounded: 0
   _isGrounded: 0
   cameraTransform: {fileID: 0}
+  tpsViewPos: {fileID: 6977584395267851655}
 --- !u!114 &4588156390618512503
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -423,7 +432,7 @@ MonoBehaviour:
   _teleportThreshold: 1
   <PrefabId>k__BackingField: 9
   <SpawnableCollectionId>k__BackingField: 0
-  <AssetPathHash>k__BackingField: 13903898023101937361
+  <AssetPathHash>k__BackingField: 16342885132488585998
   SceneId: 0
   SerializedTransformProperties:
     Position: {x: 0, y: 0, z: 0}

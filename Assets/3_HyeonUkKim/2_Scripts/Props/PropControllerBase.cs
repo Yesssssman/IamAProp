@@ -63,6 +63,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     private const float DefaultDownwardForce = 0.5f;
     private const float DefaultCheckRadius = 0.2f;
     private const int DefaultGroundLayerMask = 1 << 3;
+    private const float GroundedMaxRiseSpeed = 0.1f; // 바닥으로 판정하는 최대 상승 속도 (m/s)
 
     // ***************************************************************
     // Properties
@@ -211,7 +212,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
         return _propAnim != null
             && _propAnim.CurrentWeaponType == EWeaponType.Hide
             && inputDirection.magnitude < 0.1f
-            && _isGrounded
+            && (_isGrounded || _isRagdollIdle)
             && !inputData.JumpRequested;
     }
 
@@ -258,6 +259,9 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
                 Vector3 bottomCenter = new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
                 _isGrounded = Physics.CheckSphere(bottomCenter, CheckRadius, GroundLayer);
             }
+
+            // 점프 직후 몇 틱은 체크 구체가 아직 바닥에 닿아 있으므로 상승 중에는 착지로 보지 않음
+            _isGrounded &= _rb.linearVelocity.y <= GroundedMaxRiseSpeed;
         }
 
         if (!_wasGrounded && _isGrounded)

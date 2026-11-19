@@ -118,6 +118,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Chest
       objectReference: {fileID: 0}
+    - target: {fileID: 1893240902259630370, guid: fc98abce84eced54592c6e9a5dccc59a, type: 3}
+      propertyPath: m_TagString
+      value: Player
+      objectReference: {fileID: 0}
     - target: {fileID: 4420358160678161346, guid: fc98abce84eced54592c6e9a5dccc59a, type: 3}
       propertyPath: m_Controller
       value: 
@@ -277,7 +281,7 @@ MonoBehaviour:
   _teleportThreshold: 1
   <PrefabId>k__BackingField: 6
   <SpawnableCollectionId>k__BackingField: 0
-  <AssetPathHash>k__BackingField: 12895581301068783591
+  <AssetPathHash>k__BackingField: 2156358739124892356
   SceneId: 0
   SerializedTransformProperties:
     Position: {x: 0, y: 0, z: 0}
@@ -325,6 +329,7 @@ MonoBehaviour:
   _wasGrounded: 0
   _isGrounded: 0
   cameraTransform: {fileID: 0}
+  tpsViewPos: {fileID: 8172212070342283994}
 --- !u!114 &7493107775755073766
 MonoBehaviour:
   m_ObjectHideFlags: 0
