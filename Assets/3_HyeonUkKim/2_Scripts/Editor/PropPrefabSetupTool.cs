@@ -1,4 +1,6 @@
 using FishNet.Component.Animating;
+using FishNet.Component.Transforming;
+using FishNet.Component.Transforming.Beta;
 using FishNet.Object;
 using UnityEditor;
 using UnityEngine;
@@ -128,6 +130,11 @@ public static class PropPrefabSetupTool
         NetworkObject netObj = GetOrAddComponent<NetworkObject>(root);
         NetworkAnimator netAnim = GetOrAddComponent<NetworkAnimator>(root);
 
+        foreach (NetworkTransform staleTransform in root.GetComponentsInChildren<NetworkTransform>(true))
+        {
+            Object.DestroyImmediate(staleTransform);
+        }
+
         SerializedObject netObjSerialized = new SerializedObject(netObj);
         netObjSerialized.FindProperty("_enablePrediction").boolValue = true;
         netObjSerialized.FindProperty("_predictionType").intValue = 1; // PredictionType.Rigidbody
@@ -185,6 +192,11 @@ public static class PropPrefabSetupTool
 
         SerializedObject controllerSerialized = new SerializedObject(controller);
         controllerSerialized.FindProperty("_groundCheck").objectReferenceValue = groundCheck;
+        NetworkTickSmoother smoother = root.GetComponentInChildren<NetworkTickSmoother>(true);
+        if (smoother != null)
+        {
+            controllerSerialized.FindProperty("visualRoot").objectReferenceValue = smoother.transform;
+        }
         if (aimPivot != null)
         {
             controllerSerialized.FindProperty("aimPitchTarget").objectReferenceValue = aimPivot;

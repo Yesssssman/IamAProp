@@ -411,9 +411,10 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
                 _isRagdollIdle = true;
                 _rb.constraints = RigidbodyConstraints.None;
 
-                // 클라이언트와 서버가 동일한 방향으로 쓰러지도록 틱 기반 결정적 각도를 사용한다.
-                uint tick = rd.GetTick();
-                float angleRad = ((tick * 1103515245u + 12345u) & 0xFFFFu) * (Mathf.PI * 2f / 65536f);
+                // 소유자, 서버 및 원격 관전자가 동일한 방향으로 쓰러지도록 입력 요와 현재 회전 기반 결정적 각도를 사용한다.
+                uint seed = (uint)(Mathf.RoundToInt(rd.CameraYaw * 100f) * 73856093
+                    ^ Mathf.RoundToInt(currentRotationY * 100f) * 19349663);
+                float angleRad = ((seed * 1103515245u + 12345u) & 0xFFFFu) * (Mathf.PI * 2f / 65536f);
                 Vector3 pushDirection = new Vector3(Mathf.Cos(angleRad), 0f, Mathf.Sin(angleRad));
                 Vector3 finalForce = (pushDirection * PushForce) + (Vector3.down * DownwardForce);
 

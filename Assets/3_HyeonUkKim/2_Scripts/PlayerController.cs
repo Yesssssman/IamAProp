@@ -1,3 +1,4 @@
+using FishNet.Component.Transforming.Beta;
 using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -23,6 +24,9 @@ public class PlayerController : PropControllerBase
 
     /// <summary>카메라 추적 기준 높이를 결정하는 트랜스폼.</summary>
     [SerializeField] private Transform tpsViewPos;
+
+    /// <summary><see cref="NetworkTickSmoother"/>로 보간되는 시각 루트 트랜스폼.</summary>
+    [SerializeField] private Transform visualRoot;
 
     /// <summary>크로스헤어 조준 레이캐스트에 포함할 물리 레이어 마스크.</summary>
     [Header("크로스헤어 조준")]
@@ -87,6 +91,15 @@ public class PlayerController : PropControllerBase
         if (tpsViewPos == null)
         {
             tpsViewPos = transform.Find("TpsViewPos");
+        }
+
+        if (visualRoot == null)
+        {
+            NetworkTickSmoother smoother = GetComponentInChildren<NetworkTickSmoother>(true);
+            if (smoother != null)
+            {
+                visualRoot = smoother.transform;
+            }
         }
 
         _tpsViewOffsetY = tpsViewPos != null
@@ -304,6 +317,7 @@ public class PlayerController : PropControllerBase
     /// <summary>카메라 추적 앵커의 월드 위치와 수직 회전을 갱신한다.</summary>
     private void UpdateCameraAnchorPosition()
     {
-        _cameraAnchor.SetPositionAndRotation(transform.position + Vector3.up * _tpsViewOffsetY, Quaternion.identity);
+        Vector3 basePosition = visualRoot != null ? visualRoot.position : transform.position;
+        _cameraAnchor.SetPositionAndRotation(basePosition + Vector3.up * _tpsViewOffsetY, Quaternion.identity);
     }
 }
