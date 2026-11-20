@@ -90,9 +90,14 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     /// <summary>원격 클라이언트가 미래 틱 예측에 재사용할 직전 수신 입력 데이터.</summary>
     private PlayerInputData _lastCreatedInput;
 
+    /// <summary>직전 시뮬레이션 틱 시작 시점의 <see cref="Rigidbody"/> 월드 위치.</summary>
+    private Vector3 _lastTickPosition;
+
     private const float DefaultMoveSpeed = 5f;
     private const float DefaultRotationSmoothTime = 0.1f;
     private const float DefaultJumpForce = 12f;
+    private const float DefaultDirectionalJumpForce = 6f;
+    private const float DefaultDirectionalJumpThresholdSqr = 0.0001f;
     private const float DefaultPushForce = 2.5f;
     private const float DefaultStationaryPushMultiplier = 0.5f;
     private const float DefaultMovingPushMultiplier = 1f;
@@ -153,6 +158,12 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     /// <summary>현재 프롭의 점프 수직 임펄스 크기.</summary>
     protected float JumpForce => propData != null ? propData.JumpForce : DefaultJumpForce;
 
+    /// <summary>이동 중 점프 시 이동 방향으로 가하는 수평 도약 임펄스 크기.</summary>
+    protected float DirectionalJumpForce => propData != null ? propData.DirectionalJumpForce : DefaultDirectionalJumpForce;
+
+    /// <summary>이동 중 점프로 판정할 틱 간 수평 변위 제곱 임계값 (제곱 미터).</summary>
+    protected float DirectionalJumpThresholdSqr => propData != null ? propData.DirectionalJumpThresholdSqr : DefaultDirectionalJumpThresholdSqr;
+
     /// <summary>현재 프롭의 쓰러짐 수평 임펄스 크기.</summary>
     protected float PushForce => propData != null ? propData.PushForce : DefaultPushForce;
 
@@ -181,11 +192,15 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     protected virtual void Awake()
     {
         _rb = GetComponent<Rigidbody>();
-        if (_rb != null && propData != null)
+        if (_rb != null)
         {
-            _rb.mass = propData.RigidbodyMass;
-            _rb.linearDamping = propData.RigidbodyLinearDamping;
-            _rb.angularDamping = propData.RigidbodyAngularDamping;
+            if (propData != null)
+            {
+                _rb.mass = propData.RigidbodyMass;
+                _rb.linearDamping = propData.RigidbodyLinearDamping;
+                _rb.angularDamping = propData.RigidbodyAngularDamping;
+            }
+            _lastTickPosition = _rb.position;
         }
 
         _bodyCollider = GetComponentInChildren<Collider>();
@@ -263,6 +278,11 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
 
     public override void OnStartNetwork()
     {
+        if (_rb != null)
+        {
+            _lastTickPosition = _rb.position;
+        }
+
         if (base.TimeManager != null)
         {
             base.TimeManager.OnTick += TimeManager_OnTick;
@@ -297,7 +317,8 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
             _wasGrounded,
             _isRagdollIdle,
             _isFiring,
-            _turnSmoothVelocity);
+            _turnSmoothVelocity,
+            _lastTickPosition);
         PerformReconcile(rd);
     }
 
@@ -362,6 +383,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     {
         if (_rb == null) return;
 
+        Vector3 currentTickPosition = _rb.position;
         float delta = (float)base.TimeManager.TickDelta;
 
         if (!IsServerStarted && !IsOwner)
@@ -497,7 +519,15 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
 
         if (rd.JumpRequested && _isGrounded && !_rb.isKinematic)
         {
-            _rb.AddForce(Vector3.up * JumpForce, ForceMode.Impulse);
+            Vector3 jumpImpulse = Vector3.up * JumpForce;
+            Vector3 tickDisplacement = currentTickPosition - _lastTickPosition;
+            tickDisplacement.y = 0f;
+            if (tickDisplacement.sqrMagnitude > DirectionalJumpThresholdSqr && DirectionalJumpForce > 0f)
+            {
+                jumpImpulse += tickDisplacement.normalized * DirectionalJumpForce;
+            }
+
+            _rb.AddForce(jumpImpulse, ForceMode.Impulse);
             _isGrounded = false;
             _wasGrounded = false;
             _EplayerState = EPlayerState.Air;
@@ -507,6 +537,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
 
         _planarVelocity = horizontalVelocity;
         _currentPlanarSpeed = new Vector2(horizontalVelocity.x, horizontalVelocity.z).magnitude;
+        _lastTickPosition = currentTickPosition;
     }
 
     /// <summary>서버에서 전송된 권위 상태 <paramref name="rd"/>로 <see cref="Rigidbody"/>와 이동 상태를 강제 덮어쓴다.</summary>
@@ -535,6 +566,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
         _turnSmoothVelocity = rd.TurnSmoothVelocity;
         _planarVelocity = rd.PlanarVelocity;
         _currentPlanarSpeed = rd.PlanarSpeed;
+        _lastTickPosition = rd.LastTickPosition;
     }
 
     // ***************************************************************

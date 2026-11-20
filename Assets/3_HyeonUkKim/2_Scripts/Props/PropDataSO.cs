@@ -26,6 +26,14 @@ public class PropDataSO : ScriptableObject
     /// <summary>점프 시 가하는 수직 임펄스 크기.</summary>
     [SerializeField] private float jumpForce = 12f;
 
+    /// <summary>이동 중 점프 시 이동 방향으로 가하는 수평 도약 임펄스 크기.</summary>
+    [Min(0f)]
+    [SerializeField] private float directionalJumpForce = 6f;
+
+    /// <summary>이동 중 점프로 판정할 틱 간 수평 변위 제곱 임계값 (제곱 미터).</summary>
+    [Min(0f)]
+    [SerializeField] private float directionalJumpThresholdSqr = 0.0001f;
+
     /// <summary>맨손 정지 쓰러짐 진입 시 수평으로 밀어내는 임펄스 크기.</summary>
     [Header("래그돌 및 물리 설정")]
     [SerializeField] private float pushForce = 2.5f;
@@ -83,6 +91,12 @@ public class PropDataSO : ScriptableObject
 
     /// <summary>점프 수직 임펄스 크기.</summary>
     public float JumpForce => jumpForce;
+
+    /// <summary>이동 중 점프 수평 도약 임펄스 크기.</summary>
+    public float DirectionalJumpForce => directionalJumpForce;
+
+    /// <summary>이동 중 점프 판정 수평 변위 제곱 임계값 (제곱 미터).</summary>
+    public float DirectionalJumpThresholdSqr => directionalJumpThresholdSqr;
 
     /// <summary>쓰러짐 수평 임펄스 크기.</summary>
     public float PushForce => pushForce;

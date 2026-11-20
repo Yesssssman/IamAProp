@@ -84,6 +84,9 @@ public struct PlayerReconcileData : IReconcileData
     /// <summary><see cref="Mathf.SmoothDampAngle"/> 내부 회전 각속도 상태값.</summary>
     public float TurnSmoothVelocity;
 
+    /// <summary>직전 시뮬레이션 틱 시작 시점의 <see cref="Rigidbody"/> 월드 위치.</summary>
+    public Vector3 LastTickPosition;
+
     /// <summary>FishNet 런타임이 할당하는 로컬 틱 번호.</summary>
     private uint _tick;
 
@@ -99,7 +102,8 @@ public struct PlayerReconcileData : IReconcileData
         bool wasGrounded,
         bool isRagdollIdle,
         bool isFiring,
-        float turnSmoothVelocity)
+        float turnSmoothVelocity,
+        Vector3 lastTickPosition)
     {
         Position = position;
         Rotation = rotation;
@@ -112,6 +116,7 @@ public struct PlayerReconcileData : IReconcileData
         IsRagdollIdle = isRagdollIdle;
         IsFiring = isFiring;
         TurnSmoothVelocity = turnSmoothVelocity;
+        LastTickPosition = lastTickPosition;
         _tick = 0;
     }
 
