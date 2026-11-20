@@ -36,6 +36,9 @@ namespace Networking
         // PLACEHOLDER: 인게임 씬이 구현되기 전까지 쓰는 임시 씬
         private const string INGAME_SCENE = "YesmanTestScene";
 
+        public const int MIN_PLAYERS = 2;  // 방장 포함, 서버 LobbyOptions.MinPlayers와 같음
+        public const int MAX_PLAYERS = 16; // 방장 포함, 서버 LobbyOptions.MaxPlayers와 같음
+
         private const string RELAY_CONNECTION_TYPE = "dtls";
         private const int RECEIVE_BUFFER_BYTES = 4096;
 
@@ -52,12 +55,12 @@ namespace Networking
         private static Allocation sHostAllocation;
 
         /// <summary>현재 대기실 상태. 대기실에 없으면 null.</summary>
-        public static LobbyStateDTO CurrentLobby { get; private set; }
+        public static RoomStateDTO CurrentRoom { get; private set; }
 
         /// <summary>대기실 wss 인증으로 받은 내 게임 계정 해시코드.</summary>
         public static string LocalAccountHashcode { get; private set; }
 
-        public static bool IsHost => CurrentLobby != null && CurrentLobby.hostAccountHashcode == LocalAccountHashcode;
+        public static bool IsHost => CurrentRoom != null && CurrentRoom.hostAccountHashcode == LocalAccountHashcode;
 
         /// <summary>
         /// 플레이 시작 시 static 상태를 비움.
@@ -70,7 +73,7 @@ namespace Networking
         {
             CloseSocket();
             sHostAllocation = null;
-            CurrentLobby = null;
+            CurrentRoom = null;
             LocalAccountHashcode = null;
         }
 
@@ -78,14 +81,20 @@ namespace Networking
         // 대기실 이벤트 (메인 스레드에서 호출됨)
         // ***************************************************************
 
-        public static event Action<LobbyMemberDTO> MemberJoined;
+        public static event Action<RoomMemberDTO> MemberJoined;
 
-        /// <summary>인자: <see cref="CurrentLobby"/>에서 제거된 멤버.</summary>
-        public static event Action<LobbyMemberDTO> MemberLeft;
+        /// <summary>인자: <see cref="CurrentRoom"/>에서 제거된 멤버. 강퇴된 멤버는 <see cref="MemberKicked"/>로 알림.</summary>
+        public static event Action<RoomMemberDTO> MemberLeft;
 
-        public static event Action<LobbyChatPayload> ChatReceived;
+        /// <summary>인자: 방장이 강퇴해 <see cref="CurrentRoom"/>에서 제거된 멤버.</summary>
+        public static event Action<RoomMemberDTO> MemberKicked;
 
-        public static event Action<LobbyReadyPayload> ReadyChanged;
+        public static event Action<RoomChatPayload> ChatReceived;
+
+        public static event Action<RoomReadyPayload> ReadyChanged;
+
+        /// <summary>방장이 게임 모드·맵·최대 인원을 바꿨을 때 호출됨. <see cref="CurrentRoom"/>은 이미 갱신됨.</summary>
+        public static event Action RoomSettingsChanged;
 
         /// <summary>방장은 호스트 시작 직후, 클라이언트는 호스트 접속 완료 후 호출됨.</summary>
         public static event Action GameStarted;
@@ -96,8 +105,11 @@ namespace Networking
         /// <summary>방장이 게임을 끝내 같은 방의 대기실로 돌아왔을 때 호출됨. 모든 멤버의 준비 상태는 해제됨.</summary>
         public static event Action GameEnded;
 
-        /// <summary>인자: 서버가 보낸 닫힌 이유 (<see cref="LobbyClosedPayload.reason"/>).</summary>
-        public static event Action<string> LobbyClosed;
+        /// <summary>인자: 서버가 보낸 닫힌 이유 (<see cref="RoomClosedPayload.reason"/>).</summary>
+        public static event Action<string> RoomClosed;
+
+        /// <summary>내가 방장에게 강퇴되어 대기실 wss 연결이 끊겼을 때 호출됨.</summary>
+        public static event Action Kicked;
 
         /// <summary>인자: 서버의 Error 패킷 또는 Relay 오류의 메세지.</summary>
         public static event Action<string> ErrorReceived;
@@ -110,34 +122,34 @@ namespace Networking
         // ***************************************************************
 
         /// <summary>열려 있는 방 목록 조회.</summary>
-        public static async Awaitable<LobbyListResponseDTO> GetLobbies()
+        public static async Awaitable<RoomListResponseDTO> GetRooms()
         {
-            return await LoginManager.SendAuthorized<LobbyListResponseDTO>(LOBBY_SERVER + "/api/lobby/list", "{}");
+            return await LoginManager.SendAuthorized<RoomListResponseDTO>(LOBBY_SERVER + "/api/lobby/list", "{}");
         }
 
         /// <summary>방을 만들고 방장으로 대기실에 입장.</summary>
-        public static async Awaitable<LobbyEnterResponseDTO> CreateLobby(LobbyCreateRequestDTO request)
+        public static async Awaitable<RoomEnterResponseDTO> CreateRoom(RoomCreateRequestDTO request)
         {
-            LobbyEnterResponseDTO response = await LoginManager.SendAuthorized<LobbyEnterResponseDTO>(LOBBY_SERVER + "/api/lobby/create", JsonUtility.ToJson(request));
-            return await EnterLobby(response);
+            RoomEnterResponseDTO response = await LoginManager.SendAuthorized<RoomEnterResponseDTO>(LOBBY_SERVER + "/api/lobby/create", JsonUtility.ToJson(request));
+            return await EnterRoom(response);
         }
 
         /// <summary>방에 참가하고 대기실에 입장.</summary>
-        public static async Awaitable<LobbyEnterResponseDTO> JoinLobby(LobbyJoinRequestDTO request)
+        public static async Awaitable<RoomEnterResponseDTO> JoinRoom(RoomJoinRequestDTO request)
         {
-            LobbyEnterResponseDTO response = await LoginManager.SendAuthorized<LobbyEnterResponseDTO>(LOBBY_SERVER + "/api/lobby/join", JsonUtility.ToJson(request));
-            return await EnterLobby(response);
+            RoomEnterResponseDTO response = await LoginManager.SendAuthorized<RoomEnterResponseDTO>(LOBBY_SERVER + "/api/lobby/join", JsonUtility.ToJson(request));
+            return await EnterRoom(response);
         }
 
         /// <summary>방장이 방을 닫고 대기실에서 나감. 다른 멤버는 <see cref="LobbyClosed"/>를 받음.</summary>
-        public static async Awaitable<ResponseDTO> CloseLobby()
+        public static async Awaitable<ResponseDTO> CloseRoom()
         {
-            if (CurrentLobby == null)
+            if (CurrentRoom == null)
             {
-                return new ResponseDTO { responseMessage = CommonMessages.NOT_IN_LOBBY };
+                return new ResponseDTO { responseMessage = CommonMessages.NOT_IN_ROOM };
             }
 
-            string postData = JsonUtility.ToJson(new LobbyCloseRequestDTO { lobbyId = CurrentLobby.lobbyId });
+            string postData = JsonUtility.ToJson(new RoomCloseRequestDTO { lobbyId = CurrentRoom.lobbyId });
             ResponseDTO response = await LoginManager.SendAuthorized<ResponseDTO>(LOBBY_SERVER + "/api/lobby/close", postData);
 
             if (ResponseMessageUtil.IsOk(response.responseMessage))
@@ -149,7 +161,7 @@ namespace Networking
         }
 
         /// <summary>방 생성·참가에 성공했으면 입장권으로 대기실 wss에 연결하고 인증함.</summary>
-        private static async Awaitable<LobbyEnterResponseDTO> EnterLobby(LobbyEnterResponseDTO response)
+        private static async Awaitable<RoomEnterResponseDTO> EnterRoom(RoomEnterResponseDTO response)
         {
             if (!ResponseMessageUtil.IsOk(response.responseMessage))
             {
@@ -166,16 +178,16 @@ namespace Networking
             try
             {
                 await socket.ConnectAsync(new Uri(LOBBY_SOCKET), cancel.Token);
-                await Send(LobbyProtocol.Authenticate, new LobbyAuthenticateRequest { lobbyTicket = response.lobbyTicket });
+                await Send(RoomProtocol.Authenticate, new RoomAuthenticateRequest { lobbyTicket = response.lobbyTicket });
 
                 // 인증 실패 시 서버는 Error(0) 패킷을 보내므로 공통 필드인 responseMessage만으로 판별
                 string json = await ReceiveText(socket, cancel.Token);
-                LobbyAuthenticateResult result = json == null ? null : JsonUtility.FromJson<LobbyPacket<LobbyAuthenticateResult>>(json).payload;
+                RoomAuthenticateResult result = json == null ? null : JsonUtility.FromJson<RoomPacket<RoomAuthenticateResult>>(json).payload;
 
                 if (result == null || !ResponseMessageUtil.IsOk(result.responseMessage))
                 {
                     CloseSocket();
-                    return new LobbyEnterResponseDTO
+                    return new RoomEnterResponseDTO
                     {
                         responseCode = result?.responseCode,
                         responseMessage = result?.responseMessage ?? CommonMessages.CONNECTION_ERROR
@@ -183,12 +195,12 @@ namespace Networking
                 }
 
                 LocalAccountHashcode = result.gameAccountHashcode;
-                CurrentLobby = result.lobby;
+                CurrentRoom = result.lobby;
             }
             catch (Exception e) when (e is WebSocketException or OperationCanceledException or ArgumentException)
             {
                 CloseSocket();
-                return new LobbyEnterResponseDTO { responseMessage = CommonMessages.CONNECTION_ERROR };
+                return new RoomEnterResponseDTO { responseMessage = CommonMessages.CONNECTION_ERROR };
             }
 
             _ = ReceiveLoop(socket, cancel.Token);
@@ -201,24 +213,46 @@ namespace Networking
 
         public static async Awaitable<bool> SendChat(string message)
         {
-            return await Send(LobbyProtocol.Chat, new LobbyChatRequest { message = message });
+            return await Send(RoomProtocol.Chat, new RoomChatRequest { message = message });
         }
 
         public static async Awaitable<bool> SetReady(bool isReady)
         {
-            return await Send(LobbyProtocol.Ready, new LobbyReadyRequest { isReady = isReady });
+            return await Send(RoomProtocol.Ready, new RoomReadyRequest { isReady = isReady });
+        }
+
+        /// <summary>방장이 게임 모드·맵·최대 인원을 바꿈. 서버가 승인하면 모든 멤버가 <see cref="RoomSettingsChanged"/>를 받음.</summary>
+        public static async Awaitable<bool> ChangeRoomSettings(RoomSettingsPayload settings)
+        {
+            if (!IsHost)
+            {
+                return false;
+            }
+
+            return await Send(RoomProtocol.Settings, settings);
+        }
+
+        /// <summary>방장이 멤버를 강퇴함. 서버가 승인하면 남은 멤버는 <see cref="MemberKicked"/>, 강퇴된 멤버는 <see cref="Kicked"/>를 받음.</summary>
+        public static async Awaitable<bool> KickMember(string gameAccountHashcode)
+        {
+            if (!IsHost)
+            {
+                return false;
+            }
+
+            return await Send(RoomProtocol.Kick, new RoomKickRequest { gameAccountHashcode = gameAccountHashcode });
         }
 
         /// <summary>대기실에서 나감. 방장이 나가면 서버가 방을 닫음.</summary>
-        public static async Awaitable LeaveLobby()
+        public static async Awaitable LeaveRoom()
         {
-            await Send(LobbyProtocol.Leave, new LobbyEmptyPayload());
+            await Send(RoomProtocol.Leave, new RoomEmptyPayload());
             CloseSocket();
         }
 
         /// <summary>
         /// 방장이 Relay 할당을 만들고 참여 코드와 함께 게임 시작을 요청함.
-        /// 서버가 승인하면 모든 멤버가 <see cref="LobbyProtocol.GameStarted"/>를 받아 Relay에 접속함.
+        /// 서버가 승인하면 모든 멤버가 <see cref="RoomProtocol.GameStarted"/>를 받아 Relay에 접속함.
         /// </summary>
         public static async Awaitable<bool> StartGame()
         {
@@ -230,9 +264,9 @@ namespace Networking
             try
             {
                 await SignInUnityServices();
-                sHostAllocation = await RelayService.Instance.CreateAllocationAsync(CurrentLobby.maxPlayers - 1); // 방장 제외 인원
+                sHostAllocation = await RelayService.Instance.CreateAllocationAsync(CurrentRoom.maxPlayers - 1); // 방장 제외 인원
                 string joinCode = await RelayService.Instance.GetJoinCodeAsync(sHostAllocation.AllocationId);
-                return await Send(LobbyProtocol.GameStart, new LobbyGameStartPayload { relayJoinCode = joinCode });
+                return await Send(RoomProtocol.GameStart, new RoomGameStartPayload { relayJoinCode = joinCode });
             }
             catch (RequestFailedException e)
             {
@@ -250,10 +284,10 @@ namespace Networking
                 return false;
             }
 
-            return await Send(LobbyProtocol.GameEnd, new LobbyGameEndPayload { reason = LobbyMessages.GAME_FINISHED });
+            return await Send(RoomProtocol.GameEnd, new RoomGameEndPayload { reason = LobbyMessages.GAME_FINISHED });
         }
 
-        private static async Awaitable<bool> Send<T>(LobbyProtocol protocol, T payload)
+        private static async Awaitable<bool> Send<T>(RoomProtocol protocol, T payload)
         {
             ClientWebSocket socket = sSocket;
             CancellationTokenSource cancel = sSocketCancel;
@@ -263,7 +297,7 @@ namespace Networking
                 return false;
             }
 
-            string json = JsonUtility.ToJson(new LobbyPacket<T> { protocolId = (int)protocol, payload = payload });
+            string json = JsonUtility.ToJson(new RoomPacket<T> { protocolId = (int)protocol, payload = payload });
             byte[] bytes = Encoding.UTF8.GetBytes(json);
 
             await sSendLock.WaitAsync();
@@ -322,42 +356,52 @@ namespace Networking
                         break;
                     }
 
-                    switch ((LobbyProtocol)JsonUtility.FromJson<LobbyPacket<LobbyEmptyPayload>>(json).protocolId)
+                    switch ((RoomProtocol)JsonUtility.FromJson<RoomPacket<RoomEmptyPayload>>(json).protocolId)
                     {
-                        case LobbyProtocol.Error:
+                        case RoomProtocol.Error:
                         {
                             ErrorReceived?.Invoke(Payload<ResponseDTO>(json).responseMessage);
                             break;
                         }
-                        case LobbyProtocol.MemberJoined:
+                        case RoomProtocol.MemberJoined:
                         {
-                            LobbyMemberDTO member = Payload<LobbyMemberDTO>(json);
-                            CurrentLobby.members.Add(member);
+                            RoomMemberDTO member = Payload<RoomMemberDTO>(json);
+                            CurrentRoom.members.Add(member);
                             MemberJoined?.Invoke(member);
                             break;
                         }
-                        case LobbyProtocol.MemberLeft:
+                        case RoomProtocol.MemberLeft:
                         {
-                            string hashcode = Payload<LobbyMemberLeftPayload>(json).gameAccountHashcode;
-                            LobbyMemberDTO member = CurrentLobby.members.Find(m => m.gameAccountHashcode == hashcode);
+                            RoomMemberLeftPayload left = Payload<RoomMemberLeftPayload>(json);
+                            RoomMemberDTO member = CurrentRoom.members.Find(m => m.gameAccountHashcode == left.gameAccountHashcode);
 
-                            if (member != null)
+                            if (member == null)
                             {
-                                CurrentLobby.members.Remove(member);
+                                break;
+                            }
+
+                            CurrentRoom.members.Remove(member);
+
+                            if (left.isKicked)
+                            {
+                                MemberKicked?.Invoke(member);
+                            }
+                            else
+                            {
                                 MemberLeft?.Invoke(member);
                             }
 
                             break;
                         }
-                        case LobbyProtocol.ChatReceived:
+                        case RoomProtocol.ChatReceived:
                         {
-                            ChatReceived?.Invoke(Payload<LobbyChatPayload>(json));
+                            ChatReceived?.Invoke(Payload<RoomChatPayload>(json));
                             break;
                         }
-                        case LobbyProtocol.ReadyChanged:
+                        case RoomProtocol.ReadyChanged:
                         {
-                            LobbyReadyPayload ready = Payload<LobbyReadyPayload>(json);
-                            LobbyMemberDTO member = CurrentLobby.members.Find(m => m.gameAccountHashcode == ready.gameAccountHashcode);
+                            RoomReadyPayload ready = Payload<RoomReadyPayload>(json);
+                            RoomMemberDTO member = CurrentRoom.members.Find(m => m.gameAccountHashcode == ready.gameAccountHashcode);
 
                             if (member != null)
                             {
@@ -367,16 +411,31 @@ namespace Networking
                             ReadyChanged?.Invoke(ready);
                             break;
                         }
-                        case LobbyProtocol.LobbyClosed:
+                        case RoomProtocol.SettingsChanged:
+                        {
+                            RoomSettingsPayload settings = Payload<RoomSettingsPayload>(json);
+                            CurrentRoom.gameMode = settings.gameMode;
+                            CurrentRoom.map = settings.map;
+                            CurrentRoom.maxPlayers = settings.maxPlayers;
+                            RoomSettingsChanged?.Invoke();
+                            break;
+                        }
+                        case RoomProtocol.Kicked:
                         {
                             CloseSocket();
-                            LobbyClosed?.Invoke(Payload<LobbyClosedPayload>(json).reason);
+                            Kicked?.Invoke();
                             return;
                         }
-                        case LobbyProtocol.GameStarted:
+                        case RoomProtocol.RoomClosed:
+                        {
+                            CloseSocket();
+                            RoomClosed?.Invoke(Payload<RoomClosedPayload>(json).reason);
+                            return;
+                        }
+                        case RoomProtocol.GameStarted:
                         {
                             // 게임 중에도 대기실 wss 연결은 유지됨 (서버의 방 세션 유지)
-                            string joinCode = Payload<LobbyGameStartPayload>(json).relayJoinCode;
+                            string joinCode = Payload<RoomGameStartPayload>(json).relayJoinCode;
                             NetworkManager network = NetworkManager.Singleton;
                             UnityTransport transport = network.GetComponent<UnityTransport>();
 
@@ -389,7 +448,7 @@ namespace Networking
                                 {
                                     // 방은 유지하고 대기실 상태로 되돌림 — 다른 멤버는 GameEnded로 실패를 알게 됨
                                     GameStartFailed?.Invoke(LobbyMessages.HOST_START_FAILED);
-                                    await Send(LobbyProtocol.GameEnd, new LobbyGameEndPayload { reason = LobbyMessages.HOST_START_FAILED });
+                                    await Send(RoomProtocol.GameEnd, new RoomGameEndPayload { reason = LobbyMessages.HOST_START_FAILED });
                                     break;
                                 }
 
@@ -429,9 +488,9 @@ namespace Networking
 
                             break;
                         }
-                        case LobbyProtocol.GameEnded:
+                        case RoomProtocol.GameEnded:
                         {
-                            string reason = Payload<LobbyGameEndPayload>(json).reason;
+                            string reason = Payload<RoomGameEndPayload>(json).reason;
                             NetworkManager network = NetworkManager.Singleton;
 
                             // 아직 호스트에 접속 중인 클라이언트의 접속 시도도 여기서 중단됨
@@ -442,7 +501,7 @@ namespace Networking
                                 network.Shutdown();
                             }
 
-                            foreach (LobbyMemberDTO member in CurrentLobby.members)
+                            foreach (RoomMemberDTO member in CurrentRoom.members)
                             {
                                 member.isReady = false;
                             }
@@ -497,7 +556,7 @@ namespace Networking
 
         private static T Payload<T>(string json)
         {
-            return JsonUtility.FromJson<LobbyPacket<T>>(json).payload;
+            return JsonUtility.FromJson<RoomPacket<T>>(json).payload;
         }
 
         /// <summary>대기실 wss 연결을 끊고 대기실 상태를 비움.</summary>
@@ -513,7 +572,7 @@ namespace Networking
             sSocketCancel.Dispose();
             sSocket = null;
             sSocketCancel = null;
-            CurrentLobby = null;
+            CurrentRoom = null;
         }
 
         /// <summary>Relay 사용에 필요한 Unity Services 초기화와 익명 로그인.</summary>

@@ -26,6 +26,7 @@ namespace Networking
 
         private const string AUTH_FILE = "iamaprop_auth.json";
         private const string CONTENT_TYPE_JSON = "application/json";
+        private const int REQUEST_TIMEOUT_SECONDS = 5; // 응답이 없으면 CONNECTION_ERROR로 끝남
 
         /// <summary>엑세스 토큰. 메모리에만 존재.</summary>
         private static string sAccessToken;
@@ -42,6 +43,9 @@ namespace Networking
 
         /// <summary>ID/PW 로그인 또는 자동 로그인에 성공했는지 여부.</summary>
         public static bool IsOnline => sIsOnline;
+
+        /// <summary><see cref="GetAccountInfo"/>로 받은 내 닉네임. 아직 조회하지 않았으면 null.</summary>
+        public static string NickName { get; private set; }
 
 #if LOCAL || DEV
         public static void ResetOnline()
@@ -62,6 +66,7 @@ namespace Networking
             sAccessToken = null;
             sRefreshToken = null;
             sIsOnline = false;
+            NickName = null;
         }
 
         /// <summary>디스크에 영구히 보존되는 인증 정보 파일 경로.</summary>
@@ -75,6 +80,7 @@ namespace Networking
 
             using (UnityWebRequest req = UnityWebRequest.Post(AUTH_SERVER + "/api/account/gameuser", JsonUtility.ToJson(request), CONTENT_TYPE_JSON))
             {
+                req.timeout = REQUEST_TIMEOUT_SECONDS;
                 await req.SendWebRequest();
                 GameUserResponseDTO response = Deserialize<GameUserResponseDTO>(req);
 
@@ -101,6 +107,7 @@ namespace Networking
 
             using (UnityWebRequest req = UnityWebRequest.Post(AUTH_SERVER + "/api/account/gameuser", JsonUtility.ToJson(request), CONTENT_TYPE_JSON))
             {
+                req.timeout = REQUEST_TIMEOUT_SECONDS;
                 await req.SendWebRequest();
                 GameUserResponseDTO response = Deserialize<GameUserResponseDTO>(req);
 
@@ -158,6 +165,7 @@ namespace Networking
 
             using (UnityWebRequest req = UnityWebRequest.Post(AUTH_SERVER + "/api/account/gameusertokenrefresh", postData, CONTENT_TYPE_JSON))
             {
+                req.timeout = REQUEST_TIMEOUT_SECONDS;
                 await req.SendWebRequest();
                 GameUserResponseDTO response = Deserialize<GameUserResponseDTO>(req);
 
@@ -168,6 +176,19 @@ namespace Networking
 
                 return response;
             }
+        }
+
+        /// <summary>내 계정 정보를 조회하고 <see cref="NickName"/>에 저장.</summary>
+        public static async Awaitable<AccountInfoResponseDTO> GetAccountInfo()
+        {
+            AccountInfoResponseDTO response = await SendAuthorized<AccountInfoResponseDTO>(AUTH_SERVER + "/api/game/accountinfo", "");
+
+            if (ResponseMessageUtil.IsOk(response.responseMessage))
+            {
+                NickName = response.accountNickName;
+            }
+
+            return response;
         }
 
         /// <summary>
@@ -197,6 +218,7 @@ namespace Networking
         {
             using (UnityWebRequest req = UnityWebRequest.Post(url, postData, CONTENT_TYPE_JSON))
             {
+                req.timeout = REQUEST_TIMEOUT_SECONDS;
                 req.SetRequestHeader("Authorization", "Bearer " + sAccessToken);
                 await req.SendWebRequest();
                 return Deserialize<T>(req);

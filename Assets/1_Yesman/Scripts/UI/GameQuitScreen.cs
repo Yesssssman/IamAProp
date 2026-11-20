@@ -30,8 +30,8 @@ namespace UI
         {
             gameQuitButton.onClick.AddListener(HandleGameQuitClicked);
             LobbyManager.GameEnded += HandleGameEnded;
-            LobbyManager.LobbyClosed += HandleLobbyClosed;
-            LobbyManager.Disconnected += HandleLobbyDisconnected;
+            LobbyManager.RoomClosed += HandleRoomClosed;
+            LobbyManager.Disconnected += HandleRoomDisconnected;
 
             network = NetworkManager.Singleton;
 
@@ -44,8 +44,8 @@ namespace UI
         private void OnDestroy()
         {
             LobbyManager.GameEnded -= HandleGameEnded;
-            LobbyManager.LobbyClosed -= HandleLobbyClosed;
-            LobbyManager.Disconnected -= HandleLobbyDisconnected;
+            LobbyManager.RoomClosed -= HandleRoomClosed;
+            LobbyManager.Disconnected -= HandleRoomDisconnected;
 
             if (network != null)
             {
@@ -72,7 +72,7 @@ namespace UI
                 return;
             }
 
-            await LobbyManager.LeaveLobby();
+            await LobbyManager.LeaveRoom();
             await ReturnToLobbyScene();
         }
 
@@ -81,12 +81,12 @@ namespace UI
             await ReturnToLobbyScene();
         }
 
-        private async void HandleLobbyClosed(string reason)
+        private async void HandleRoomClosed(string reason)
         {
             await ReturnToLobbyScene();
         }
 
-        private async void HandleLobbyDisconnected()
+        private async void HandleRoomDisconnected()
         {
             await ReturnToLobbyScene();
         }
