@@ -194,6 +194,8 @@ public static class PropPrefabSetupTool
         {
             EnsureIgnoredParameter(ignoredParams, "MoveX");
             EnsureIgnoredParameter(ignoredParams, "MoveZ");
+            EnsureIgnoredParameter(ignoredParams, "Hit");
+            EnsureIgnoredParameter(ignoredParams, "HitIndex");
         }
         netAnimSerialized.ApplyModifiedPropertiesWithoutUndo();
 

@@ -1,4 +1,5 @@
 using System;
+using FishNet.Connection;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using UnityEngine;
@@ -40,6 +41,9 @@ public class PlayerAnim : PropAnimBase
 
     /// <summary>현재 오른손에 장착된 무기의 <see cref="Animator"/> 컴포넌트.</summary>
     private Animator _weaponAnimator;
+
+    /// <summary>서버 피격 이벤트와 사망 상태를 조회하는 체력 컴포넌트.</summary>
+    private PlayerHealth _playerHealth;
 
     /// <summary>무기 교체 애니메이션 진입 직후 <c>isWeaponSwap</c>을 초기화하기 위한 대기 플래그.</summary>
     private bool _pendingWeaponSwapReset;
@@ -120,6 +124,12 @@ public class PlayerAnim : PropAnimBase
     // ***************************************************************
     // MonoBehaviour
     // ***************************************************************
+
+    protected override void Awake()
+    {
+        base.Awake();
+        _playerHealth = GetComponent<PlayerHealth>();
+    }
 
     protected override void Update()
     {
@@ -219,6 +229,22 @@ public class PlayerAnim : PropAnimBase
     // ***************************************************************
     // NetworkBehaviour
     // ***************************************************************
+
+    public override void OnStartServer()
+    {
+        if (_playerHealth != null)
+        {
+            _playerHealth.OnDamaged += HandleServerDamaged;
+        }
+    }
+
+    public override void OnStopServer()
+    {
+        if (_playerHealth != null)
+        {
+            _playerHealth.OnDamaged -= HandleServerDamaged;
+        }
+    }
 
     public override void OnStartNetwork()
     {
@@ -370,9 +396,27 @@ public class PlayerAnim : PropAnimBase
         _pendingReloadReset = true;
     }
 
+    /// <summary>서버가 결정한 <paramref name="hitIndex"/>로 모든 클라이언트의 피격 애니메이션을 재생한다.</summary>
+    [ObserversRpc]
+    private void PlayHitObserversRpc(int hitIndex)
+    {
+        TriggerHit(hitIndex);
+    }
+
     // ***************************************************************
     // Event Handlers
     // ***************************************************************
+
+    /// <summary>서버 피격 이벤트 수신 시 숨김/사망 상태를 제외하고 모든 클라이언트에 랜덤 피격 모션을 전파한다.</summary>
+    private void HandleServerDamaged(float damage, NetworkConnection attacker)
+    {
+        bool isHidden = _propEntity != null && _propEntity.IsRagdollIdle;
+        bool isDead = _playerHealth != null && _playerHealth.IsDead;
+        if (isHidden || isDead) return;
+
+        int hitIndex = UnityEngine.Random.Range(0, HitClipCount);
+        PlayHitObserversRpc(hitIndex);
+    }
 
     /// <summary><see cref="_weaponType"/> 변경 시 무기 오브젝트와 몸통/손 애니메이터를 갱신한다.</summary>
     private void OnWeaponTypeChanged(EWeaponType previousValue, EWeaponType newValue, bool asServer)

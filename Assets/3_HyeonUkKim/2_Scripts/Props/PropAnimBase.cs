@@ -75,8 +75,17 @@ public abstract class PropAnimBase : NetworkBehaviour, IPropAnimController
     /// <summary>애니메이터 <c>isWeaponSwap</c> 파라미터 해시.</summary>
     protected static readonly int IsWeaponSwap = Animator.StringToHash("isWeaponSwap");
 
+    /// <summary>피격 애니메이션 변형 클립 개수.</summary>
+    protected const int HitClipCount = 4;
+
     /// <summary>애니메이터 <c>isReload</c> 파라미터 해시.</summary>
     protected static readonly int IsReload = Animator.StringToHash("isReload");
+
+    /// <summary>애니메이터 <c>Hit</c> 트리거 파라미터 해시.</summary>
+    protected static readonly int Hit = Animator.StringToHash("Hit");
+
+    /// <summary>애니메이터 <c>HitIndex</c> 파라미터 해시.</summary>
+    protected static readonly int HitIndex = Animator.StringToHash("HitIndex");
 
     /// <summary>몸통 기본 이동 블렌드 상태(<c>UnArmedBlend</c>) 해시.</summary>
     private static readonly int UnArmedBlendState = Animator.StringToHash("UnArmedBlend");
@@ -277,4 +286,13 @@ public abstract class PropAnimBase : NetworkBehaviour, IPropAnimController
 
     /// <inheritdoc/>
     public virtual void RequestReload() { }
+
+    /// <inheritdoc/>
+    public virtual void TriggerHit(int hitIndex)
+    {
+        if (bodyAnimator == null || !bodyAnimator.isActiveAndEnabled) return;
+
+        bodyAnimator.SetInteger(HitIndex, Mathf.Clamp(hitIndex, 0, HitClipCount - 1));
+        bodyAnimator.SetTrigger(Hit);
+    }
 }

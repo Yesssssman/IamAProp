@@ -576,6 +576,8 @@ MonoBehaviour:
   IgnoredParameters:
   - MoveX
   - MoveZ
+  - Hit
+  - HitIndex
   _animator: {fileID: 3750648677330133184}
   _synchronizeWhenDisabled: 0
   _smoothFloats: 1

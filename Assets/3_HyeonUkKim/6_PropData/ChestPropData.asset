@@ -17,6 +17,8 @@ MonoBehaviour:
   moveSpeed: 3
   rotationSmoothTime: 0.1
   jumpForce: 15
+  directionalJumpForce: 6
+  directionalJumpThresholdSqr: 0.0001
   pushForce: 2.5
   stationaryPushMultiplier: 0.5
   movingPushMultiplier: 1
@@ -43,6 +45,10 @@ MonoBehaviour:
     aimRunForwardRightClip: {fileID: -1992894103249247365, guid: d81713e13f6b3b348a8d4a3e282d9933, type: 3}
     aimRunLeftClip: {fileID: -4865557963820777358, guid: d81713e13f6b3b348a8d4a3e282d9933, type: 3}
     aimRunRightClip: {fileID: -691212122336126430, guid: d81713e13f6b3b348a8d4a3e282d9933, type: 3}
+    hit1Clip: {fileID: 3169551658750593100, guid: d81713e13f6b3b348a8d4a3e282d9933, type: 3}
+    hit2Clip: {fileID: 7986996036552594245, guid: d81713e13f6b3b348a8d4a3e282d9933, type: 3}
+    hit3Clip: {fileID: -741816088663239696, guid: d81713e13f6b3b348a8d4a3e282d9933, type: 3}
+    hit4Clip: {fileID: -4000875841930765055, guid: d81713e13f6b3b348a8d4a3e282d9933, type: 3}
   unarmedHandClips:
     idleClip: {fileID: 0}
     runClip: {fileID: 1646884068010633961, guid: 0e3cacf20f6c4b549b8a1eafdd3b330e, type: 3}

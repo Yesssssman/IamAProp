@@ -44,6 +44,18 @@ public struct PropBodyClips
 
     /// <summary>총기 조준 우측 달리기 상태 클립.</summary>
     public AnimationClip aimRunRightClip;
+
+    /// <summary>피격 1번 모션 클립.</summary>
+    public AnimationClip hit1Clip;
+
+    /// <summary>피격 2번 모션 클립.</summary>
+    public AnimationClip hit2Clip;
+
+    /// <summary>피격 3번 모션 클립.</summary>
+    public AnimationClip hit3Clip;
+
+    /// <summary>피격 4번 모션 클립.</summary>
+    public AnimationClip hit4Clip;
 }
 
 /// <summary>프롭별 비무장 손 상태 애니메이션 클립 묶음.</summary>
@@ -118,6 +130,18 @@ public class PropTemplateSO : ScriptableObject
     /// <summary>몸통 베이스 컨트롤러의 조준 우측 달리기 기준 클립.</summary>
     [SerializeField] private AnimationClip baseBodyAimRunRightClip;
 
+    /// <summary>몸통 베이스 컨트롤러의 피격 1번 기준 클립.</summary>
+    [SerializeField] private AnimationClip baseBodyHit1Clip;
+
+    /// <summary>몸통 베이스 컨트롤러의 피격 2번 기준 클립.</summary>
+    [SerializeField] private AnimationClip baseBodyHit2Clip;
+
+    /// <summary>몸통 베이스 컨트롤러의 피격 3번 기준 클립.</summary>
+    [SerializeField] private AnimationClip baseBodyHit3Clip;
+
+    /// <summary>몸통 베이스 컨트롤러의 피격 4번 기준 클립.</summary>
+    [SerializeField] private AnimationClip baseBodyHit4Clip;
+
     /// <summary>손 베이스 컨트롤러의 비무장 대기 상태 기준 클립.</summary>
     [Header("손 오버라이드 기준 클립")]
     [SerializeField] private AnimationClip baseHandIdleClip;
@@ -162,7 +186,7 @@ public class PropTemplateSO : ScriptableObject
             : Enum.GetValues(typeof(EWeaponType)).Length;
 
         RuntimeAnimatorController[] controllers = new RuntimeAnimatorController[weaponCount];
-        List<KeyValuePair<AnimationClip, AnimationClip>> overrides = new(13);
+        List<KeyValuePair<AnimationClip, AnimationClip>> overrides = new(17);
 
         for (int i = 0; i < weaponCount; i++)
         {
@@ -196,6 +220,10 @@ public class PropTemplateSO : ScriptableObject
             AddOverrideIfValid(overrides, baseBodyAimRunForwardRightClip, bodyClips.aimRunForwardRightClip);
             AddOverrideIfValid(overrides, baseBodyAimRunLeftClip, bodyClips.aimRunLeftClip);
             AddOverrideIfValid(overrides, baseBodyAimRunRightClip, bodyClips.aimRunRightClip);
+            AddOverrideIfValid(overrides, baseBodyHit1Clip, bodyClips.hit1Clip);
+            AddOverrideIfValid(overrides, baseBodyHit2Clip, bodyClips.hit2Clip);
+            AddOverrideIfValid(overrides, baseBodyHit3Clip, bodyClips.hit3Clip);
+            AddOverrideIfValid(overrides, baseBodyHit4Clip, bodyClips.hit4Clip);
 
             AnimatorOverrideController overrideController = new AnimatorOverrideController(baseBodyController);
             overrideController.name = $"{baseBodyController.name}_{weaponType}_Runtime";

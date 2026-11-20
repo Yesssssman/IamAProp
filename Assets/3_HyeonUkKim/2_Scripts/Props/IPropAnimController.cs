@@ -21,4 +21,7 @@ public interface IPropAnimController
 
     /// <summary>총기 장착 상태에서 손 재장전 애니메이션을 요청한다.</summary>
     void RequestReload();
+
+    /// <summary>지정한 인덱스(0~3)의 피격 Additive 애니메이션을 재생한다.</summary>
+    void TriggerHit(int hitIndex);
 }

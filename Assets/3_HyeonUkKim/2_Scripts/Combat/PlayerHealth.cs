@@ -31,6 +31,9 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     /// <summary>체력이 변경될 때 (현재 체력, 최대 체력)을 알리는 이벤트.</summary>
     public event Action<float, float> OnHealthChanged;
 
+    /// <summary>서버에서 실제 데미지가 적용된 직후 (최종 데미지, 공격자 연결)을 알리는 이벤트.</summary>
+    public event Action<float, NetworkConnection> OnDamaged;
+
     /// <summary>서버에서 체력이 0에 도달했을 때 공격자 연결과 함께 발생하는 이벤트.</summary>
     public event Action<NetworkConnection> OnDied;
 
@@ -88,6 +91,8 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
         int attackerId = attacker != null ? attacker.ClientId : -1;
         Debug.Log($"[PlayerHealth] {name}(Owner:{OwnerId}) 피격: -{finalDamage:F1} (체력: {_currentHealth.Value:F1}/{MaxHealth:F1}, 공격자 ClientId:{attackerId})");
+
+        OnDamaged?.Invoke(finalDamage, attacker);
 
         if (_currentHealth.Value <= 0f)
         {
