@@ -73,7 +73,7 @@ namespace UI
             LobbyManager.ChatReceived += HandleChatReceived;
             LobbyManager.ReadyChanged += HandleReadyChanged;
             LobbyManager.GameStartFailed += HandleGameStartFailed;
-            LobbyManager.LobbyClosed += HandleLobbyClosed;
+            LobbyManager.RoomClosed += HandleRoomClosed;
             LobbyManager.ErrorReceived += HandleErrorReceived;
             LobbyManager.Disconnected += HandleDisconnected;
 
@@ -86,9 +86,9 @@ namespace UI
         private async void Start()
         {
             // 인게임에서 돌아온 경우: 방장이 게임을 끝냈으면 대기실, 방을 나왔으면 방 목록
-            if (LobbyManager.CurrentLobby != null)
+            if (LobbyManager.CurrentRoom != null)
             {
-                AddChatLine("Game ended. Back to " + LobbyManager.CurrentLobby.lobbyName);
+                AddChatLine("Game ended. Back to " + LobbyManager.CurrentRoom.lobbyName);
             }
             else
             {
@@ -103,7 +103,7 @@ namespace UI
             LobbyManager.ChatReceived -= HandleChatReceived;
             LobbyManager.ReadyChanged -= HandleReadyChanged;
             LobbyManager.GameStartFailed -= HandleGameStartFailed;
-            LobbyManager.LobbyClosed -= HandleLobbyClosed;
+            LobbyManager.RoomClosed -= HandleRoomClosed;
             LobbyManager.ErrorReceived -= HandleErrorReceived;
             LobbyManager.Disconnected -= HandleDisconnected;
         }
@@ -164,20 +164,20 @@ namespace UI
 
         private async void HandleCreateLobbyClicked()
         {
-            LobbyCreateRequestDTO request = new LobbyCreateRequestDTO
+            RoomCreateRequestDTO request = new RoomCreateRequestDTO
             {
                 lobbyName = lobbyNameInput.text,
                 maxPlayers = maxPlayers,
                 password = lobbyPasswordInput.text
             };
 
-            ApplyEnterResult(await LobbyManager.CreateLobby(request));
+            ApplyEnterResult(await LobbyManager.CreateRoom(request));
         }
 
         private async void HandleJoinLobbyClicked(string lobbyId)
         {
-            LobbyJoinRequestDTO request = new LobbyJoinRequestDTO { lobbyId = lobbyId, password = joinPasswordInput.text };
-            LobbyEnterResponseDTO response = await LobbyManager.JoinLobby(request);
+            RoomJoinRequestDTO request = new RoomJoinRequestDTO { lobbyId = lobbyId, password = joinPasswordInput.text };
+            RoomEnterResponseDTO response = await LobbyManager.JoinRoom(request);
 
             joinPasswordAlarmText.gameObject.SetActive(response.responseMessage == LobbyMessages.INVALID_PASSWORD);
             ApplyEnterResult(response);
@@ -188,12 +188,12 @@ namespace UI
         {
             ClearLobbyRows();
 
-            if (!LoginManager.IsOnline || LobbyManager.CurrentLobby != null)
+            if (!LoginManager.IsOnline || LobbyManager.CurrentRoom != null)
             {
                 return;
             }
 
-            LobbyListResponseDTO response = await LobbyManager.GetLobbies();
+            RoomListResponseDTO response = await LobbyManager.GetRooms();
 
             if (!ResponseMessageUtil.IsOk(response.responseMessage))
             {
@@ -204,12 +204,12 @@ namespace UI
             // 응답을 기다리는 동안 방에 들어갔거나 목록을 또 요청했을 수 있음
             ClearLobbyRows();
 
-            if (LobbyManager.CurrentLobby != null || response.lobbies == null)
+            if (LobbyManager.CurrentRoom != null || response.lobbies == null)
             {
                 return;
             }
 
-            foreach (LobbyInfoDTO lobby in response.lobbies)
+            foreach (RoomInfoDTO lobby in response.lobbies)
             {
                 Button row = Instantiate(lobbyRowTemplate, lobbyListContent);
                 string lobbyId = lobby.lobbyId;
@@ -234,7 +234,7 @@ namespace UI
         }
 
         /// <summary>방 생성·참가 결과를 보여주고, 성공했으면 대기실 화면으로 바꿈.</summary>
-        private void ApplyEnterResult(LobbyEnterResponseDTO response)
+        private void ApplyEnterResult(RoomEnterResponseDTO response)
         {
             if (!ResponseMessageUtil.IsOk(response.responseMessage))
             {
@@ -246,7 +246,7 @@ namespace UI
             chatLogText.text = "";
             isReady = false;
             joinPasswordAlarmText.gameObject.SetActive(false);
-            statusText.text = "Entered lobby: " + LobbyManager.CurrentLobby.lobbyName;
+            statusText.text = "Entered lobby: " + LobbyManager.CurrentRoom.lobbyName;
             UpdateButtons();
         }
 
@@ -276,7 +276,7 @@ namespace UI
         {
             if (LobbyManager.IsHost)
             {
-                ResponseDTO response = await LobbyManager.CloseLobby();
+                ResponseDTO response = await LobbyManager.CloseRoom();
 
                 if (!ResponseMessageUtil.IsOk(response.responseMessage))
                 {
@@ -286,7 +286,7 @@ namespace UI
             }
             else
             {
-                await LobbyManager.LeaveLobby();
+                await LobbyManager.LeaveRoom();
             }
 
             await ReturnToLobbyList(null);
@@ -305,24 +305,24 @@ namespace UI
             UpdateButtons();
         }
 
-        private void HandleMemberJoined(LobbyMemberDTO member)
+        private void HandleMemberJoined(RoomMemberDTO member)
         {
             AddChatLine($"{member.nickName} joined");
         }
 
-        private void HandleMemberLeft(LobbyMemberDTO member)
+        private void HandleMemberLeft(RoomMemberDTO member)
         {
             AddChatLine($"{member.nickName} left");
         }
 
-        private void HandleChatReceived(LobbyChatPayload chat)
+        private void HandleChatReceived(RoomChatPayload chat)
         {
             AddChatLine($"{chat.nickName}: {chat.message}");
         }
 
-        private void HandleReadyChanged(LobbyReadyPayload ready)
+        private void HandleReadyChanged(RoomReadyPayload ready)
         {
-            LobbyMemberDTO member = LobbyManager.CurrentLobby?.members.Find(m => m.gameAccountHashcode == ready.gameAccountHashcode);
+            RoomMemberDTO member = LobbyManager.CurrentRoom?.members.Find(m => m.gameAccountHashcode == ready.gameAccountHashcode);
             AddChatLine($"{member?.nickName ?? ready.gameAccountHashcode} is {(ready.isReady ? "ready" : "not ready")}");
 
             if (ready.gameAccountHashcode == LobbyManager.LocalAccountHashcode)
@@ -343,7 +343,7 @@ namespace UI
             AddChatLine("Error: " + message);
         }
 
-        private async void HandleLobbyClosed(string reason)
+        private async void HandleRoomClosed(string reason)
         {
             await ReturnToLobbyList("Lobby destroyed");
         }
@@ -380,7 +380,7 @@ namespace UI
         private void UpdateButtons()
         {
             bool online = LoginManager.IsOnline;
-            bool inLobby = LobbyManager.CurrentLobby != null;
+            bool inLobby = LobbyManager.CurrentRoom != null;
 
             signUpButton.interactable = !online;
             logInButton.interactable = !online;
