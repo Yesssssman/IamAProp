@@ -1,0 +1,530 @@
+using System;
+using FishNet.Object;
+using FishNet.Object.Synchronizing;
+using FishNet.Transporting;
+using UnityEngine;
+
+/// <summary>플레이어의 4슬롯 무기 보유 현황, 장착 전환 및 서버 권위 줍기/버리기를 관리한다.</summary>
+[RequireComponent(typeof(PlayerController))]
+public class PlayerWeaponInventory : NetworkBehaviour
+{
+    // ***************************************************************
+    // Constants
+    // ***************************************************************
+
+    /// <summary>1~4번 키 입력에 대응하는 총 무기 슬롯 수.</summary>
+    public const int SlotCount = 4;
+
+    private const float ServerPickupRangeTolerance = 0.25f; // 네트워크 지연을 감안한 서버 줍기 거리 허용 오차 (미터)
+    private const float CrosshairCameraRangeBonus = 6.0f; // TPS 카메라 후방 거리를 보정하기 위한 크로스헤어 탐색 여유 거리 (미터)
+    private const float DropWallMargin = 0.2f; // 벽 앞에서 무기를 버릴 때 관통을 막는 여유 거리 (미터)
+    private const float DropSpinSpeed = 4.0f; // 드롭된 무기에 부여하는 초기 회전 각속도 (rad/s)
+
+    // ***************************************************************
+    // Fields
+    // ***************************************************************
+
+    /// <summary>무기 데이터 조회 및 드롭 프리팹 생성에 사용할 데이터베이스.</summary>
+    [Header("무기 데이터베이스")]
+    [SerializeField] private WeaponDatabaseSO weaponDatabase;
+
+    /// <summary>바닥의 월드 무기 아이템을 주울 수 있는 최대 표면 간 거리 (미터).</summary>
+    [Header("줍기 및 버리기 설정")]
+    [Min(0.05f)]
+    [SerializeField] private float pickupRange = 0.2f;
+
+    /// <summary>크로스헤어 조준 줍기 구체 캐스트 반지름 (미터).</summary>
+    [Min(0.05f)]
+    [SerializeField] private float crosshairPickupRadius = 0.25f;
+
+    /// <summary>무기를 버릴 때 플레이어 전방으로 띄울 스폰 거리 (미터).</summary>
+    [Min(0f)]
+    [SerializeField] private float dropForwardOffset = 0.7f;
+
+    /// <summary>무기를 버릴 때 기준 원점에서 위로 띄울 오프셋 (미터).</summary>
+    [Min(0f)]
+    [SerializeField] private float dropUpwardOffset = 0.15f;
+
+    /// <summary>무기를 버릴 때 전방으로 가할 투척 속력 (m/s).</summary>
+    [Min(0f)]
+    [SerializeField] private float dropThrowSpeed = 2.2f;
+
+    /// <summary>무기를 버릴 때 상향으로 가할 투척 속력 (m/s).</summary>
+    [Min(0f)]
+    [SerializeField] private float dropUpwardSpeed = 1.2f;
+
+    /// <summary>무기 드롭 시 벽 관통 여부를 검사할 지형 레이어 마스크.</summary>
+    [SerializeField] private LayerMask dropObstacleMask = (1 << 0) | (1 << 3); // Default, Ground
+
+    /// <summary>서버와 소유자 간 동기화되는 4슬롯 무기 및 개별 탄약 목록.</summary>
+    private readonly SyncList<WeaponSlotState> _slots = new(
+        new SyncTypeSettings(WritePermission.ServerOnly, ReadPermission.OwnerOnly, 0f, Channel.Reliable));
+
+    /// <summary>호스트와 모든 클라이언트에 동기화되는 현재 장착 무기 스냅샷.</summary>
+    private readonly SyncVar<EquippedWeaponState> _equippedState = new(
+        new EquippedWeaponState { Slot = EWeaponSlotType.Unarmed, WeaponId = string.Empty, ChangeSequence = 0 },
+        new SyncTypeSettings(0f, Channel.Reliable));
+
+    /// <summary>조준 원점 및 전방 방향을 제공하는 플레이어 컨트롤러.</summary>
+    private PlayerController _playerController;
+
+    /// <summary>생존 여부를 조회하는 체력 컴포넌트.</summary>
+    private PlayerHealth _playerHealth;
+
+    /// <summary>줍기 거리 계산에 사용하는 플레이어 본체 콜라이더.</summary>
+    private Collider _bodyCollider;
+
+    /// <summary>주변 월드 무기 탐색용 콜라이더 재사용 버퍼.</summary>
+    private readonly Collider[] _pickupOverlapBuffer = new Collider[24];
+
+    /// <summary>크로스헤어 줍기 구체 캐스트 결과 재사용 버퍼.</summary>
+    private readonly RaycastHit[] _pickupRayBuffer = new RaycastHit[16];
+
+    // ***************************************************************
+    // Events
+    // ***************************************************************
+
+    /// <summary>현재 장착 중인 무기 상태가 변경될 때 발생하는 이벤트.</summary>
+    public event Action<EquippedWeaponState> OnEquippedWeaponChanged;
+
+    /// <summary>특정 슬롯의 보유 무기 또는 탄약 상태가 변경될 때 발생하는 이벤트.</summary>
+    public event Action<EWeaponSlotType, WeaponSlotState> OnSlotUpdated;
+
+    // ***************************************************************
+    // Properties
+    // ***************************************************************
+
+    /// <summary>연결된 무기 데이터베이스.</summary>
+    public WeaponDatabaseSO WeaponDatabase => weaponDatabase;
+
+    /// <summary>현재 동기화된 장착 무기 스냅샷.</summary>
+    public EquippedWeaponState EquippedState => _equippedState.Value;
+
+    /// <summary>현재 활성화된 무기 슬롯.</summary>
+    public EWeaponSlotType ActiveSlot => _equippedState.Value.Slot;
+
+    /// <summary>현재 손에 장착된 무기의 고유 식별자.</summary>
+    public string EquippedWeaponId => _equippedState.Value.WeaponId;
+
+    /// <summary>현재 손에 장착된 무기의 <see cref="WeaponDataSO"/> 에셋.</summary>
+    public WeaponDataSO EquippedWeaponData => GetWeaponDataById(_equippedState.Value.WeaponId);
+
+    // ***************************************************************
+    // MonoBehaviour
+    // ***************************************************************
+
+    private void Awake()
+    {
+        _playerController = GetComponent<PlayerController>();
+        _playerHealth = GetComponent<PlayerHealth>();
+        _bodyCollider = GetComponentInChildren<Collider>();
+    }
+
+    // ***************************************************************
+    // NetworkBehaviour
+    // ***************************************************************
+
+    public override void OnStartServer()
+    {
+        _slots.Clear();
+        for (int i = 0; i < SlotCount; i++)
+        {
+            _slots.Add(WeaponSlotState.Empty);
+        }
+
+        // 스폰 시 2번 근접 슬롯에만 기본 Knife를 지급하고 장착 상태로 시작한다.
+        WeaponDataSO defaultMelee = weaponDatabase != null ? weaponDatabase.DefaultMeleeWeapon : null;
+        if (defaultMelee != null && !string.IsNullOrEmpty(defaultMelee.WeaponId))
+        {
+            int meleeIndex = (int)EWeaponSlotType.Melee;
+            _slots[meleeIndex] = new WeaponSlotState
+            {
+                WeaponId = defaultMelee.WeaponId,
+                CurrentAmmo = defaultMelee.UsesAmmo ? defaultMelee.MaxAmmo : 0,
+                ReserveAmmo = defaultMelee.UsesAmmo ? defaultMelee.MaxReserveAmmo : 0
+            };
+
+            _equippedState.Value = new EquippedWeaponState
+            {
+                Slot = EWeaponSlotType.Melee,
+                WeaponId = defaultMelee.WeaponId,
+                ChangeSequence = 1
+            };
+        }
+        else
+        {
+            _equippedState.Value = new EquippedWeaponState
+            {
+                Slot = EWeaponSlotType.Unarmed,
+                WeaponId = string.Empty,
+                ChangeSequence = 1
+            };
+        }
+    }
+
+    public override void OnStartNetwork()
+    {
+        _equippedState.OnChange += HandleEquippedStateChanged;
+        _slots.OnChange += HandleSlotsChanged;
+        OnEquippedWeaponChanged?.Invoke(_equippedState.Value);
+    }
+
+    public override void OnStopNetwork()
+    {
+        _equippedState.OnChange -= HandleEquippedStateChanged;
+        _slots.OnChange -= HandleSlotsChanged;
+    }
+
+    // ***************************************************************
+    // Public Query API
+    // ***************************************************************
+
+    /// <summary><paramref name="slot"/>에 소지 중인 무기가 있는지 여부를 반환한다 (맨손 슬롯은 항상 참).</summary>
+    public bool HasWeaponInSlot(EWeaponSlotType slot)
+    {
+        if (slot == EWeaponSlotType.Unarmed) return true;
+
+        int index = (int)slot;
+        return index >= 0 && index < _slots.Count && !_slots[index].IsEmpty;
+    }
+
+    /// <summary><paramref name="slot"/>의 현재 보유 무기 및 탄약 상태를 반환한다.</summary>
+    public WeaponSlotState GetSlotState(EWeaponSlotType slot)
+    {
+        int index = (int)slot;
+        if (index < 0 || index >= _slots.Count) return WeaponSlotState.Empty;
+        return _slots[index];
+    }
+
+    /// <summary><paramref name="slot"/>에 보유 중인 무기의 <see cref="WeaponDataSO"/>를 반환한다.</summary>
+    public WeaponDataSO GetWeaponDataInSlot(EWeaponSlotType slot)
+    {
+        if (slot == EWeaponSlotType.Unarmed) return null;
+
+        if (slot == _equippedState.Value.Slot && !string.IsNullOrEmpty(_equippedState.Value.WeaponId))
+        {
+            return GetWeaponDataById(_equippedState.Value.WeaponId);
+        }
+
+        WeaponSlotState state = GetSlotState(slot);
+        return state.IsEmpty ? null : GetWeaponDataById(state.WeaponId);
+    }
+
+    /// <summary><paramref name="weaponId"/>에 해당하는 <see cref="WeaponDataSO"/>를 반환한다.</summary>
+    public WeaponDataSO GetWeaponDataById(string weaponId)
+    {
+        if (weaponDatabase == null || string.IsNullOrEmpty(weaponId)) return null;
+        return weaponDatabase.GetById(weaponId);
+    }
+
+    // ***************************************************************
+    // Public Control API
+    // ***************************************************************
+
+    /// <summary>소유자가 지정한 <paramref name="slot"/>으로 무기 전환을 요청한다 (빈 슬롯이면 무시).</summary>
+    public bool TrySelectSlot(EWeaponSlotType slot)
+    {
+        if (!IsOwner || !IsSpawned) return false;
+        if (_playerHealth != null && _playerHealth.IsDead) return false;
+        if (slot != EWeaponSlotType.Unarmed && !HasWeaponInSlot(slot)) return false;
+        if (_equippedState.Value.Slot == slot) return false;
+
+        RequestSelectSlotServerRpc(slot);
+        return true;
+    }
+
+    /// <summary>소유자가 크로스헤어 또는 주변 범위 내 가장 가까운 월드 무기의 획득을 서버에 요청한다.</summary>
+    public void TryPickupNearbyWeapon()
+    {
+        if (!IsOwner || !IsSpawned) return;
+        if (_playerHealth != null && _playerHealth.IsDead) return;
+
+        WorldWeaponPickup bestPickup = null;
+
+        Camera mainCamera = Camera.main;
+        if (mainCamera != null)
+        {
+            Ray ray = mainCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+            int rayHits = Physics.SphereCastNonAlloc(
+                ray,
+                crosshairPickupRadius,
+                _pickupRayBuffer,
+                pickupRange + CrosshairCameraRangeBonus,
+                ~0,
+                QueryTriggerInteraction.Collide);
+
+            float closestRayDist = float.MaxValue;
+            for (int i = 0; i < rayHits; i++)
+            {
+                RaycastHit hit = _pickupRayBuffer[i];
+                if (hit.collider == null) continue;
+
+                WorldWeaponPickup candidate = hit.collider.GetComponentInParent<WorldWeaponPickup>();
+                if (candidate == null || !candidate.IsSpawned || string.IsNullOrEmpty(candidate.WeaponId)) continue;
+                if (GetPickupDistance(candidate) > pickupRange) continue;
+
+                if (hit.distance < closestRayDist)
+                {
+                    closestRayDist = hit.distance;
+                    bestPickup = candidate;
+                }
+            }
+        }
+
+        if (bestPickup == null)
+        {
+            Vector3 searchCenter = _bodyCollider != null ? _bodyCollider.bounds.center : transform.position;
+            float searchRadius = (_bodyCollider != null ? _bodyCollider.bounds.extents.magnitude : 0.5f) + pickupRange;
+            int overlapCount = Physics.OverlapSphereNonAlloc(
+                searchCenter,
+                searchRadius,
+                _pickupOverlapBuffer,
+                ~0,
+                QueryTriggerInteraction.Collide);
+
+            float closestDist = float.MaxValue;
+            for (int i = 0; i < overlapCount; i++)
+            {
+                Collider col = _pickupOverlapBuffer[i];
+                if (col == null) continue;
+
+                WorldWeaponPickup candidate = col.GetComponentInParent<WorldWeaponPickup>();
+                if (candidate == null || !candidate.IsSpawned || string.IsNullOrEmpty(candidate.WeaponId)) continue;
+
+                float dist = GetPickupDistance(candidate);
+                if (dist > pickupRange) continue;
+
+                if (dist < closestDist)
+                {
+                    closestDist = dist;
+                    bestPickup = candidate;
+                }
+            }
+        }
+
+        if (bestPickup != null && bestPickup.NetworkObject != null)
+        {
+            RequestPickupServerRpc(bestPickup.NetworkObject);
+        }
+    }
+
+    /// <summary>소유자가 현재 장착 중인 무기를 바닥에 버리도록 서버에 요청한다 (맨손이면 무시).</summary>
+    public void TryDropCurrentWeapon()
+    {
+        if (!IsOwner || !IsSpawned) return;
+        if (_playerHealth != null && _playerHealth.IsDead) return;
+        if (_equippedState.Value.Slot == EWeaponSlotType.Unarmed) return;
+        if (!HasWeaponInSlot(_equippedState.Value.Slot)) return;
+
+        RequestDropCurrentWeaponServerRpc();
+    }
+
+    /// <summary>서버에서 지정 슬롯 무기의 탄창 탄약을 1발 차감하고 슬롯 상태를 갱신한다.</summary>
+    [Server]
+    public bool TryConsumeAmmo(EWeaponSlotType slot, string expectedWeaponId, out WeaponSlotState updatedState)
+    {
+        updatedState = WeaponSlotState.Empty;
+        int index = (int)slot;
+        if (index < 0 || index >= _slots.Count) return false;
+
+        WeaponSlotState current = _slots[index];
+        if (current.IsEmpty || !string.Equals(current.WeaponId, expectedWeaponId, StringComparison.Ordinal)) return false;
+        if (current.CurrentAmmo <= 0)
+        {
+            updatedState = current;
+            return false;
+        }
+
+        current.CurrentAmmo--;
+        _slots[index] = current;
+        updatedState = current;
+        return true;
+    }
+
+    /// <summary>서버에서 지정 슬롯 무기의 재장전을 완료하고 탄창 및 예비 탄약을 갱신한다.</summary>
+    [Server]
+    public bool TryApplyReload(EWeaponSlotType slot, string expectedWeaponId, int maxAmmo, out WeaponSlotState updatedState)
+    {
+        updatedState = WeaponSlotState.Empty;
+        int index = (int)slot;
+        if (index < 0 || index >= _slots.Count) return false;
+
+        WeaponSlotState current = _slots[index];
+        if (current.IsEmpty || !string.Equals(current.WeaponId, expectedWeaponId, StringComparison.Ordinal)) return false;
+
+        int needed = maxAmmo - current.CurrentAmmo;
+        int loaded = Mathf.Min(needed, current.ReserveAmmo);
+        if (loaded > 0)
+        {
+            current.CurrentAmmo += loaded;
+            current.ReserveAmmo -= loaded;
+            _slots[index] = current;
+        }
+
+        updatedState = current;
+        return true;
+    }
+
+    // ***************************************************************
+    // Network RPCs
+    // ***************************************************************
+
+    /// <summary>서버에서 슬롯 보유 여부를 검증한 뒤 장착 슬롯을 변경한다.</summary>
+    [ServerRpc]
+    private void RequestSelectSlotServerRpc(EWeaponSlotType slot, Channel channel = Channel.Reliable)
+    {
+        if (_playerHealth != null && _playerHealth.IsDead) return;
+        if (!Enum.IsDefined(typeof(EWeaponSlotType), slot)) return;
+        if (slot != EWeaponSlotType.Unarmed && !HasWeaponInSlot(slot)) return;
+        if (_equippedState.Value.Slot == slot) return;
+
+        string nextWeaponId = slot == EWeaponSlotType.Unarmed ? string.Empty : _slots[(int)slot].WeaponId;
+        _equippedState.Value = new EquippedWeaponState
+        {
+            Slot = slot,
+            WeaponId = nextWeaponId,
+            ChangeSequence = (ushort)(_equippedState.Value.ChangeSequence + 1)
+        };
+    }
+
+    /// <summary>서버에서 거리와 아이템 유효성을 검증한 뒤 월드 무기를 획득하고 기존 슬롯 무기는 드롭한다.</summary>
+    [ServerRpc]
+    private void RequestPickupServerRpc(NetworkObject pickupObject, Channel channel = Channel.Reliable)
+    {
+        if (_playerHealth != null && _playerHealth.IsDead) return;
+        if (pickupObject == null || !pickupObject.IsSpawned) return;
+
+        WorldWeaponPickup pickup = pickupObject.GetComponent<WorldWeaponPickup>();
+        if (pickup == null || pickup.IsConsumed) return;
+
+        if (GetPickupDistance(pickup) > pickupRange + ServerPickupRangeTolerance)
+        {
+            return;
+        }
+
+        WeaponDataSO newData = GetWeaponDataById(pickup.WeaponId);
+        if (newData == null || newData.SlotType == EWeaponSlotType.Unarmed) return;
+
+        int slotIndex = (int)newData.SlotType;
+        if (slotIndex < 0 || slotIndex >= _slots.Count) return;
+
+        if (!pickup.TryConsume(out WeaponSlotState pickedState)) return;
+
+        WeaponSlotState previousSlotState = _slots[slotIndex];
+        _slots[slotIndex] = pickedState;
+        _equippedState.Value = new EquippedWeaponState
+        {
+            Slot = newData.SlotType,
+            WeaponId = pickedState.WeaponId,
+            ChangeSequence = (ushort)(_equippedState.Value.ChangeSequence + 1)
+        };
+
+        if (!previousSlotState.IsEmpty)
+        {
+            SpawnDroppedWeapon(previousSlotState);
+        }
+    }
+
+    /// <summary>서버에서 현재 장착 무기를 바닥에 드롭하고 1번 맨손 모드로 전환한다.</summary>
+    [ServerRpc]
+    private void RequestDropCurrentWeaponServerRpc(Channel channel = Channel.Reliable)
+    {
+        if (_playerHealth != null && _playerHealth.IsDead) return;
+
+        EWeaponSlotType currentSlot = _equippedState.Value.Slot;
+        if (currentSlot == EWeaponSlotType.Unarmed) return;
+
+        int slotIndex = (int)currentSlot;
+        if (slotIndex < 0 || slotIndex >= _slots.Count || _slots[slotIndex].IsEmpty) return;
+
+        WeaponSlotState droppedState = _slots[slotIndex];
+        _slots[slotIndex] = WeaponSlotState.Empty;
+        _equippedState.Value = new EquippedWeaponState
+        {
+            Slot = EWeaponSlotType.Unarmed,
+            WeaponId = string.Empty,
+            ChangeSequence = (ushort)(_equippedState.Value.ChangeSequence + 1)
+        };
+
+        SpawnDroppedWeapon(droppedState);
+    }
+
+    // ***************************************************************
+    // Event Handlers
+    // ***************************************************************
+
+    /// <summary><see cref="_equippedState"/> 변경 시 구독 컴포넌트에 최신 장착 상태를 알린다.</summary>
+    private void HandleEquippedStateChanged(EquippedWeaponState previousValue, EquippedWeaponState nextValue, bool asServer)
+    {
+        if (!asServer && IsServerInitialized) return;
+        OnEquippedWeaponChanged?.Invoke(nextValue);
+    }
+
+    /// <summary><see cref="_slots"/> 변경 시 구독 컴포넌트에 갱신된 슬롯 상태를 알린다.</summary>
+    private void HandleSlotsChanged(
+        SyncListOperation op,
+        int index,
+        WeaponSlotState oldItem,
+        WeaponSlotState newItem,
+        bool asServer)
+    {
+        if (!asServer && IsServerInitialized) return;
+        if (op != SyncListOperation.Set && op != SyncListOperation.Add) return;
+        if (index < 0 || index >= SlotCount) return;
+
+        OnSlotUpdated?.Invoke((EWeaponSlotType)index, newItem);
+    }
+
+    // ***************************************************************
+    // Helpers
+    // ***************************************************************
+
+    /// <summary>플레이어 콜라이더와 <paramref name="pickup"/> 콜라이더 사이의 최단 표면 거리(미터)를 계산한다.</summary>
+    private float GetPickupDistance(WorldWeaponPickup pickup)
+    {
+        Collider pickupCollider = pickup.PickupCollider;
+        Vector3 pickupCenter = pickupCollider != null ? pickupCollider.bounds.center : pickup.transform.position;
+        Vector3 playerPoint = _bodyCollider != null ? _bodyCollider.ClosestPoint(pickupCenter) : transform.position;
+        Vector3 pickupPoint = pickupCollider != null ? pickupCollider.ClosestPoint(playerPoint) : pickupCenter;
+        if (_bodyCollider != null)
+        {
+            playerPoint = _bodyCollider.ClosestPoint(pickupPoint);
+        }
+
+        return Vector3.Distance(playerPoint, pickupPoint);
+    }
+
+    /// <summary>서버에서 플레이어 전방 안전 위치에 <paramref name="slotState"/>를 담은 월드 픽업을 스폰한다.</summary>
+    [Server]
+    private void SpawnDroppedWeapon(WeaponSlotState slotState)
+    {
+        if (slotState.IsEmpty || weaponDatabase == null || weaponDatabase.WorldPickupPrefab == null) return;
+
+        Vector3 origin = _playerController != null
+            ? _playerController.GetFireOrigin()
+            : transform.position + Vector3.up * 0.45f;
+        Vector3 forward = transform.forward;
+        forward.y = 0f;
+        forward = forward.sqrMagnitude > 0.0001f ? forward.normalized : Vector3.forward;
+
+        float spawnDistance = dropForwardOffset;
+        if (Physics.Raycast(origin, forward, out RaycastHit wallHit, dropForwardOffset + DropWallMargin, dropObstacleMask, QueryTriggerInteraction.Ignore))
+        {
+            spawnDistance = Mathf.Max(0.1f, wallHit.distance - DropWallMargin);
+        }
+
+        Vector3 spawnPosition = origin + forward * spawnDistance + Vector3.up * dropUpwardOffset;
+        Quaternion spawnRotation = Quaternion.LookRotation(forward, Vector3.up);
+
+        WorldWeaponPickup pickup = Instantiate(weaponDatabase.WorldPickupPrefab, spawnPosition, spawnRotation);
+        ServerManager.Spawn(pickup.NetworkObject);
+
+        Vector3 throwVelocity = forward * dropThrowSpeed + Vector3.up * dropUpwardSpeed;
+        Vector3 angularVelocity = new Vector3(
+            UnityEngine.Random.Range(-DropSpinSpeed, DropSpinSpeed),
+            UnityEngine.Random.Range(-DropSpinSpeed, DropSpinSpeed),
+            UnityEngine.Random.Range(-DropSpinSpeed, DropSpinSpeed));
+
+        pickup.Initialize(slotState.WeaponId, slotState.CurrentAmmo, slotState.ReserveAmmo, throwVelocity, angularVelocity);
+    }
+}

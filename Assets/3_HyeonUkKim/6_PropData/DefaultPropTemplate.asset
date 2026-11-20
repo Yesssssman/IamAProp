@@ -68,3 +68,24 @@ MonoBehaviour:
     reloadClip: {fileID: -8794803593805319676, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
     usesAimLocomotion: 1
     weaponData: {fileID: 11400000, guid: 72839a025a9b5463f965a652766284f1, type: 2}
+  slotBaseHandClips:
+  - drawClip: {fileID: 0}
+    idleClip: {fileID: 0}
+    attackClip: {fileID: 0}
+    secondaryAttackClip: {fileID: 0}
+    reloadClip: {fileID: 0}
+  - drawClip: {fileID: -8729689723522185007, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+    idleClip: {fileID: -7665465369729928803, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+    attackClip: {fileID: -825554537858325762, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+    secondaryAttackClip: {fileID: -3126985727076928379, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+    reloadClip: {fileID: 0}
+  - drawClip: {fileID: 5720448858562440716, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+    idleClip: {fileID: -4528279105999121834, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+    attackClip: {fileID: -4445914306707852730, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+    secondaryAttackClip: {fileID: 0}
+    reloadClip: {fileID: -7851223266158103639, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  - drawClip: {fileID: -1102481637146406913, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+    idleClip: {fileID: -6878191168479885631, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+    attackClip: {fileID: -1455791241674618426, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+    secondaryAttackClip: {fileID: 0}
+    reloadClip: {fileID: -8794803593805319676, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}

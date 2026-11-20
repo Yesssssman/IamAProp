@@ -132,6 +132,10 @@ public class PropDataSO : ScriptableObject
     public WeaponSocketConfig[] WeaponSockets =>
         propTemplate != null ? propTemplate.WeaponSockets : Array.Empty<WeaponSocketConfig>();
 
+    /// <summary>공유 템플릿의 슬롯별 손 무기 오버라이드 기준 클립 목록.</summary>
+    public WeaponSlotBaseHandClips[] SlotBaseHandClips =>
+        propTemplate != null ? propTemplate.SlotBaseHandClips : Array.Empty<WeaponSlotBaseHandClips>();
+
     // ***************************************************************
     // Public Control API
     // ***************************************************************
@@ -144,8 +148,8 @@ public class PropDataSO : ScriptableObject
             : Array.Empty<RuntimeAnimatorController>();
     }
 
-    /// <summary>이 프롭의 비무장 손 클립이 매핑된 <see cref="RuntimeAnimatorController"/>를 생성한다.</summary>
-    public RuntimeAnimatorController CreateHandController()
+    /// <summary>이 프롭의 비무장 손 클립이 매핑된 <see cref="AnimatorOverrideController"/>를 생성한다.</summary>
+    public AnimatorOverrideController CreateHandController()
     {
         return propTemplate != null
             ? propTemplate.CreateHandController(unarmedHandClips)

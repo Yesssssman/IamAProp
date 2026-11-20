@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de4854d5dc56141ed89c59778feab293, type: 3}
+  m_Name: WeaponDatabase
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponDatabaseSO
+  weapons:
+  - {fileID: 11400000, guid: 0e5ab66a214064daf80a7ef147f5cf41, type: 2}
+  - {fileID: 11400000, guid: 52c21af8a1c304783bfcf694026f9b8c, type: 2}
+  - {fileID: 11400000, guid: 72839a025a9b5463f965a652766284f1, type: 2}
+  - {fileID: 11400000, guid: 7aed69aaf27bb48fba53cbf746201ffc, type: 2}
+  defaultMeleeWeapon: {fileID: 11400000, guid: 0e5ab66a214064daf80a7ef147f5cf41, type: 2}
+  worldPickupPrefab: {fileID: 8298750971163431968, guid: 339113f73d6c3465bb10696548536737, type: 3}

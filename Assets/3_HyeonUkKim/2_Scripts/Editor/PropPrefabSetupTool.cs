@@ -15,6 +15,7 @@ public static class PropPrefabSetupTool
     private const string DefaultBodyControllerPath = "Assets/3_HyeonUkKim/4_Animations/PlayerAnim.controller";
     private const string DefaultHandControllerPath = "Assets/3_HyeonUkKim/4_Animations/HandAnim.controller";
     private const string DefaultPlayerStatsPath = "Assets/3_HyeonUkKim/8_CombatData/DefaultPlayerStats.asset";
+    private const string DefaultWeaponDatabasePath = "Assets/3_HyeonUkKim/8_CombatData/WeaponDatabase.asset";
 
     // ***************************************************************
     // Menu Actions
@@ -139,11 +140,24 @@ public static class PropPrefabSetupTool
         EnsureChildTransform(root.transform, "TpsViewPos", new Vector3(0f, Mathf.Max(0.35f, propHeight * 0.85f), 0f));
 
         PlayerController controller = GetOrAddComponent<PlayerController>(root);
+        PlayerWeaponInventory weaponInventory = GetOrAddComponent<PlayerWeaponInventory>(root);
         PlayerAnim propAnim = GetOrAddComponent<PlayerAnim>(root);
         PlayerHealth playerHealth = GetOrAddComponent<PlayerHealth>(root);
         PlayerWeaponController weaponController = GetOrAddComponent<PlayerWeaponController>(root);
         NetworkObject netObj = GetOrAddComponent<NetworkObject>(root);
         NetworkAnimator netAnim = GetOrAddComponent<NetworkAnimator>(root);
+
+        WeaponDatabaseSO defaultWeaponDb = AssetDatabase.LoadAssetAtPath<WeaponDatabaseSO>(DefaultWeaponDatabasePath);
+        if (defaultWeaponDb != null)
+        {
+            SerializedObject invSerialized = new SerializedObject(weaponInventory);
+            SerializedProperty dbProp = invSerialized.FindProperty("weaponDatabase");
+            if (dbProp != null && dbProp.objectReferenceValue == null)
+            {
+                dbProp.objectReferenceValue = defaultWeaponDb;
+                invSerialized.ApplyModifiedPropertiesWithoutUndo();
+            }
+        }
 
         int playerLayer = LayerMask.NameToLayer("Player");
         if (playerLayer >= 0)
