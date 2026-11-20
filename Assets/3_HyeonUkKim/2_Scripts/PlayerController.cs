@@ -44,6 +44,9 @@ public class PlayerController : PropControllerBase
     /// <summary>발사, 탄약 및 재장전을 처리하는 무기 전투 컴포넌트.</summary>
     private PlayerWeaponController _weaponController;
 
+    /// <summary>4슬롯 무기 보유 및 줍기/버리기를 관리하는 인벤토리 컴포넌트.</summary>
+    private PlayerWeaponInventory _weaponInventory;
+
     /// <summary>래그돌 회전과 무관하게 수직 자세를 유지하는 카메라 추적 앵커.</summary>
     private Transform _cameraAnchor;
 
@@ -90,6 +93,8 @@ public class PlayerController : PropControllerBase
         _inputActions.Player.Jump.started += OnJump;
         _inputActions.Player.ChgWeapon.started += ChangeWeaponMode;
         _inputActions.Player.Reload.started += OnReloadStarted;
+        _inputActions.Player.Pickup.started += OnPickupStarted;
+        _inputActions.Player.DropWeapon.started += OnDropWeaponStarted;
 
         if (tpsViewPos == null)
         {
@@ -152,6 +157,8 @@ public class PlayerController : PropControllerBase
         _inputActions.Player.Jump.started -= OnJump;
         _inputActions.Player.ChgWeapon.started -= ChangeWeaponMode;
         _inputActions.Player.Reload.started -= OnReloadStarted;
+        _inputActions.Player.Pickup.started -= OnPickupStarted;
+        _inputActions.Player.DropWeapon.started -= OnDropWeaponStarted;
         _inputActions.Player.Disable();
         _inputActions.Dispose();
         _inputActions = null;
@@ -165,6 +172,7 @@ public class PlayerController : PropControllerBase
     protected override void OnPropAwake()
     {
         _weaponController = GetComponent<PlayerWeaponController>();
+        _weaponInventory = GetComponent<PlayerWeaponInventory>();
     }
 
     /// <inheritdoc/>
@@ -319,13 +327,36 @@ public class PlayerController : PropControllerBase
         }
     }
 
-    /// <summary>무기 전환 입력에 따라 무기 모드를 변경한다.</summary>
+    /// <summary>무기 전환 입력에 따라 보유 중인 슬롯으로 무기 모드를 변경한다.</summary>
     private void ChangeWeaponMode(InputAction.CallbackContext context)
     {
         if (!IsOwner) return;
 
-        int weaponIndex = Mathf.Clamp(Mathf.RoundToInt(context.ReadValue<float>()) - 1, 0, 3);
-        EWeaponType weaponType = (EWeaponType)weaponIndex;
+        int slotIndex = Mathf.Clamp(Mathf.RoundToInt(context.ReadValue<float>()) - 1, 0, PlayerWeaponInventory.SlotCount - 1);
+        EWeaponSlotType targetSlot = (EWeaponSlotType)slotIndex;
+
+        if (_weaponInventory != null)
+        {
+            if (targetSlot != EWeaponSlotType.Unarmed && !_weaponInventory.HasWeaponInSlot(targetSlot))
+            {
+                return;
+            }
+            if (_weaponInventory.ActiveSlot == targetSlot)
+            {
+                return;
+            }
+
+            if (targetSlot == EWeaponSlotType.Unarmed)
+            {
+                _EplayerState = _isGrounded ? EPlayerState.Idle : EPlayerState.Air;
+            }
+
+            _weaponController?.SetFireInput(false);
+            _weaponInventory.TrySelectSlot(targetSlot);
+            return;
+        }
+
+        EWeaponType weaponType = (EWeaponType)slotIndex;
         if (weaponType == EWeaponType.Hide)
         {
             _EplayerState = _isGrounded ? EPlayerState.Idle : EPlayerState.Air;
@@ -348,6 +379,27 @@ public class PlayerController : PropControllerBase
         {
             _propAnim?.RequestReload();
         }
+    }
+
+    /// <summary><c>G</c> 입력 시 <c>Alt</c> 조합이 아닐 때만 주변 무기 획득을 요청한다.</summary>
+    private void OnPickupStarted(InputAction.CallbackContext context)
+    {
+        if (!IsOwner || _weaponInventory == null) return;
+        if (Keyboard.current != null && Keyboard.current.altKey.isPressed) return;
+
+        _weaponController?.SetFireInput(false);
+        _weaponInventory.TryPickupNearbyWeapon();
+    }
+
+    /// <summary><c>Alt + G</c> 입력 시 현재 장착 무기를 바닥에 버리도록 요청한다.</summary>
+    private void OnDropWeaponStarted(InputAction.CallbackContext context)
+    {
+        if (!IsOwner || _weaponInventory == null) return;
+        if (_weaponInventory.ActiveSlot == EWeaponSlotType.Unarmed) return;
+
+        _weaponController?.SetFireInput(false);
+        _EplayerState = _isGrounded ? EPlayerState.Idle : EPlayerState.Air;
+        _weaponInventory.TryDropCurrentWeapon();
     }
 
     // ***************************************************************

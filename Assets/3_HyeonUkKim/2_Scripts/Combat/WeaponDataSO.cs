@@ -8,7 +8,7 @@ public enum EWeaponCategory
     Melee
 }
 
-/// <summary>개별 무기의 전투 수치, 사거리, 탄약 및 재장전 데이터를 정의한다.</summary>
+/// <summary>개별 무기의 식별자, 장착 비주얼, 애니메이션 오버라이드, 전투 수치 및 사운드 데이터를 정의한다.</summary>
 [CreateAssetMenu(fileName = "WeaponData", menuName = "IamAProp/Combat/Weapon Data")]
 public class WeaponDataSO : ScriptableObject
 {
@@ -16,15 +16,95 @@ public class WeaponDataSO : ScriptableObject
     // Fields
     // ***************************************************************
 
-    /// <summary>UI 및 로그에 표시할 무기 이름.</summary>
+    /// <summary>네트워크 동기화 및 데이터베이스 조회에 사용할 고유 무기 식별자.</summary>
     [Header("무기 식별")]
+    [SerializeField] private string weaponId = string.Empty;
+
+    /// <summary>UI 및 로그에 표시할 무기 이름.</summary>
     [SerializeField] private string weaponName = "Weapon";
 
     /// <summary>이 데이터가 대응하는 장착 무기 모드.</summary>
     [SerializeField] private EWeaponType weaponType = EWeaponType.Ak;
 
+    /// <summary>이 무기가 장착되는 키 입력 슬롯 카테고리.</summary>
+    [SerializeField] private EWeaponSlotType slotType = EWeaponSlotType.Primary;
+
     /// <summary>무기 분류 (주무기, 보조무기, 근접무기).</summary>
     [SerializeField] private EWeaponCategory category = EWeaponCategory.Primary;
+
+    /// <summary>오른손 소켓에 장착할 무기 프리팹.</summary>
+    [Header("장착 및 월드 비주얼")]
+    [SerializeField] private GameObject equippedPrefab;
+
+    /// <summary>바닥에 떨어진 월드 픽업에 표시할 비주얼 프리팹 (비워두면 <see cref="equippedPrefab"/> 사용).</summary>
+    [SerializeField] private GameObject worldVisualPrefab;
+
+    /// <summary>장착된 무기 오브젝트의 <see cref="Animator"/>에 할당할 컨트롤러.</summary>
+    [SerializeField] private RuntimeAnimatorController weaponAnimController;
+
+    /// <summary>오른손 본 기준 무기 로컬 위치.</summary>
+    [SerializeField] private Vector3 gripPosition;
+
+    /// <summary>오른손 본 기준 무기 로컬 오일러 회전각 (도 단위).</summary>
+    [SerializeField] private Vector3 gripRotation;
+
+    /// <summary>오른손 본 기준 무기 로컬 스케일.</summary>
+    [SerializeField] private Vector3 gripScale = Vector3.one;
+
+    /// <summary>바닥 월드 픽업에 표시할 모델의 로컬 스케일.</summary>
+    [SerializeField] private Vector3 worldPickupScale = Vector3.one;
+
+    /// <summary>장착 상태에서 이동 시 조준 달리기 클립(<c>AimRun</c>)을 사용하는지 여부.</summary>
+    [SerializeField] private bool usesAimLocomotion = true;
+
+    /// <summary>손 애니메이터의 무기 드로우 상태에 오버라이드할 클립.</summary>
+    [Header("손 애니메이션 오버라이드")]
+    [SerializeField] private AnimationClip handDrawClip;
+
+    /// <summary>손 애니메이터의 대기/조준 상태에 오버라이드할 클립.</summary>
+    [SerializeField] private AnimationClip handIdleClip;
+
+    /// <summary>손 애니메이터의 기본 공격/사격 상태에 오버라이드할 클립.</summary>
+    [SerializeField] private AnimationClip handAttackClip;
+
+    /// <summary>손 애니메이터의 2타 근접 공격 상태에 오버라이드할 클립.</summary>
+    [SerializeField] private AnimationClip handSecondaryAttackClip;
+
+    /// <summary>손 애니메이터의 재장전 상태 및 왼손 탄창 샘플링에 사용할 클립.</summary>
+    [SerializeField] private AnimationClip handReloadClip;
+
+    /// <summary>손 발사 클립의 총 프레임 수.</summary>
+    [Header("총기 프레임 동기화")]
+    [Min(0f)]
+    [SerializeField] private float handShotFrames = 17f;
+
+    /// <summary>총기 발사 클립의 총 프레임 수.</summary>
+    [Min(0f)]
+    [SerializeField] private float weaponShotFrames = 9f;
+
+    /// <summary>손 재장전 클립의 총 프레임 수.</summary>
+    [Min(0f)]
+    [SerializeField] private float handReloadTotalFrames;
+
+    /// <summary>손 재장전 중 총기 노리쇠/슬라이드 모션이 시작되는 프레임.</summary>
+    [Min(0f)]
+    [SerializeField] private float weaponReloadStartFrame;
+
+    /// <summary>총기 재장전 클립의 총 프레임 수.</summary>
+    [Min(0f)]
+    [SerializeField] private float weaponReloadTotalFrames;
+
+    /// <summary>손 드로우 클립의 총 프레임 수.</summary>
+    [Min(0f)]
+    [SerializeField] private float handDrawTotalFrames;
+
+    /// <summary>손 드로우 중 총기 노리쇠/슬라이드 모션이 시작되는 프레임.</summary>
+    [Min(0f)]
+    [SerializeField] private float weaponDrawStartFrame;
+
+    /// <summary>총기 드로우 연동 클립의 총 프레임 수.</summary>
+    [Min(0f)]
+    [SerializeField] private float weaponDrawTotalFrames;
 
     /// <summary>단일 적중 시 적용할 기본 공격력.</summary>
     [Header("전투 성능")]
@@ -81,14 +161,83 @@ public class WeaponDataSO : ScriptableObject
     // Properties
     // ***************************************************************
 
+    /// <summary>고유 무기 식별자.</summary>
+    public string WeaponId => weaponId;
+
     /// <summary>무기 이름.</summary>
     public string WeaponName => weaponName;
 
     /// <summary>대응하는 장착 무기 모드.</summary>
     public EWeaponType WeaponType => weaponType;
 
+    /// <summary>이 무기가 장착되는 키 입력 슬롯 카테고리.</summary>
+    public EWeaponSlotType SlotType => slotType;
+
     /// <summary>무기 분류.</summary>
     public EWeaponCategory Category => category;
+
+    /// <summary>오른손 소켓 장착용 프리팹.</summary>
+    public GameObject EquippedPrefab => equippedPrefab;
+
+    /// <summary>월드 픽업 비주얼용 프리팹.</summary>
+    public GameObject WorldVisualPrefab => worldVisualPrefab != null ? worldVisualPrefab : equippedPrefab;
+
+    /// <summary>무기 오브젝트 <see cref="Animator"/> 컨트롤러.</summary>
+    public RuntimeAnimatorController WeaponAnimController => weaponAnimController;
+
+    /// <summary>오른손 본 기준 무기 로컬 위치.</summary>
+    public Vector3 GripPosition => gripPosition;
+
+    /// <summary>오른손 본 기준 무기 로컬 오일러 회전각 (도 단위).</summary>
+    public Vector3 GripRotation => gripRotation;
+
+    /// <summary>오른손 본 기준 무기 로컬 스케일.</summary>
+    public Vector3 GripScale => gripScale;
+
+    /// <summary>바닥 월드 픽업 모델 스케일.</summary>
+    public Vector3 WorldPickupScale => worldPickupScale;
+
+    /// <summary>장착 이동 시 조준 달리기 클립 사용 여부.</summary>
+    public bool UsesAimLocomotion => usesAimLocomotion;
+
+    /// <summary>손 드로우 오버라이드 클립.</summary>
+    public AnimationClip HandDrawClip => handDrawClip;
+
+    /// <summary>손 대기/조준 오버라이드 클립.</summary>
+    public AnimationClip HandIdleClip => handIdleClip;
+
+    /// <summary>손 기본 공격/사격 오버라이드 클립.</summary>
+    public AnimationClip HandAttackClip => handAttackClip;
+
+    /// <summary>손 2타 근접 공격 오버라이드 클립.</summary>
+    public AnimationClip HandSecondaryAttackClip => handSecondaryAttackClip;
+
+    /// <summary>손 재장전 오버라이드 클립.</summary>
+    public AnimationClip HandReloadClip => handReloadClip;
+
+    /// <summary>손 발사 클립 총 프레임 수.</summary>
+    public float HandShotFrames => handShotFrames;
+
+    /// <summary>총기 발사 클립 총 프레임 수.</summary>
+    public float WeaponShotFrames => weaponShotFrames;
+
+    /// <summary>손 재장전 클립 총 프레임 수.</summary>
+    public float HandReloadTotalFrames => handReloadTotalFrames;
+
+    /// <summary>손 재장전 중 총기 모션 시작 프레임.</summary>
+    public float WeaponReloadStartFrame => weaponReloadStartFrame;
+
+    /// <summary>총기 재장전 클립 총 프레임 수.</summary>
+    public float WeaponReloadTotalFrames => weaponReloadTotalFrames;
+
+    /// <summary>손 드로우 클립 총 프레임 수.</summary>
+    public float HandDrawTotalFrames => handDrawTotalFrames;
+
+    /// <summary>손 드로우 중 총기 모션 시작 프레임.</summary>
+    public float WeaponDrawStartFrame => weaponDrawStartFrame;
+
+    /// <summary>총기 드로우 연동 클립 총 프레임 수.</summary>
+    public float WeaponDrawTotalFrames => weaponDrawTotalFrames;
 
     /// <summary>단일 적중 데미지.</summary>
     public float Damage => damage;

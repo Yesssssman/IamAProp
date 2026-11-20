@@ -34,7 +34,7 @@ public abstract class PropAnimBase : NetworkBehaviour, IPropAnimController
     protected RuntimeAnimatorController[] _bodyWeaponControllers;
 
     /// <summary><see cref="propData"/>로 생성된 런타임 손 오버라이드 컨트롤러.</summary>
-    protected RuntimeAnimatorController _handOverrideController;
+    protected AnimatorOverrideController _handOverrideController;
 
     /// <summary>프레임 단위로 감쇠 보간된 현재 <c>MoveX</c> 파라미터 값.</summary>
     protected float _currentMoveX;

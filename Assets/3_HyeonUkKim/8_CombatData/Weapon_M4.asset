@@ -1,0 +1,56 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f442477cb8ae1434884e5bb207e1a747, type: 3}
+  m_Name: Weapon_M4
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponDataSO
+  weaponId: m4
+  weaponName: M4
+  weaponType: 3
+  slotType: 3
+  category: 0
+  equippedPrefab: {fileID: 5306954234914666315, guid: 938d76041920d4688ab5ce01f176d005, type: 3}
+  worldVisualPrefab: {fileID: 0}
+  weaponAnimController: {fileID: 9100000, guid: 7e2d38bb498ea440abde8814d6bc6008, type: 2}
+  gripPosition: {x: -0.0255, y: -0.002, z: -0.0091}
+  gripRotation: {x: 274.73553, y: 179.99992, z: 222.94275}
+  gripScale: {x: 1, y: 1, z: 1}
+  worldPickupScale: {x: 1, y: 1, z: 1}
+  usesAimLocomotion: 1
+  handDrawClip: {fileID: -9154298136647773739, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handIdleClip: {fileID: -5609668889187248227, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handAttackClip: {fileID: 3249893011140170461, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handSecondaryAttackClip: {fileID: 0}
+  handReloadClip: {fileID: -2983283518593891209, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handShotFrames: 17
+  weaponShotFrames: 9
+  handReloadTotalFrames: 179
+  weaponReloadStartFrame: 122
+  weaponReloadTotalFrames: 20
+  handDrawTotalFrames: 74
+  weaponDrawStartFrame: 16
+  weaponDrawTotalFrames: 20
+  damage: 23
+  fireRate: 11.5
+  isAutomatic: 1
+  range: 100
+  meleeCastRadius: 0
+  usesAmmo: 1
+  maxAmmo: 30
+  maxReserveAmmo: 90
+  reloadTime: 3
+  shotClip: {fileID: 8300000, guid: d44826b5c59704bab8c38530fe916d45, type: 3}
+  reloadClips:
+  - {fileID: 8300000, guid: 3ef3a2f0f0267446aa96afa400af2aa6, type: 3}
+  - {fileID: 8300000, guid: fa9566860d7d148339f3ce24934abd9e, type: 3}
+  - {fileID: 8300000, guid: 0898f36efc04c4b9aafb88dbc13238fa, type: 3}
+  shotVolume: 1
+  reloadVolume: 1
