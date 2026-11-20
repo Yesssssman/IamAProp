@@ -121,6 +121,30 @@ public class PlayerAnim : PropAnimBase
         }
     }
 
+    /// <summary>손 애니메이터가 현재 장착 무기의 재장전 상태를 재생 중이거나 진입 전이 중인지 여부.</summary>
+    public bool IsReloadAnimationActive
+    {
+        get
+        {
+            if (handAnimator == null) return false;
+
+            int expectedHash = _weaponType.Value switch
+            {
+                EWeaponType.Pistol => M1911ReloadState,
+                EWeaponType.Ak => AkReloadState,
+                _ => 0
+            };
+            if (expectedHash == 0) return false;
+
+            if (handAnimator.IsInTransition(0))
+            {
+                return handAnimator.GetNextAnimatorStateInfo(0).shortNameHash == expectedHash;
+            }
+
+            return handAnimator.GetCurrentAnimatorStateInfo(0).shortNameHash == expectedHash;
+        }
+    }
+
     // ***************************************************************
     // MonoBehaviour
     // ***************************************************************

@@ -62,6 +62,21 @@ public class WeaponDataSO : ScriptableObject
     [Min(0f)]
     [SerializeField] private float reloadTime = 2.5f;
 
+    /// <summary>발사 시 재생할 총성 오디오 클립.</summary>
+    [Header("사운드")]
+    [SerializeField] private AudioClip shotClip;
+
+    /// <summary>재장전 3단계 오디오 클립 (0: 탄창 빼기, 1: 탄창 결합, 2: 노리쇠 후퇴·전진).</summary>
+    [SerializeField] private AudioClip[] reloadClips;
+
+    /// <summary>사격 사운드 재생 볼륨 배율.</summary>
+    [Range(0f, 1f)]
+    [SerializeField] private float shotVolume = 1f;
+
+    /// <summary>재장전 사운드 재생 볼륨 배율.</summary>
+    [Range(0f, 1f)]
+    [SerializeField] private float reloadVolume = 1f;
+
     // ***************************************************************
     // Properties
     // ***************************************************************
@@ -104,4 +119,28 @@ public class WeaponDataSO : ScriptableObject
 
     /// <summary>재장전 소요 시간 (초 단위).</summary>
     public float ReloadTime => reloadTime;
+
+    /// <summary>발사 시 재생할 총성 오디오 클립.</summary>
+    public AudioClip ShotClip => shotClip;
+
+    /// <summary>재장전 단계별 오디오 클립 배열.</summary>
+    public AudioClip[] ReloadClips => reloadClips;
+
+    /// <summary>사격 사운드 볼륨 배율.</summary>
+    public float ShotVolume => shotVolume;
+
+    /// <summary>재장전 사운드 볼륨 배율.</summary>
+    public float ReloadVolume => reloadVolume;
+
+    // ***************************************************************
+    // Public Control API
+    // ***************************************************************
+
+    /// <summary>재장전 단계 번호(<paramref name="step"/>: 1~3)에 해당하는 오디오 클립을 반환한다.</summary>
+    public AudioClip GetReloadClip(int step)
+    {
+        int index = step - 1;
+        if (reloadClips == null || index < 0 || index >= reloadClips.Length) return null;
+        return reloadClips[index];
+    }
 }

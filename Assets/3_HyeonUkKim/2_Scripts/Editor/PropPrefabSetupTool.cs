@@ -231,7 +231,26 @@ public static class PropPrefabSetupTool
                 handsTf.localRotation = savedRot;
                 handsTf.localScale = savedScale;
             }
+
+            HandReloadAudioRelay reloadRelay = GetOrAddComponent<HandReloadAudioRelay>(handsTf.gameObject);
+            SerializedObject relaySerialized = new SerializedObject(reloadRelay);
+            relaySerialized.FindProperty("weaponController").objectReferenceValue = weaponController;
+            relaySerialized.ApplyModifiedPropertiesWithoutUndo();
         }
+
+        GameObject audioHost = aimPivot != null ? aimPivot.gameObject : root;
+        AudioSource weaponAudioSource = GetOrAddComponent<AudioSource>(audioHost);
+        weaponAudioSource.playOnAwake = false;
+        weaponAudioSource.loop = false;
+        weaponAudioSource.spatialBlend = 1f;
+        weaponAudioSource.rolloffMode = AudioRolloffMode.Logarithmic;
+        weaponAudioSource.minDistance = 2f;
+        weaponAudioSource.maxDistance = 40f;
+        weaponAudioSource.dopplerLevel = 0f;
+
+        SerializedObject weaponAudioSerialized = new SerializedObject(weaponController);
+        weaponAudioSerialized.FindProperty("weaponAudioSource").objectReferenceValue = weaponAudioSource;
+        weaponAudioSerialized.ApplyModifiedPropertiesWithoutUndo();
 
         SerializedObject controllerSerialized = new SerializedObject(controller);
         controllerSerialized.FindProperty("_groundCheck").objectReferenceValue = groundCheck;

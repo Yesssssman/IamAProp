@@ -24,3 +24,10 @@ MonoBehaviour:
   maxAmmo: 7
   maxReserveAmmo: 28
   reloadTime: 1.8
+  shotClip: {fileID: 8300000, guid: 8d8f9f7ca40a24481b6e5511e984946d, type: 3}
+  reloadClips:
+  - {fileID: 8300000, guid: a39dfede3565247b8ae5e7b7a7900541, type: 3}
+  - {fileID: 8300000, guid: d460b3bd67c8a4f94a0097115f7f3770, type: 3}
+  - {fileID: 8300000, guid: 712767e92f043411b9f4373ffdd61267, type: 3}
+  shotVolume: 1
+  reloadVolume: 1

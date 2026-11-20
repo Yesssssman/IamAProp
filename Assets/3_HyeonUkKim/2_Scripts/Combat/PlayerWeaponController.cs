@@ -43,6 +43,10 @@ public class PlayerWeaponController : NetworkBehaviour
     [Min(0f)]
     [SerializeField] private float debugRayDuration = 1.5f;
 
+    /// <summary>총기 사격 및 재장전 사운드를 3D 공간에서 재생할 <see cref="AudioSource"/> 컴포넌트.</summary>
+    [Header("사운드 설정")]
+    [SerializeField] private AudioSource weaponAudioSource;
+
     /// <summary>소유자 측 로컬 예측용 무기 런타임 상태 배열.</summary>
     private WeaponRuntimeState[] _ownerStates;
 
@@ -145,6 +149,10 @@ public class PlayerWeaponController : NetworkBehaviour
         _playerController = GetComponent<PlayerController>();
         _playerAnim = GetComponent<PlayerAnim>();
         _playerHealth = GetComponent<PlayerHealth>();
+        if (weaponAudioSource == null)
+        {
+            weaponAudioSource = GetComponent<AudioSource>();
+        }
 
         int slotCount = Enum.GetValues(typeof(EWeaponType)).Length;
         _ownerStates = new WeaponRuntimeState[slotCount];
@@ -291,6 +299,7 @@ public class PlayerWeaponController : NetworkBehaviour
         }
 
         _playerAnim.TriggerAttack(attackVariant);
+        PlayShotSound(currentWeapon);
 
         Vector3 origin = _playerController != null
             ? _playerController.GetFireOrigin()
@@ -381,6 +390,39 @@ public class PlayerWeaponController : NetworkBehaviour
         if (sockets == null || index < 0 || index >= sockets.Length) return null;
 
         return sockets[index].weaponData;
+    }
+
+    /// <summary>지정한 <paramref name="weaponType"/>의 사격 사운드를 1회 재생한다.</summary>
+    public void PlayShotSound(EWeaponType weaponType)
+    {
+        if (!IsSpawned || weaponAudioSource == null) return;
+        if (PredictionManager != null && PredictionManager.IsReconciling) return;
+
+        WeaponDataSO weaponData = GetWeaponData(weaponType);
+        if (weaponData == null || weaponData.ShotClip == null) return;
+
+        weaponAudioSource.PlayOneShot(weaponData.ShotClip, weaponData.ShotVolume);
+    }
+
+    /// <summary>현재 장착 무기의 재장전 단계(<paramref name="step"/>: 1~3) 사운드를 재생한다.</summary>
+    public void PlayReloadSound(int step)
+    {
+        if (!IsSpawned || weaponAudioSource == null || _playerAnim == null) return;
+        if (PredictionManager != null && PredictionManager.IsReconciling) return;
+        if (_playerHealth != null && _playerHealth.IsDead) return;
+        if (_playerController != null && _playerController.IsRagdollIdle) return;
+
+        EWeaponType currentWeapon = _playerAnim.CurrentWeaponType;
+        if (currentWeapon != EWeaponType.Ak && currentWeapon != EWeaponType.Pistol) return;
+        if (_playerAnim.IsSwappingWeapon || !_playerAnim.IsReloadAnimationActive) return;
+
+        WeaponDataSO weaponData = GetWeaponData(currentWeapon);
+        if (weaponData == null) return;
+
+        AudioClip reloadClip = weaponData.GetReloadClip(step);
+        if (reloadClip == null) return;
+
+        weaponAudioSource.PlayOneShot(reloadClip, weaponData.ReloadVolume);
     }
 
     // ***************************************************************
@@ -483,7 +525,7 @@ public class PlayerWeaponController : NetworkBehaviour
         }
 
         Debug.DrawLine(origin, hitPoint, hitDamageable ? Color.red : Color.yellow, debugRayDuration);
-        BroadcastFireObserversRpc(origin, hitPoint, hitDamageable, attackVariant);
+        BroadcastFireObserversRpc(origin, hitPoint, hitDamageable, weaponType, attackVariant);
 
         if (hitDamageable)
         {
@@ -512,13 +554,14 @@ public class PlayerWeaponController : NetworkBehaviour
         _serverReloadEndTime = Time.time + weaponData.ReloadTime;
     }
 
-    /// <summary>클라이언트에 발사 애니메이션과 디버그 궤적을 전파한다.</summary>
+    /// <summary>클라이언트에 발사 애니메이션, 사격 사운드와 디버그 궤적을 전파한다.</summary>
     [ObserversRpc]
-    private void BroadcastFireObserversRpc(Vector3 origin, Vector3 hitPoint, bool hitDamageable, byte attackVariant)
+    private void BroadcastFireObserversRpc(Vector3 origin, Vector3 hitPoint, bool hitDamageable, EWeaponType weaponType, byte attackVariant)
     {
         if (!IsOwner)
         {
             _playerAnim?.TriggerAttack(attackVariant);
+            PlayShotSound(weaponType);
         }
 
         if (!IsServerInitialized)
