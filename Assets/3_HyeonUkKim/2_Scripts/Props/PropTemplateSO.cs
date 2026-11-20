@@ -75,6 +75,26 @@ public struct PropUnarmedHandClips
     public AnimationClip fallClip;
 }
 
+/// <summary>손 베이스 컨트롤러의 슬롯별 무기 애니메이션 기준 클립 묶음.</summary>
+[Serializable]
+public struct WeaponSlotBaseHandClips
+{
+    /// <summary>드로우 상태 기준 클립.</summary>
+    public AnimationClip drawClip;
+
+    /// <summary>대기 또는 조준 상태 기준 클립.</summary>
+    public AnimationClip idleClip;
+
+    /// <summary>기본 공격 또는 발사 상태 기준 클립.</summary>
+    public AnimationClip attackClip;
+
+    /// <summary>2타 근접 공격 상태 기준 클립.</summary>
+    public AnimationClip secondaryAttackClip;
+
+    /// <summary>재장전 상태 기준 클립.</summary>
+    public AnimationClip reloadClip;
+}
+
 /// <summary>모든 프롭이 공유하는 베이스 애니메이터 컨트롤러, 기준 클립 및 무기 소켓 로드아웃을 정의한다.</summary>
 [CreateAssetMenu(fileName = "PropTemplate", menuName = "IamAProp/Prop Template")]
 public class PropTemplateSO : ScriptableObject
@@ -159,6 +179,10 @@ public class PropTemplateSO : ScriptableObject
     [Header("공통 무기 소켓 로드아웃")]
     [SerializeField] private WeaponSocketConfig[] weaponSockets;
 
+    /// <summary><see cref="EWeaponSlotType"/> 순서에 대응하는 손 베이스 컨트롤러의 슬롯별 기준 클립.</summary>
+    [Header("슬롯별 손 무기 오버라이드 기준 클립")]
+    [SerializeField] private WeaponSlotBaseHandClips[] slotBaseHandClips;
+
     // ***************************************************************
     // Properties
     // ***************************************************************
@@ -171,6 +195,9 @@ public class PropTemplateSO : ScriptableObject
 
     /// <summary>공통 무기 소켓 설정 배열.</summary>
     public WeaponSocketConfig[] WeaponSockets => weaponSockets;
+
+    /// <summary>슬롯별 손 무기 오버라이드 기준 클립 배열.</summary>
+    public WeaponSlotBaseHandClips[] SlotBaseHandClips => slotBaseHandClips;
 
     // ***************************************************************
     // Public Control API
@@ -235,7 +262,7 @@ public class PropTemplateSO : ScriptableObject
     }
 
     /// <summary><paramref name="handClips"/>를 매핑한 비무장 손 <see cref="AnimatorOverrideController"/>를 생성한다.</summary>
-    public RuntimeAnimatorController CreateHandController(in PropUnarmedHandClips handClips)
+    public AnimatorOverrideController CreateHandController(in PropUnarmedHandClips handClips)
     {
         if (baseHandController == null) return null;
 

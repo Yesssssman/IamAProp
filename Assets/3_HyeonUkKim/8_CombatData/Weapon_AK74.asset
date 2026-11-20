@@ -12,9 +12,32 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f442477cb8ae1434884e5bb207e1a747, type: 3}
   m_Name: Weapon_AK74
   m_EditorClassIdentifier: Assembly-CSharp::WeaponDataSO
+  weaponId: ak74
   weaponName: AK-74
   weaponType: 3
+  slotType: 3
   category: 0
+  equippedPrefab: {fileID: 5803435650769594868, guid: 3f3191eb7a96f421a8fa7deafb3c1f96, type: 3}
+  worldVisualPrefab: {fileID: 0}
+  weaponAnimController: {fileID: 9100000, guid: bda809c67aa1b4b13b22130c52b507a9, type: 2}
+  gripPosition: {x: -0.026, y: -0.008, z: -0.006}
+  gripRotation: {x: 274.24396, y: 222.39346, z: 180.59734}
+  gripScale: {x: 1, y: 1, z: 1}
+  worldPickupScale: {x: 1, y: 1, z: 1}
+  usesAimLocomotion: 1
+  handDrawClip: {fileID: -1102481637146406913, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handIdleClip: {fileID: -6878191168479885631, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handAttackClip: {fileID: -1455791241674618426, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handSecondaryAttackClip: {fileID: 0}
+  handReloadClip: {fileID: -8794803593805319676, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handShotFrames: 17
+  weaponShotFrames: 9
+  handReloadTotalFrames: 179
+  weaponReloadStartFrame: 130
+  weaponReloadTotalFrames: 16
+  handDrawTotalFrames: 69
+  weaponDrawStartFrame: 15
+  weaponDrawTotalFrames: 16
   damage: 25
   fireRate: 10
   isAutomatic: 1

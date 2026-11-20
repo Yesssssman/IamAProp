@@ -12,9 +12,32 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f442477cb8ae1434884e5bb207e1a747, type: 3}
   m_Name: Weapon_Knife
   m_EditorClassIdentifier: Assembly-CSharp::WeaponDataSO
+  weaponId: knife
   weaponName: Knife
   weaponType: 1
+  slotType: 1
   category: 2
+  equippedPrefab: {fileID: 5489145493786919654, guid: c331d4509e2a94446b4dedf64fcae8dd, type: 3}
+  worldVisualPrefab: {fileID: 0}
+  weaponAnimController: {fileID: 0}
+  gripPosition: {x: -0.0139, y: 0.018, z: 0.0018}
+  gripRotation: {x: 41.692326, y: 39.301437, z: 304.95862}
+  gripScale: {x: 0.4, y: 0.4, z: 0.4}
+  worldPickupScale: {x: 0.8, y: 0.8, z: 0.8}
+  usesAimLocomotion: 0
+  handDrawClip: {fileID: -8729689723522185007, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handIdleClip: {fileID: -7665465369729928803, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handAttackClip: {fileID: -825554537858325762, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handSecondaryAttackClip: {fileID: -3126985727076928379, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handReloadClip: {fileID: 0}
+  handShotFrames: 0
+  weaponShotFrames: 0
+  handReloadTotalFrames: 0
+  weaponReloadStartFrame: 0
+  weaponReloadTotalFrames: 0
+  handDrawTotalFrames: 0
+  weaponDrawStartFrame: 0
+  weaponDrawTotalFrames: 0
   damage: 50
   fireRate: 2.4
   isAutomatic: 1
@@ -24,3 +47,7 @@ MonoBehaviour:
   maxAmmo: 0
   maxReserveAmmo: 0
   reloadTime: 0
+  shotClip: {fileID: 0}
+  reloadClips: []
+  shotVolume: 1
+  reloadVolume: 1

@@ -1,49 +1,42 @@
 using System;
+using System.Collections.Generic;
 using FishNet.Connection;
 using FishNet.Object;
-using FishNet.Object.Synchronizing;
 using UnityEngine;
 
 /// <summary>소유자 및 원격 프록시의 무기 장착, 재장전, 총기 프레임 동기화를 담당하는 플레이어 애니메이터.</summary>
 [RequireComponent(typeof(PlayerController))]
+[RequireComponent(typeof(PlayerWeaponInventory))]
 public class PlayerAnim : PropAnimBase
 {
     // ***************************************************************
-    // Types
+    // Constants
     // ***************************************************************
 
-    /// <summary>손 애니메이션 상태에 대응하는 총기 재장전/드로우 프레임 매핑.</summary>
-    private readonly struct WeaponReloadSyncRule
-    {
-        public readonly int handStateHash;
-        public readonly float totalHandFrames;
-        public readonly float weaponStartFrame;
-        public readonly float weaponTotalFrames;
-
-        public WeaponReloadSyncRule(int handStateHash, float totalHandFrames, float weaponStartFrame, float weaponTotalFrames)
-        {
-            this.handStateHash = handStateHash;
-            this.totalHandFrames = totalHandFrames;
-            this.weaponStartFrame = weaponStartFrame;
-            this.weaponTotalFrames = weaponTotalFrames;
-        }
-    }
+    private const float DefaultHandShotFrames = 17f; // 손 발사 클립 기본 총 프레임 수
+    private const float DefaultWeaponShotFrames = 9f; // 총기 발사 클립 기본 총 프레임 수
 
     // ***************************************************************
     // Fields
     // ***************************************************************
 
-    /// <summary>현재 장착 중인 무기 종류.</summary>
-    private readonly SyncVar<EWeaponType> _weaponType = new(EWeaponType.Hide);
-
-    /// <summary>이 오브젝트에 마지막으로 적용된 무기 종류 (초기값 -1로 첫 동기화 보장).</summary>
-    private EWeaponType _appliedWeaponType = (EWeaponType)(-1);
-
-    /// <summary>현재 오른손에 장착된 무기의 <see cref="Animator"/> 컴포넌트.</summary>
-    private Animator _weaponAnimator;
+    /// <summary>무기 보유 현황과 현재 장착 상태를 제공하는 인벤토리 컴포넌트.</summary>
+    private PlayerWeaponInventory _weaponInventory;
 
     /// <summary>서버 피격 이벤트와 사망 상태를 조회하는 체력 컴포넌트.</summary>
     private PlayerHealth _playerHealth;
+
+    /// <summary>이 오브젝트에 마지막으로 적용된 장착 무기 스냅샷.</summary>
+    private EquippedWeaponState _appliedEquippedState;
+
+    /// <summary>최초 1회 장착 무기 동기화가 적용되었는지 여부.</summary>
+    private bool _hasAppliedEquippedState;
+
+    /// <summary>현재 적용된 무기의 <see cref="WeaponDataSO"/> 에셋.</summary>
+    private WeaponDataSO _appliedWeaponData;
+
+    /// <summary>현재 오른손에 장착된 무기의 <see cref="Animator"/> 컴포넌트.</summary>
+    private Animator _weaponAnimator;
 
     /// <summary>무기 교체 애니메이션 진입 직후 <c>isWeaponSwap</c>을 초기화하기 위한 대기 플래그.</summary>
     private bool _pendingWeaponSwapReset;
@@ -51,8 +44,8 @@ public class PlayerAnim : PropAnimBase
     /// <summary>재장전 애니메이션 진입 직후 <c>isReload</c>를 초기화하기 위한 대기 플래그.</summary>
     private bool _pendingReloadReset;
 
-    private const float HandShotFrames = 17f; // 손 발사 클립 총 프레임 수
-    private const float WeaponShotFrames = 9f; // 총기 발사 클립 총 프레임 수
+    /// <summary>손 오버라이드 컨트롤러 갱신에 재사용하는 클립 매핑 버퍼.</summary>
+    private readonly List<KeyValuePair<AnimationClip, AnimationClip>> _handOverrideBuffer = new(16);
 
     /// <summary>단검 드로우 애니메이션 상태(<c>Knife_Draw</c>) 해시.</summary>
     private static readonly int KnifeDrawState = Animator.StringToHash("Knife_Draw");
@@ -90,21 +83,13 @@ public class PlayerAnim : PropAnimBase
     /// <summary>총기 재장전 애니메이션 상태(<c>Reload</c>) 해시.</summary>
     private static readonly int WeaponReloadState = Animator.StringToHash("Reload");
 
-    /// <summary>손 재장전/드로우 상태별 총기 슬라이드/노리쇠 후퇴 프레임 동기화 테이블.</summary>
-    private static readonly WeaponReloadSyncRule[] ReloadSyncRules =
-    {
-        new(M1911ReloadState, 107f, 78f, 9f),
-        new(AkReloadState, 179f, 130f, 16f),
-        new(M1911DrawState, 47f, 19f, 9f),
-        new(AkDrawState, 69f, 15f, 16f)
-    };
-
     // ***************************************************************
     // Properties
     // ***************************************************************
 
     /// <inheritdoc/>
-    public override EWeaponType CurrentWeaponType => _weaponType.Value;
+    public override EWeaponType CurrentWeaponType =>
+        _weaponInventory != null ? (EWeaponType)_weaponInventory.ActiveSlot : EWeaponType.Hide;
 
     /// <inheritdoc/>
     public override bool IsSwappingWeapon
@@ -126,12 +111,15 @@ public class PlayerAnim : PropAnimBase
     {
         get
         {
-            if (handAnimator == null) return false;
-
-            int expectedHash = _weaponType.Value switch
+            if (handAnimator == null || _weaponInventory == null || _appliedWeaponData == null || !_appliedWeaponData.UsesAmmo)
             {
-                EWeaponType.Pistol => M1911ReloadState,
-                EWeaponType.Ak => AkReloadState,
+                return false;
+            }
+
+            int expectedHash = _weaponInventory.ActiveSlot switch
+            {
+                EWeaponSlotType.Secondary => M1911ReloadState,
+                EWeaponSlotType.Primary => AkReloadState,
                 _ => 0
             };
             if (expectedHash == 0) return false;
@@ -152,6 +140,7 @@ public class PlayerAnim : PropAnimBase
     protected override void Awake()
     {
         base.Awake();
+        _weaponInventory = GetComponent<PlayerWeaponInventory>();
         _playerHealth = GetComponent<PlayerHealth>();
     }
 
@@ -206,12 +195,18 @@ public class PlayerAnim : PropAnimBase
 
         if (activeHash == M1911ShotState || activeHash == AkShotState)
         {
-            float handFrame = Mathf.Repeat(activeHandState.normalizedTime, 1f) * HandShotFrames;
-            if (handFrame < WeaponShotFrames)
+            float handShotFrames = _appliedWeaponData != null && _appliedWeaponData.HandShotFrames > 0f
+                ? _appliedWeaponData.HandShotFrames
+                : DefaultHandShotFrames;
+            float weaponShotFrames = _appliedWeaponData != null && _appliedWeaponData.WeaponShotFrames > 0f
+                ? _appliedWeaponData.WeaponShotFrames
+                : DefaultWeaponShotFrames;
+            float handFrame = Mathf.Repeat(activeHandState.normalizedTime, 1f) * handShotFrames;
+            if (handFrame < weaponShotFrames)
             {
                 _weaponAnimator.SetBool(IsAttack, true);
                 _weaponAnimator.SetBool(IsReload, false);
-                _weaponAnimator.Play(WeaponShotState, 0, handFrame / WeaponShotFrames);
+                _weaponAnimator.Play(WeaponShotState, 0, handFrame / weaponShotFrames);
             }
             else
             {
@@ -221,18 +216,39 @@ public class PlayerAnim : PropAnimBase
             return;
         }
 
-        for (int i = 0; i < ReloadSyncRules.Length; i++)
+        if (_appliedWeaponData != null
+            && (activeHash == M1911ReloadState || activeHash == AkReloadState)
+            && _appliedWeaponData.HandReloadTotalFrames > 0f
+            && _appliedWeaponData.WeaponReloadTotalFrames > 0f)
         {
-            WeaponReloadSyncRule rule = ReloadSyncRules[i];
-            if (activeHash != rule.handStateHash) continue;
-
-            float handFrame = Mathf.Clamp01(activeHandState.normalizedTime) * rule.totalHandFrames;
-            float weaponFrame = handFrame - rule.weaponStartFrame;
-            if (weaponFrame >= 0f && weaponFrame < rule.weaponTotalFrames)
+            float handFrame = Mathf.Clamp01(activeHandState.normalizedTime) * _appliedWeaponData.HandReloadTotalFrames;
+            float weaponFrame = handFrame - _appliedWeaponData.WeaponReloadStartFrame;
+            if (weaponFrame >= 0f && weaponFrame < _appliedWeaponData.WeaponReloadTotalFrames)
             {
                 _weaponAnimator.SetBool(IsReload, true);
                 _weaponAnimator.SetBool(IsAttack, false);
-                _weaponAnimator.Play(WeaponReloadState, 0, weaponFrame / rule.weaponTotalFrames);
+                _weaponAnimator.Play(WeaponReloadState, 0, weaponFrame / _appliedWeaponData.WeaponReloadTotalFrames);
+            }
+            else
+            {
+                _weaponAnimator.SetBool(IsReload, false);
+                _weaponAnimator.Play(WeaponIdleState, 0, 0f);
+            }
+            return;
+        }
+
+        if (_appliedWeaponData != null
+            && (activeHash == M1911DrawState || activeHash == AkDrawState)
+            && _appliedWeaponData.HandDrawTotalFrames > 0f
+            && _appliedWeaponData.WeaponDrawTotalFrames > 0f)
+        {
+            float handFrame = Mathf.Clamp01(activeHandState.normalizedTime) * _appliedWeaponData.HandDrawTotalFrames;
+            float weaponFrame = handFrame - _appliedWeaponData.WeaponDrawStartFrame;
+            if (weaponFrame >= 0f && weaponFrame < _appliedWeaponData.WeaponDrawTotalFrames)
+            {
+                _weaponAnimator.SetBool(IsReload, true);
+                _weaponAnimator.SetBool(IsAttack, false);
+                _weaponAnimator.Play(WeaponReloadState, 0, weaponFrame / _appliedWeaponData.WeaponDrawTotalFrames);
             }
             else
             {
@@ -272,14 +288,23 @@ public class PlayerAnim : PropAnimBase
 
     public override void OnStartNetwork()
     {
-        _weaponType.OnChange += OnWeaponTypeChanged;
-        OnWeaponTypeChanged(EWeaponType.Hide, _weaponType.Value, asServer: true);
+        if (_weaponInventory != null)
+        {
+            _weaponInventory.OnEquippedWeaponChanged += HandleEquippedWeaponChanged;
+            HandleEquippedWeaponChanged(_weaponInventory.EquippedState);
+        }
     }
 
     public override void OnStopNetwork()
     {
-        _weaponType.OnChange -= OnWeaponTypeChanged;
-        _appliedWeaponType = (EWeaponType)(-1);
+        if (_weaponInventory != null)
+        {
+            _weaponInventory.OnEquippedWeaponChanged -= HandleEquippedWeaponChanged;
+        }
+
+        _hasAppliedEquippedState = false;
+        _appliedEquippedState = default;
+        _appliedWeaponData = null;
     }
 
     // ***************************************************************
@@ -291,7 +316,7 @@ public class PlayerAnim : PropAnimBase
     {
         if (!IsOwner || bodyAnimator == null) return;
 
-        bool canAttack = attacking && _weaponType.Value != EWeaponType.Hide;
+        bool canAttack = attacking && CurrentWeaponType != EWeaponType.Hide;
         bodyAnimator.SetBool(IsAttack, canAttack);
 
         if (handAnimator != null)
@@ -308,20 +333,20 @@ public class PlayerAnim : PropAnimBase
     /// <inheritdoc/>
     public override void TriggerAttack(int attackVariant = 0)
     {
-        if (handAnimator == null) return;
+        if (handAnimator == null || _weaponInventory == null) return;
 
-        EWeaponType currentWeapon = _weaponType.Value;
-        int shotState = currentWeapon switch
+        EWeaponSlotType activeSlot = _weaponInventory.ActiveSlot;
+        int shotState = activeSlot switch
         {
-            EWeaponType.KnifeMode => attackVariant == 1 ? KnifeSwing2State : KnifeSwingState,
-            EWeaponType.Pistol => M1911ShotState,
-            EWeaponType.Ak => AkShotState,
+            EWeaponSlotType.Melee => attackVariant == 1 ? KnifeSwing2State : KnifeSwingState,
+            EWeaponSlotType.Secondary => M1911ShotState,
+            EWeaponSlotType.Primary => AkShotState,
             _ => 0
         };
         if (shotState == 0) return;
 
         handAnimator.SetBool(IsAttack, false);
-        if (currentWeapon == EWeaponType.KnifeMode)
+        if (activeSlot == EWeaponSlotType.Melee)
         {
             handAnimator.CrossFadeInFixedTime(shotState, 0.05f, 0, 0f);
         }
@@ -341,23 +366,19 @@ public class PlayerAnim : PropAnimBase
     /// <inheritdoc/>
     public override void SetWeaponMode(EWeaponType weaponType)
     {
-        if (!IsOwner) return;
+        if (!IsOwner || _weaponInventory == null) return;
 
-        if (IsServerInitialized)
-        {
-            _weaponType.Value = weaponType;
-        }
-        else
-        {
-            SetWeaponModeServerRpc(weaponType);
-        }
+        _weaponInventory.TrySelectSlot((EWeaponSlotType)weaponType);
     }
 
     /// <inheritdoc/>
     public override void RequestReload()
     {
-        if (!IsOwner || handAnimator == null) return;
-        if (_weaponType.Value != EWeaponType.Pistol && _weaponType.Value != EWeaponType.Ak) return;
+        if (!IsOwner || handAnimator == null || _weaponInventory == null) return;
+        if (_appliedWeaponData == null || !_appliedWeaponData.UsesAmmo) return;
+
+        EWeaponSlotType activeSlot = _weaponInventory.ActiveSlot;
+        if (activeSlot != EWeaponSlotType.Secondary && activeSlot != EWeaponSlotType.Primary) return;
         if (_pendingReloadReset || _pendingWeaponSwapReset) return;
 
         int currentHash = handAnimator.GetCurrentAnimatorStateInfo(0).shortNameHash;
@@ -391,13 +412,6 @@ public class PlayerAnim : PropAnimBase
     // ***************************************************************
     // Network RPCs
     // ***************************************************************
-
-    /// <summary>소유자 클라이언트의 무기 모드 변경을 서버에 반영한다.</summary>
-    [ServerRpc]
-    private void SetWeaponModeServerRpc(EWeaponType weaponType)
-    {
-        _weaponType.Value = weaponType;
-    }
 
     /// <summary>소유자 클라이언트의 재장전 요청을 서버를 통해 다른 관전자에게 전달한다.</summary>
     [ServerRpc]
@@ -442,33 +456,100 @@ public class PlayerAnim : PropAnimBase
         PlayHitObserversRpc(hitIndex);
     }
 
-    /// <summary><see cref="_weaponType"/> 변경 시 무기 오브젝트와 몸통/손 애니메이터를 갱신한다.</summary>
-    private void OnWeaponTypeChanged(EWeaponType previousValue, EWeaponType newValue, bool asServer)
+    /// <summary>장착 무기 변경 시 무기 오브젝트, 손 오버라이드 클립 및 몸통/손 애니메이터를 갱신한다.</summary>
+    private void HandleEquippedWeaponChanged(EquippedWeaponState newState)
     {
-        if (!asServer && IsServerInitialized) return;
-        if (_appliedWeaponType == newValue) return;
-        _appliedWeaponType = newValue;
-        int index = (int)newValue;
+        if (_hasAppliedEquippedState && _appliedEquippedState == newState) return;
+
+        bool hadPrevious = _hasAppliedEquippedState;
+        EWeaponSlotType previousSlot = _appliedEquippedState.Slot;
+        _hasAppliedEquippedState = true;
+        _appliedEquippedState = newState;
+
+        int slotIndex = (int)newState.Slot;
+        WeaponDataSO weaponData = newState.Slot != EWeaponSlotType.Unarmed && _weaponInventory != null
+            ? _weaponInventory.GetWeaponDataById(newState.WeaponId)
+            : null;
+        _appliedWeaponData = weaponData;
+
+        bool wasAir = bodyAnimator != null && bodyAnimator.GetBool(IsAir);
+        bool wasJumped = bodyAnimator != null && bodyAnimator.GetBool(IsJumped);
 
         if (bodyAnimator != null)
         {
-            bool wasAir = bodyAnimator.GetBool(IsAir);
-            bool wasJumped = bodyAnimator.GetBool(IsJumped);
+            int bodyControllerIndex = slotIndex;
+            if (newState.Slot != EWeaponSlotType.Unarmed && weaponData != null)
+            {
+                bodyControllerIndex = weaponData.UsesAimLocomotion
+                    ? (int)EWeaponSlotType.Primary
+                    : (int)EWeaponSlotType.Melee;
+            }
 
             if (_bodyWeaponControllers != null
-                && index >= 0
-                && index < _bodyWeaponControllers.Length
-                && _bodyWeaponControllers[index] != null)
+                && bodyControllerIndex >= 0
+                && bodyControllerIndex < _bodyWeaponControllers.Length
+                && _bodyWeaponControllers[bodyControllerIndex] != null)
             {
-                bodyAnimator.runtimeAnimatorController = _bodyWeaponControllers[index];
+                bodyAnimator.runtimeAnimatorController = _bodyWeaponControllers[bodyControllerIndex];
             }
 
             bodyAnimator.SetFloat(MoveX, _currentMoveX);
             bodyAnimator.SetFloat(MoveZ, _currentMoveZ);
             bodyAnimator.SetBool(IsAir, wasAir);
             bodyAnimator.SetBool(IsJumped, wasJumped);
-            bodyAnimator.SetInteger(WeaponMode, index);
+            bodyAnimator.SetInteger(WeaponMode, slotIndex);
             bodyAnimator.SetBool(IsReload, false);
+        }
+
+        // 같은 슬롯의 다른 무기(예: AK ↔ M4)를 장착할 때 손 오버라이드 클립을 동적으로 교체한다.
+        if (handAnimator != null && _handOverrideController != null && weaponData != null && propData != null)
+        {
+            WeaponSlotBaseHandClips[] slotBases = propData.SlotBaseHandClips;
+            if (slotBases != null && slotIndex >= 0 && slotIndex < slotBases.Length)
+            {
+                WeaponSlotBaseHandClips baseClips = slotBases[slotIndex];
+                _handOverrideBuffer.Clear();
+                _handOverrideController.GetOverrides(_handOverrideBuffer);
+
+                bool modified = false;
+                for (int i = 0; i < _handOverrideBuffer.Count; i++)
+                {
+                    AnimationClip baseClip = _handOverrideBuffer[i].Key;
+                    AnimationClip targetClip = null;
+
+                    if (baseClip == baseClips.drawClip && weaponData.HandDrawClip != null)
+                    {
+                        targetClip = weaponData.HandDrawClip;
+                    }
+                    else if (baseClip == baseClips.idleClip && weaponData.HandIdleClip != null)
+                    {
+                        targetClip = weaponData.HandIdleClip;
+                    }
+                    else if (baseClip == baseClips.attackClip && weaponData.HandAttackClip != null)
+                    {
+                        targetClip = weaponData.HandAttackClip;
+                    }
+                    else if (baseClip == baseClips.secondaryAttackClip && weaponData.HandSecondaryAttackClip != null)
+                    {
+                        targetClip = weaponData.HandSecondaryAttackClip;
+                    }
+                    else if (baseClip == baseClips.reloadClip && weaponData.HandReloadClip != null)
+                    {
+                        targetClip = weaponData.HandReloadClip;
+                    }
+
+                    if (targetClip != null && _handOverrideBuffer[i].Value != targetClip)
+                    {
+                        _handOverrideBuffer[i] = new KeyValuePair<AnimationClip, AnimationClip>(baseClip, targetClip);
+                        modified = true;
+                    }
+                }
+
+                if (modified)
+                {
+                    _handOverrideController.ApplyOverrides(_handOverrideBuffer);
+                }
+            }
         }
 
         if (handScript != null)
@@ -494,14 +575,9 @@ public class PlayerAnim : PropAnimBase
                 Destroy(prevRight);
             }
 
-            WeaponSocketConfig[] sockets = propData != null ? propData.WeaponSockets : null;
-            if (sockets != null
-                && index >= 0
-                && index < sockets.Length
-                && sockets[index].weaponPrefab != null)
+            if (weaponData != null && weaponData.EquippedPrefab != null)
             {
-                WeaponSocketConfig socket = sockets[index];
-                GameObject weaponObject = Instantiate(socket.weaponPrefab);
+                GameObject weaponObject = Instantiate(weaponData.EquippedPrefab);
                 Collider weaponCollider = weaponObject.GetComponent<Collider>();
                 if (weaponCollider != null)
                 {
@@ -510,19 +586,19 @@ public class PlayerAnim : PropAnimBase
 
                 handScript.SetRightHandItem(weaponObject);
                 weaponObject.transform.SetLocalPositionAndRotation(
-                    socket.gripPosition,
-                    Quaternion.Euler(socket.gripRotation));
-                weaponObject.transform.localScale = socket.gripScale;
+                    weaponData.GripPosition,
+                    Quaternion.Euler(weaponData.GripRotation));
+                weaponObject.transform.localScale = weaponData.GripScale;
 
                 GunScript gun = weaponObject.GetComponent<GunScript>();
-                if (gun != null && socket.reloadClip != null)
+                if (gun != null && weaponData.HandReloadClip != null)
                 {
                     AnimationEvent equipEvent = Array.Find(
-                        socket.reloadClip.events,
+                        weaponData.HandReloadClip.events,
                         evt => evt.functionName == nameof(HandScript.EquipMagazineToGun));
                     if (equipEvent != null)
                     {
-                        socket.reloadClip.SampleAnimation(handScript.gameObject, equipEvent.time);
+                        weaponData.HandReloadClip.SampleAnimation(handScript.gameObject, equipEvent.time);
                     }
 
                     GameObject magazine = Instantiate(gun.GetMagazine(), handScript.GetLeftHand(), true);
@@ -538,10 +614,10 @@ public class PlayerAnim : PropAnimBase
                 _weaponAnimator = weaponObject.GetComponent<Animator>();
                 if (_weaponAnimator != null)
                 {
-                    if (socket.weaponAnimController != null
-                        && _weaponAnimator.runtimeAnimatorController != socket.weaponAnimController)
+                    if (weaponData.WeaponAnimController != null
+                        && _weaponAnimator.runtimeAnimatorController != weaponData.WeaponAnimController)
                     {
-                        _weaponAnimator.runtimeAnimatorController = socket.weaponAnimController;
+                        _weaponAnimator.runtimeAnimatorController = weaponData.WeaponAnimController;
                     }
 
                     if (_weaponAnimator.runtimeAnimatorController != null)
@@ -558,11 +634,14 @@ public class PlayerAnim : PropAnimBase
 
         if (handAnimator == null) return;
 
-        handAnimator.SetInteger(WeaponMode, index);
+        handAnimator.SetFloat(MoveX, _currentHandMoveX);
+        handAnimator.SetBool(IsAir, wasAir);
+        handAnimator.SetBool(IsJumped, wasJumped);
+        handAnimator.SetInteger(WeaponMode, slotIndex);
         handAnimator.SetBool(IsReload, false);
         _pendingReloadReset = false;
 
-        if (newValue == EWeaponType.Hide)
+        if (newState.Slot == EWeaponSlotType.Unarmed)
         {
             if (IsOwner && bodyAnimator != null)
             {
@@ -573,15 +652,30 @@ public class PlayerAnim : PropAnimBase
             handAnimator.SetBool(IsWeaponSwap, false);
             _pendingWeaponSwapReset = false;
         }
-        else if (previousValue != newValue)
+        else
         {
-            // 무기 교체 시 손 드로우 애니메이션 상태로 전이하도록 트리거 플래그를 설정한다.
+            // 무기 교체 및 줍기 직후 손 드로우 애니메이션 상태로 전이하도록 트리거 플래그를 설정한다.
             if (IsOwner && bodyAnimator != null)
             {
                 bodyAnimator.SetBool(IsWeaponSwap, true);
             }
             handAnimator.SetBool(IsWeaponSwap, true);
             _pendingWeaponSwapReset = true;
+
+            if (hadPrevious && previousSlot == newState.Slot)
+            {
+                int drawStateHash = newState.Slot switch
+                {
+                    EWeaponSlotType.Melee => KnifeDrawState,
+                    EWeaponSlotType.Secondary => M1911DrawState,
+                    EWeaponSlotType.Primary => AkDrawState,
+                    _ => 0
+                };
+                if (drawStateHash != 0)
+                {
+                    handAnimator.Play(drawStateHash, 0, 0f);
+                }
+            }
         }
     }
 }

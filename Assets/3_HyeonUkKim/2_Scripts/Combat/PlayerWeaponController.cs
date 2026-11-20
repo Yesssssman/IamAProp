@@ -4,17 +4,18 @@ using FishNet.Object;
 using FishNet.Transporting;
 using UnityEngine;
 
-/// <summary>무기별 런타임 탄약/쿨다운 관리와 서버 권위 히트스캔(Raycast) 공격 판정을 처리한다.</summary>
+/// <summary>무기 인스턴스별 탄약/쿨다운 관리와 서버 권위 히트스캔(Raycast) 공격 판정을 처리한다.</summary>
 [RequireComponent(typeof(PlayerController))]
 [RequireComponent(typeof(PlayerAnim))]
+[RequireComponent(typeof(PlayerWeaponInventory))]
 public class PlayerWeaponController : NetworkBehaviour
 {
     // ***************************************************************
     // Types
     // ***************************************************************
 
-    /// <summary>무기 슬롯별 런타임 탄약 및 발사 쿨다운 상태.</summary>
-    private struct WeaponRuntimeState
+    /// <summary>소유자 측 로컬 예측용 슬롯별 탄약 및 발사 쿨다운 상태.</summary>
+    private struct OwnerSlotRuntimeState
     {
         public int currentAmmo;
         public int reserveAmmo;
@@ -47,11 +48,11 @@ public class PlayerWeaponController : NetworkBehaviour
     [Header("사운드 설정")]
     [SerializeField] private AudioSource weaponAudioSource;
 
-    /// <summary>소유자 측 로컬 예측용 무기 런타임 상태 배열.</summary>
-    private WeaponRuntimeState[] _ownerStates;
+    /// <summary>소유자 측 로컬 예측용 슬롯별 탄약 및 쿨다운 배열.</summary>
+    private OwnerSlotRuntimeState[] _ownerStates;
 
-    /// <summary>서버 권위 검증용 무기 런타임 상태 배열.</summary>
-    private WeaponRuntimeState[] _serverStates;
+    /// <summary>서버 측 슬롯별 다음 발사 허용 시각 배열 (<see cref="Time.time"/> 기준).</summary>
+    private float[] _serverNextFireTimes;
 
     /// <summary>히트스캔 물리 캐스트 결과를 저장하는 재사용 버퍼.</summary>
     private readonly RaycastHit[] _hitBuffer = new RaycastHit[16];
@@ -59,8 +60,11 @@ public class PlayerWeaponController : NetworkBehaviour
     /// <summary>조준 좌표와 발사 원점을 제공하는 플레이어 컨트롤러.</summary>
     private PlayerController _playerController;
 
-    /// <summary>장착 무기 상태와 공격/재장전 애니메이션을 제어하는 컴포넌트.</summary>
+    /// <summary>공격/재장전 애니메이션을 제어하는 컴포넌트.</summary>
     private PlayerAnim _playerAnim;
+
+    /// <summary>4슬롯 보유 무기와 탄약 상태를 관리하는 인벤토리 컴포넌트.</summary>
+    private PlayerWeaponInventory _weaponInventory;
 
     /// <summary>플레이어 생존 상태를 조회하는 체력 컴포넌트.</summary>
     private PlayerHealth _playerHealth;
@@ -83,8 +87,11 @@ public class PlayerWeaponController : NetworkBehaviour
     /// <summary>소유자 측 재장전 완료 예정 시각 (<see cref="Time.time"/> 기준).</summary>
     private float _ownerReloadEndTime;
 
-    /// <summary>소유자 측 재장전 중인 무기 종류.</summary>
-    private EWeaponType _ownerReloadWeaponType;
+    /// <summary>소유자 측 재장전 중인 무기 슬롯.</summary>
+    private EWeaponSlotType _ownerReloadSlot;
+
+    /// <summary>소유자 측 재장전 중인 무기 식별자.</summary>
+    private string _ownerReloadWeaponId;
 
     /// <summary>서버 측 재장전 진행 여부.</summary>
     private bool _isServerReloading;
@@ -92,14 +99,17 @@ public class PlayerWeaponController : NetworkBehaviour
     /// <summary>서버 측 재장전 완료 예정 시각 (<see cref="Time.time"/> 기준).</summary>
     private float _serverReloadEndTime;
 
-    /// <summary>서버 측 재장전 중인 무기 종류.</summary>
-    private EWeaponType _serverReloadWeaponType;
+    /// <summary>서버 측 재장전 중인 무기 슬롯.</summary>
+    private EWeaponSlotType _serverReloadSlot;
+
+    /// <summary>서버 측 재장전 중인 무기 식별자.</summary>
+    private string _serverReloadWeaponId;
 
     // ***************************************************************
     // Events
     // ***************************************************************
 
-    /// <summary>탄약 수치가 변경될 때 (무기 종류, 현재 탄창, 예비 탄약)을 알리는 이벤트.</summary>
+    /// <summary>탄약 수치가 변경될 때 (무기 슬롯 모드, 현재 탄창, 예비 탄약)을 알리는 이벤트.</summary>
     public event Action<EWeaponType, int, int> OnAmmoChanged;
 
     /// <summary>서버가 <see cref="IDamageable"/> 적중을 확정했을 때 소유자에게 알리는 이벤트.</summary>
@@ -110,15 +120,15 @@ public class PlayerWeaponController : NetworkBehaviour
     // ***************************************************************
 
     /// <summary>현재 장착 중인 무기의 <see cref="WeaponDataSO"/> 에셋.</summary>
-    public WeaponDataSO CurrentWeaponData => _playerAnim != null ? GetWeaponData(_playerAnim.CurrentWeaponType) : null;
+    public WeaponDataSO CurrentWeaponData => _weaponInventory != null ? _weaponInventory.EquippedWeaponData : null;
 
     /// <summary>현재 장착 중인 무기의 남은 탄창 수.</summary>
     public int CurrentAmmo
     {
         get
         {
-            if (_playerAnim == null || _ownerStates == null) return 0;
-            int index = (int)_playerAnim.CurrentWeaponType;
+            if (_weaponInventory == null || _ownerStates == null) return 0;
+            int index = (int)_weaponInventory.ActiveSlot;
             return index >= 0 && index < _ownerStates.Length ? _ownerStates[index].currentAmmo : 0;
         }
     }
@@ -128,8 +138,8 @@ public class PlayerWeaponController : NetworkBehaviour
     {
         get
         {
-            if (_playerAnim == null || _ownerStates == null) return 0;
-            int index = (int)_playerAnim.CurrentWeaponType;
+            if (_weaponInventory == null || _ownerStates == null) return 0;
+            int index = (int)_weaponInventory.ActiveSlot;
             return index >= 0 && index < _ownerStates.Length ? _ownerStates[index].reserveAmmo : 0;
         }
     }
@@ -148,46 +158,41 @@ public class PlayerWeaponController : NetworkBehaviour
     {
         _playerController = GetComponent<PlayerController>();
         _playerAnim = GetComponent<PlayerAnim>();
+        _weaponInventory = GetComponent<PlayerWeaponInventory>();
         _playerHealth = GetComponent<PlayerHealth>();
         if (weaponAudioSource == null)
         {
             weaponAudioSource = GetComponent<AudioSource>();
         }
 
-        int slotCount = Enum.GetValues(typeof(EWeaponType)).Length;
-        _ownerStates = new WeaponRuntimeState[slotCount];
-        _serverStates = new WeaponRuntimeState[slotCount];
+        _ownerStates = new OwnerSlotRuntimeState[PlayerWeaponInventory.SlotCount];
+        _serverNextFireTimes = new float[PlayerWeaponInventory.SlotCount];
     }
 
     private void Update()
     {
-        if (!IsSpawned || _playerAnim == null) return;
+        if (!IsSpawned || _playerAnim == null || _weaponInventory == null) return;
 
-        EWeaponType currentWeapon = _playerAnim.CurrentWeaponType;
+        EWeaponSlotType activeSlot = _weaponInventory.ActiveSlot;
+        string activeWeaponId = _weaponInventory.EquippedWeaponId;
 
         if (IsServerInitialized && _isServerReloading)
         {
-            if (currentWeapon != _serverReloadWeaponType)
+            if (activeSlot != _serverReloadSlot
+                || !string.Equals(activeWeaponId, _serverReloadWeaponId, StringComparison.Ordinal))
             {
                 _isServerReloading = false;
             }
             else if (Time.time >= _serverReloadEndTime)
             {
                 _isServerReloading = false;
-                WeaponDataSO reloadData = GetWeaponData(_serverReloadWeaponType);
-                int reloadIndex = (int)_serverReloadWeaponType;
-                if (reloadData != null && reloadData.UsesAmmo && reloadIndex >= 0 && reloadIndex < _serverStates.Length)
+                WeaponDataSO reloadData = _weaponInventory.GetWeaponDataById(_serverReloadWeaponId);
+                if (reloadData != null
+                    && reloadData.UsesAmmo
+                    && _weaponInventory.TryApplyReload(_serverReloadSlot, _serverReloadWeaponId, reloadData.MaxAmmo, out WeaponSlotState updated))
                 {
-                    int needed = reloadData.MaxAmmo - _serverStates[reloadIndex].currentAmmo;
-                    int loaded = Mathf.Min(needed, _serverStates[reloadIndex].reserveAmmo);
-                    if (loaded > 0)
-                    {
-                        _serverStates[reloadIndex].currentAmmo += loaded;
-                        _serverStates[reloadIndex].reserveAmmo -= loaded;
-                    }
-
-                    Debug.Log($"[PlayerWeaponController] {name}({reloadData.WeaponName}) 재장전 완료: {_serverStates[reloadIndex].currentAmmo}/{_serverStates[reloadIndex].reserveAmmo}");
-                    SyncAmmoTargetRpc(Owner, _serverReloadWeaponType, _serverStates[reloadIndex].currentAmmo, _serverStates[reloadIndex].reserveAmmo);
+                    Debug.Log($"[PlayerWeaponController] {name}({reloadData.WeaponName}) 재장전 완료: {updated.CurrentAmmo}/{updated.ReserveAmmo}");
+                    SyncAmmoTargetRpc(Owner, _serverReloadSlot, updated.CurrentAmmo, updated.ReserveAmmo);
                 }
             }
         }
@@ -196,7 +201,8 @@ public class PlayerWeaponController : NetworkBehaviour
 
         if (_isOwnerReloading)
         {
-            if (currentWeapon != _ownerReloadWeaponType)
+            if (activeSlot != _ownerReloadSlot
+                || !string.Equals(activeWeaponId, _ownerReloadWeaponId, StringComparison.Ordinal))
             {
                 _isOwnerReloading = false;
             }
@@ -205,8 +211,8 @@ public class PlayerWeaponController : NetworkBehaviour
                 _isOwnerReloading = false;
                 if (!IsServerInitialized)
                 {
-                    WeaponDataSO reloadData = GetWeaponData(_ownerReloadWeaponType);
-                    int reloadIndex = (int)_ownerReloadWeaponType;
+                    WeaponDataSO reloadData = _weaponInventory.GetWeaponDataById(_ownerReloadWeaponId);
+                    int reloadIndex = (int)_ownerReloadSlot;
                     if (reloadData != null && reloadData.UsesAmmo && reloadIndex >= 0 && reloadIndex < _ownerStates.Length)
                     {
                         int needed = reloadData.MaxAmmo - _ownerStates[reloadIndex].currentAmmo;
@@ -215,14 +221,14 @@ public class PlayerWeaponController : NetworkBehaviour
                         {
                             _ownerStates[reloadIndex].currentAmmo += loaded;
                             _ownerStates[reloadIndex].reserveAmmo -= loaded;
-                            OnAmmoChanged?.Invoke(_ownerReloadWeaponType, _ownerStates[reloadIndex].currentAmmo, _ownerStates[reloadIndex].reserveAmmo);
+                            OnAmmoChanged?.Invoke((EWeaponType)_ownerReloadSlot, _ownerStates[reloadIndex].currentAmmo, _ownerStates[reloadIndex].reserveAmmo);
                         }
                     }
                 }
             }
         }
 
-        if (currentWeapon != EWeaponType.KnifeMode)
+        if (activeSlot != EWeaponSlotType.Melee)
         {
             _meleeComboStep = 0;
             _meleeComboExpireTime = 0f;
@@ -240,7 +246,7 @@ public class PlayerWeaponController : NetworkBehaviour
             return;
         }
 
-        WeaponDataSO weaponData = GetWeaponData(currentWeapon);
+        WeaponDataSO weaponData = _weaponInventory.EquippedWeaponData;
         if (weaponData == null)
         {
             _fireRequested = false;
@@ -249,14 +255,14 @@ public class PlayerWeaponController : NetworkBehaviour
 
         if (!weaponData.IsAutomatic && !_fireRequested) return;
 
-        int slotIndex = (int)currentWeapon;
+        int slotIndex = (int)activeSlot;
         if (slotIndex < 0 || slotIndex >= _ownerStates.Length) return;
 
         float remainingCooldown = _ownerStates[slotIndex].nextFireTime - Time.time;
         if (remainingCooldown > 0f)
         {
             // 근접 무기는 직전 스윙 막바지 구간에서의 재입력만 선입력으로 유지한다.
-            if (currentWeapon == EWeaponType.KnifeMode && remainingCooldown > MeleeComboBufferWindow)
+            if (activeSlot == EWeaponSlotType.Melee && remainingCooldown > MeleeComboBufferWindow)
             {
                 _fireRequested = false;
             }
@@ -272,7 +278,7 @@ public class PlayerWeaponController : NetworkBehaviour
         }
 
         byte attackVariant = 0;
-        if (currentWeapon == EWeaponType.KnifeMode)
+        if (activeSlot == EWeaponSlotType.Melee)
         {
             if (Time.time <= _meleeComboExpireTime)
             {
@@ -287,7 +293,7 @@ public class PlayerWeaponController : NetworkBehaviour
 
         float nextFireTime = Time.time + weaponData.AttackCooldown;
         _ownerStates[slotIndex].nextFireTime = nextFireTime;
-        if (currentWeapon == EWeaponType.KnifeMode)
+        if (activeSlot == EWeaponSlotType.Melee)
         {
             _meleeComboExpireTime = nextFireTime + MeleeComboGraceWindow;
         }
@@ -295,11 +301,11 @@ public class PlayerWeaponController : NetworkBehaviour
         if (weaponData.UsesAmmo)
         {
             _ownerStates[slotIndex].currentAmmo--;
-            OnAmmoChanged?.Invoke(currentWeapon, _ownerStates[slotIndex].currentAmmo, _ownerStates[slotIndex].reserveAmmo);
+            OnAmmoChanged?.Invoke((EWeaponType)activeSlot, _ownerStates[slotIndex].currentAmmo, _ownerStates[slotIndex].reserveAmmo);
         }
 
         _playerAnim.TriggerAttack(attackVariant);
-        PlayShotSound(currentWeapon);
+        PlayShotSound(activeWeaponId);
 
         Vector3 origin = _playerController != null
             ? _playerController.GetFireOrigin()
@@ -310,23 +316,51 @@ public class PlayerWeaponController : NetworkBehaviour
         Vector3 direction = aimPoint - origin;
         direction = direction.sqrMagnitude > 0.0001f ? direction.normalized : transform.forward;
 
-        RequestFireServerRpc(origin, direction, currentWeapon, attackVariant);
+        RequestFireServerRpc(origin, direction, activeSlot, activeWeaponId, attackVariant);
     }
 
     // ***************************************************************
     // NetworkBehaviour
     // ***************************************************************
 
-    public override void OnStartServer()
+    public override void OnStartNetwork()
     {
-        InitializeWeaponStates(_serverStates);
+        if (_weaponInventory != null)
+        {
+            _weaponInventory.OnEquippedWeaponChanged += HandleEquippedWeaponChanged;
+            _weaponInventory.OnSlotUpdated += HandleSlotUpdated;
+        }
+    }
+
+    public override void OnStopNetwork()
+    {
+        if (_weaponInventory != null)
+        {
+            _weaponInventory.OnEquippedWeaponChanged -= HandleEquippedWeaponChanged;
+            _weaponInventory.OnSlotUpdated -= HandleSlotUpdated;
+        }
+
+        _isServerReloading = false;
     }
 
     public override void OnStartClient()
     {
-        if (!IsOwner) return;
+        if (!IsOwner || _weaponInventory == null || _ownerStates == null) return;
 
-        InitializeWeaponStates(_ownerStates);
+        for (int i = 0; i < _ownerStates.Length; i++)
+        {
+            WeaponSlotState state = _weaponInventory.GetSlotState((EWeaponSlotType)i);
+            _ownerStates[i].currentAmmo = state.CurrentAmmo;
+            _ownerStates[i].reserveAmmo = state.ReserveAmmo;
+            _ownerStates[i].nextFireTime = 0f;
+        }
+
+        EWeaponSlotType activeSlot = _weaponInventory.ActiveSlot;
+        int activeIndex = (int)activeSlot;
+        if (activeIndex >= 0 && activeIndex < _ownerStates.Length)
+        {
+            OnAmmoChanged?.Invoke((EWeaponType)activeSlot, _ownerStates[activeIndex].currentAmmo, _ownerStates[activeIndex].reserveAmmo);
+        }
     }
 
     public override void OnStopClient()
@@ -357,67 +391,69 @@ public class PlayerWeaponController : NetworkBehaviour
     /// <summary>현재 무기가 재장전 가능한 상태면 재장전 시퀀스를 시작한다.</summary>
     public void TryStartReload()
     {
-        if (!IsOwner || !IsSpawned || _playerAnim == null) return;
+        if (!IsOwner || !IsSpawned || _playerAnim == null || _weaponInventory == null) return;
         if (_playerHealth != null && _playerHealth.IsDead) return;
         if (_isOwnerReloading || _playerAnim.IsSwappingWeapon) return;
 
-        EWeaponType weaponType = _playerAnim.CurrentWeaponType;
-        WeaponDataSO weaponData = GetWeaponData(weaponType);
+        EWeaponSlotType activeSlot = _weaponInventory.ActiveSlot;
+        string activeWeaponId = _weaponInventory.EquippedWeaponId;
+        WeaponDataSO weaponData = _weaponInventory.EquippedWeaponData;
         if (weaponData == null || !weaponData.UsesAmmo) return;
 
-        int slotIndex = (int)weaponType;
+        int slotIndex = (int)activeSlot;
         if (slotIndex < 0 || slotIndex >= _ownerStates.Length) return;
         if (_ownerStates[slotIndex].currentAmmo >= weaponData.MaxAmmo) return;
         if (_ownerStates[slotIndex].reserveAmmo <= 0) return;
 
         _isOwnerReloading = true;
-        _ownerReloadWeaponType = weaponType;
+        _ownerReloadSlot = activeSlot;
+        _ownerReloadWeaponId = activeWeaponId;
         _ownerReloadEndTime = Time.time + weaponData.ReloadTime;
         _fireRequested = false;
 
         _playerAnim.RequestReload();
-        RequestReloadServerRpc(weaponType);
+        RequestReloadServerRpc(activeSlot, activeWeaponId);
     }
 
-    /// <summary><paramref name="weaponType"/>에 연결된 <see cref="WeaponDataSO"/>를 반환한다.</summary>
+    /// <summary><paramref name="weaponType"/> 슬롯에 보유 중인 <see cref="WeaponDataSO"/>를 반환한다.</summary>
     public WeaponDataSO GetWeaponData(EWeaponType weaponType)
     {
-        PropDataSO propData = _playerController != null ? _playerController.PropData : null;
-        if (propData == null) return null;
-
-        WeaponSocketConfig[] sockets = propData.WeaponSockets;
-        int index = (int)weaponType;
-        if (sockets == null || index < 0 || index >= sockets.Length) return null;
-
-        return sockets[index].weaponData;
+        return _weaponInventory != null ? _weaponInventory.GetWeaponDataInSlot((EWeaponSlotType)weaponType) : null;
     }
 
-    /// <summary>지정한 <paramref name="weaponType"/>의 사격 사운드를 1회 재생한다.</summary>
-    public void PlayShotSound(EWeaponType weaponType)
+    /// <summary>지정한 <paramref name="weaponId"/>의 사격 사운드를 1회 재생한다.</summary>
+    public void PlayShotSound(string weaponId)
     {
-        if (!IsSpawned || weaponAudioSource == null) return;
+        if (!IsSpawned || weaponAudioSource == null || _weaponInventory == null) return;
         if (PredictionManager != null && PredictionManager.IsReconciling) return;
 
-        WeaponDataSO weaponData = GetWeaponData(weaponType);
+        WeaponDataSO weaponData = _weaponInventory.GetWeaponDataById(weaponId);
         if (weaponData == null || weaponData.ShotClip == null) return;
 
         weaponAudioSource.PlayOneShot(weaponData.ShotClip, weaponData.ShotVolume);
     }
 
+    /// <summary>지정한 <paramref name="weaponType"/> 슬롯 무기의 사격 사운드를 1회 재생한다.</summary>
+    public void PlayShotSound(EWeaponType weaponType)
+    {
+        WeaponDataSO weaponData = GetWeaponData(weaponType);
+        if (weaponData != null)
+        {
+            PlayShotSound(weaponData.WeaponId);
+        }
+    }
+
     /// <summary>현재 장착 무기의 재장전 단계(<paramref name="step"/>: 1~3) 사운드를 재생한다.</summary>
     public void PlayReloadSound(int step)
     {
-        if (!IsSpawned || weaponAudioSource == null || _playerAnim == null) return;
+        if (!IsSpawned || weaponAudioSource == null || _playerAnim == null || _weaponInventory == null) return;
         if (PredictionManager != null && PredictionManager.IsReconciling) return;
         if (_playerHealth != null && _playerHealth.IsDead) return;
         if (_playerController != null && _playerController.IsRagdollIdle) return;
 
-        EWeaponType currentWeapon = _playerAnim.CurrentWeaponType;
-        if (currentWeapon != EWeaponType.Ak && currentWeapon != EWeaponType.Pistol) return;
+        WeaponDataSO weaponData = _weaponInventory.EquippedWeaponData;
+        if (weaponData == null || !weaponData.UsesAmmo) return;
         if (_playerAnim.IsSwappingWeapon || !_playerAnim.IsReloadAnimationActive) return;
-
-        WeaponDataSO weaponData = GetWeaponData(currentWeapon);
-        if (weaponData == null) return;
 
         AudioClip reloadClip = weaponData.GetReloadClip(step);
         if (reloadClip == null) return;
@@ -431,23 +467,35 @@ public class PlayerWeaponController : NetworkBehaviour
 
     /// <summary>서버에서 발사 조건을 검증하고 히트스캔 또는 근접 충돌 판정 및 데미지를 적용한다.</summary>
     [ServerRpc]
-    private void RequestFireServerRpc(Vector3 origin, Vector3 direction, EWeaponType weaponType, byte attackVariant, Channel channel = Channel.Reliable)
+    private void RequestFireServerRpc(
+        Vector3 origin,
+        Vector3 direction,
+        EWeaponSlotType slot,
+        string weaponId,
+        byte attackVariant,
+        Channel channel = Channel.Reliable)
     {
         if (_playerHealth != null && _playerHealth.IsDead) return;
-        if (_playerAnim == null || _playerAnim.CurrentWeaponType != weaponType) return;
+        if (_weaponInventory == null || _weaponInventory.ActiveSlot != slot) return;
+        if (!string.Equals(_weaponInventory.EquippedWeaponId, weaponId, StringComparison.Ordinal)) return;
         if (_isServerReloading) return;
 
-        WeaponDataSO weaponData = GetWeaponData(weaponType);
+        WeaponDataSO weaponData = _weaponInventory.EquippedWeaponData;
         if (weaponData == null) return;
 
-        int slotIndex = (int)weaponType;
-        if (slotIndex < 0 || slotIndex >= _serverStates.Length) return;
-        if (Time.time < _serverStates[slotIndex].nextFireTime - FireRateTolerance) return;
+        int slotIndex = (int)slot;
+        if (slotIndex < 0 || slotIndex >= _serverNextFireTimes.Length) return;
+        if (Time.time < _serverNextFireTimes[slotIndex] - FireRateTolerance) return;
 
-        if (weaponData.UsesAmmo && _serverStates[slotIndex].currentAmmo <= 0)
+        if (weaponData.UsesAmmo)
         {
-            SyncAmmoTargetRpc(Owner, weaponType, _serverStates[slotIndex].currentAmmo, _serverStates[slotIndex].reserveAmmo);
-            return;
+            if (!_weaponInventory.TryConsumeAmmo(slot, weaponId, out WeaponSlotState updatedAmmo))
+            {
+                SyncAmmoTargetRpc(Owner, slot, updatedAmmo.CurrentAmmo, updatedAmmo.ReserveAmmo);
+                return;
+            }
+
+            SyncAmmoTargetRpc(Owner, slot, updatedAmmo.CurrentAmmo, updatedAmmo.ReserveAmmo);
         }
 
         if (direction.sqrMagnitude < 0.0001f) return;
@@ -461,12 +509,7 @@ public class PlayerWeaponController : NetworkBehaviour
             origin = expectedOrigin;
         }
 
-        _serverStates[slotIndex].nextFireTime = Time.time + weaponData.AttackCooldown;
-        if (weaponData.UsesAmmo)
-        {
-            _serverStates[slotIndex].currentAmmo--;
-            SyncAmmoTargetRpc(Owner, weaponType, _serverStates[slotIndex].currentAmmo, _serverStates[slotIndex].reserveAmmo);
-        }
+        _serverNextFireTimes[slotIndex] = Time.time + weaponData.AttackCooldown;
 
         int hitCount = weaponData.MeleeCastRadius > 0f
             ? Physics.SphereCastNonAlloc(
@@ -525,7 +568,7 @@ public class PlayerWeaponController : NetworkBehaviour
         }
 
         Debug.DrawLine(origin, hitPoint, hitDamageable ? Color.red : Color.yellow, debugRayDuration);
-        BroadcastFireObserversRpc(origin, hitPoint, hitDamageable, weaponType, attackVariant);
+        BroadcastFireObserversRpc(origin, hitPoint, hitDamageable, weaponId, attackVariant);
 
         if (hitDamageable)
         {
@@ -535,33 +578,33 @@ public class PlayerWeaponController : NetworkBehaviour
 
     /// <summary>서버에서 재장전 타이머를 시작한다.</summary>
     [ServerRpc]
-    private void RequestReloadServerRpc(EWeaponType weaponType, Channel channel = Channel.Reliable)
+    private void RequestReloadServerRpc(EWeaponSlotType slot, string weaponId, Channel channel = Channel.Reliable)
     {
         if (_playerHealth != null && _playerHealth.IsDead) return;
-        if (_playerAnim == null || _playerAnim.CurrentWeaponType != weaponType) return;
+        if (_weaponInventory == null || _weaponInventory.ActiveSlot != slot) return;
+        if (!string.Equals(_weaponInventory.EquippedWeaponId, weaponId, StringComparison.Ordinal)) return;
         if (_isServerReloading) return;
 
-        WeaponDataSO weaponData = GetWeaponData(weaponType);
+        WeaponDataSO weaponData = _weaponInventory.EquippedWeaponData;
         if (weaponData == null || !weaponData.UsesAmmo) return;
 
-        int slotIndex = (int)weaponType;
-        if (slotIndex < 0 || slotIndex >= _serverStates.Length) return;
-        if (_serverStates[slotIndex].currentAmmo >= weaponData.MaxAmmo) return;
-        if (_serverStates[slotIndex].reserveAmmo <= 0) return;
+        WeaponSlotState slotState = _weaponInventory.GetSlotState(slot);
+        if (slotState.IsEmpty || slotState.CurrentAmmo >= weaponData.MaxAmmo || slotState.ReserveAmmo <= 0) return;
 
         _isServerReloading = true;
-        _serverReloadWeaponType = weaponType;
+        _serverReloadSlot = slot;
+        _serverReloadWeaponId = weaponId;
         _serverReloadEndTime = Time.time + weaponData.ReloadTime;
     }
 
     /// <summary>클라이언트에 발사 애니메이션, 사격 사운드와 디버그 궤적을 전파한다.</summary>
     [ObserversRpc]
-    private void BroadcastFireObserversRpc(Vector3 origin, Vector3 hitPoint, bool hitDamageable, EWeaponType weaponType, byte attackVariant)
+    private void BroadcastFireObserversRpc(Vector3 origin, Vector3 hitPoint, bool hitDamageable, string weaponId, byte attackVariant)
     {
         if (!IsOwner)
         {
             _playerAnim?.TriggerAttack(attackVariant);
-            PlayShotSound(weaponType);
+            PlayShotSound(weaponId);
         }
 
         if (!IsServerInitialized)
@@ -572,14 +615,14 @@ public class PlayerWeaponController : NetworkBehaviour
 
     /// <summary>서버의 권위 탄약 수치를 소유자 클라이언트에 동기화한다.</summary>
     [TargetRpc]
-    private void SyncAmmoTargetRpc(NetworkConnection target, EWeaponType weaponType, int currentAmmo, int reserveAmmo)
+    private void SyncAmmoTargetRpc(NetworkConnection target, EWeaponSlotType slot, int currentAmmo, int reserveAmmo)
     {
-        int index = (int)weaponType;
+        int index = (int)slot;
         if (_ownerStates == null || index < 0 || index >= _ownerStates.Length) return;
 
         _ownerStates[index].currentAmmo = currentAmmo;
         _ownerStates[index].reserveAmmo = reserveAmmo;
-        OnAmmoChanged?.Invoke(weaponType, currentAmmo, reserveAmmo);
+        OnAmmoChanged?.Invoke((EWeaponType)slot, currentAmmo, reserveAmmo);
     }
 
     /// <summary>서버에서 확정된 <see cref="IDamageable"/> 적중 사실을 소유자 클라이언트에 알린다.</summary>
@@ -590,23 +633,44 @@ public class PlayerWeaponController : NetworkBehaviour
     }
 
     // ***************************************************************
-    // Helpers
+    // Event Handlers
     // ***************************************************************
 
-    /// <summary>무기 슬롯별 런타임 상태를 각 <see cref="WeaponDataSO"/> 기본값으로 채운다.</summary>
-    private void InitializeWeaponStates(WeaponRuntimeState[] states)
+    /// <summary>장착 무기 변경 시 진행 중인 재장전과 공격 상태를 정리하고 탄약을 반영한다.</summary>
+    private void HandleEquippedWeaponChanged(EquippedWeaponState state)
     {
-        if (states == null) return;
+        _isOwnerReloading = false;
+        _isServerReloading = false;
+        _fireRequested = false;
 
-        for (int i = 0; i < states.Length; i++)
+        if (state.Slot != EWeaponSlotType.Melee)
         {
-            WeaponDataSO data = GetWeaponData((EWeaponType)i);
-            states[i] = new WeaponRuntimeState
-            {
-                currentAmmo = data != null && data.UsesAmmo ? data.MaxAmmo : 0,
-                reserveAmmo = data != null && data.UsesAmmo ? data.MaxReserveAmmo : 0,
-                nextFireTime = 0f
-            };
+            _meleeComboStep = 0;
+            _meleeComboExpireTime = 0f;
         }
+
+        if (!IsOwner || _weaponInventory == null || _ownerStates == null) return;
+
+        int slotIndex = (int)state.Slot;
+        if (slotIndex < 0 || slotIndex >= _ownerStates.Length) return;
+
+        WeaponSlotState slotState = _weaponInventory.GetSlotState(state.Slot);
+        _ownerStates[slotIndex].currentAmmo = slotState.CurrentAmmo;
+        _ownerStates[slotIndex].reserveAmmo = slotState.ReserveAmmo;
+        _ownerStates[slotIndex].nextFireTime = 0f;
+        OnAmmoChanged?.Invoke((EWeaponType)state.Slot, slotState.CurrentAmmo, slotState.ReserveAmmo);
+    }
+
+    /// <summary>인벤토리 슬롯 상태가 동기화될 때 소유자 로컬 예측 탄약을 서버 권위 값에 맞춘다.</summary>
+    private void HandleSlotUpdated(EWeaponSlotType slot, WeaponSlotState state)
+    {
+        if (!IsOwner || _ownerStates == null) return;
+
+        int index = (int)slot;
+        if (index < 0 || index >= _ownerStates.Length) return;
+
+        _ownerStates[index].currentAmmo = state.CurrentAmmo;
+        _ownerStates[index].reserveAmmo = state.ReserveAmmo;
+        OnAmmoChanged?.Invoke((EWeaponType)slot, state.CurrentAmmo, state.ReserveAmmo);
     }
 }

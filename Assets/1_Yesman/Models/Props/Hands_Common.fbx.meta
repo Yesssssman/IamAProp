@@ -553,6 +553,13 @@ ModelImporter:
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
+      - time: 0.043575417
+        functionName: OnReloadSound
+        data: 
+        objectReferenceParameter: {instanceID: 0}
+        floatParameter: 0
+        intParameter: 1
+        messageOptions: 0
       - time: 0.16759777
         functionName: ShowLeftHandMagazine
         data: 
@@ -566,6 +573,20 @@ ModelImporter:
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
         intParameter: 0
+        messageOptions: 0
+      - time: 0.40223464
+        functionName: OnReloadSound
+        data: 
+        objectReferenceParameter: {instanceID: 0}
+        floatParameter: 0
+        intParameter: 2
+        messageOptions: 0
+      - time: 0.6815643
+        functionName: OnReloadSound
+        data: 
+        objectReferenceParameter: {instanceID: 0}
+        floatParameter: 0
+        intParameter: 3
         messageOptions: 0
       transformMask: []
       maskType: 3

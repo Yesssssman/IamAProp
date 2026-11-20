@@ -12,9 +12,32 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f442477cb8ae1434884e5bb207e1a747, type: 3}
   m_Name: Weapon_M1911
   m_EditorClassIdentifier: Assembly-CSharp::WeaponDataSO
+  weaponId: m1911
   weaponName: M1911
   weaponType: 2
+  slotType: 2
   category: 1
+  equippedPrefab: {fileID: 389447474382563802, guid: b27139442064d47fd9b21b582b2fd121, type: 3}
+  worldVisualPrefab: {fileID: 0}
+  weaponAnimController: {fileID: 9100000, guid: 593c2dd6af7de4bd38b08063b27a26a8, type: 2}
+  gripPosition: {x: -0.0126, y: 0.0594, z: -0.0227}
+  gripRotation: {x: 88.07187, y: 247.8977, z: 71.43641}
+  gripScale: {x: 1, y: 1, z: 1}
+  worldPickupScale: {x: 1, y: 1, z: 1}
+  usesAimLocomotion: 1
+  handDrawClip: {fileID: 5720448858562440716, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handIdleClip: {fileID: -4528279105999121834, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handAttackClip: {fileID: -4445914306707852730, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handSecondaryAttackClip: {fileID: 0}
+  handReloadClip: {fileID: -7851223266158103639, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handShotFrames: 17
+  weaponShotFrames: 9
+  handReloadTotalFrames: 107
+  weaponReloadStartFrame: 78
+  weaponReloadTotalFrames: 9
+  handDrawTotalFrames: 47
+  weaponDrawStartFrame: 19
+  weaponDrawTotalFrames: 9
   damage: 35
   fireRate: 4
   isAutomatic: 0
