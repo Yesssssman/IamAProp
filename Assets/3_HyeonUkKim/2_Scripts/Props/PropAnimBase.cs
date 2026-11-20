@@ -91,6 +91,9 @@ public abstract class PropAnimBase : NetworkBehaviour, IPropAnimController
     /// <inheritdoc/>
     public virtual EWeaponType CurrentWeaponType => EWeaponType.Hide;
 
+    /// <inheritdoc/>
+    public virtual bool IsSwappingWeapon => false;
+
     // ***************************************************************
     // MonoBehaviour
     // ***************************************************************
@@ -200,7 +203,6 @@ public abstract class PropAnimBase : NetworkBehaviour, IPropAnimController
         {
             handAnimator.SetBool(IsAir, bodyAnimator.GetBool(IsAir));
             handAnimator.SetBool(IsJumped, bodyAnimator.GetBool(IsJumped));
-            handAnimator.SetBool(IsAttack, bodyAnimator.GetBool(IsAttack));
             handAnimator.SetInteger(WeaponMode, bodyAnimator.GetInteger(WeaponMode));
         }
 
@@ -266,6 +268,9 @@ public abstract class PropAnimBase : NetworkBehaviour, IPropAnimController
 
     /// <inheritdoc/>
     public virtual void SetAttackState(bool attacking) { }
+
+    /// <inheritdoc/>
+    public virtual void TriggerAttack(int attackVariant = 0) { }
 
     /// <inheritdoc/>
     public virtual void SetWeaponMode(EWeaponType weaponType) { }

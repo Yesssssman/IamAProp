@@ -14,6 +14,7 @@ public static class PropPrefabSetupTool
 
     private const string DefaultBodyControllerPath = "Assets/3_HyeonUkKim/4_Animations/PlayerAnim.controller";
     private const string DefaultHandControllerPath = "Assets/3_HyeonUkKim/4_Animations/HandAnim.controller";
+    private const string DefaultPlayerStatsPath = "Assets/3_HyeonUkKim/8_CombatData/DefaultPlayerStats.asset";
 
     // ***************************************************************
     // Menu Actions
@@ -76,6 +77,18 @@ public static class PropPrefabSetupTool
         }
 
         HandScript handScript = root.GetComponentInChildren<HandScript>(true);
+        PlayerScript playerScript = root.GetComponentInChildren<PlayerScript>(true);
+        if (handScript != null && playerScript != null)
+        {
+            SerializedObject handSerialized = new SerializedObject(handScript);
+            handSerialized.FindProperty("player").objectReferenceValue = playerScript;
+            handSerialized.ApplyModifiedPropertiesWithoutUndo();
+
+            SerializedObject playerSerialized = new SerializedObject(playerScript);
+            playerSerialized.FindProperty("hand").objectReferenceValue = handScript;
+            playerSerialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
         Animator handAnimator = handScript != null ? handScript.GetComponent<Animator>() : null;
         RuntimeAnimatorController baseHandController = propData != null && propData.PropTemplate != null
             ? propData.PropTemplate.BaseHandController
@@ -127,8 +140,36 @@ public static class PropPrefabSetupTool
 
         PlayerController controller = GetOrAddComponent<PlayerController>(root);
         PlayerAnim propAnim = GetOrAddComponent<PlayerAnim>(root);
+        PlayerHealth playerHealth = GetOrAddComponent<PlayerHealth>(root);
+        PlayerWeaponController weaponController = GetOrAddComponent<PlayerWeaponController>(root);
         NetworkObject netObj = GetOrAddComponent<NetworkObject>(root);
         NetworkAnimator netAnim = GetOrAddComponent<NetworkAnimator>(root);
+
+        int playerLayer = LayerMask.NameToLayer("Player");
+        if (playerLayer >= 0)
+        {
+            root.layer = playerLayer;
+        }
+
+        int combatMask = LayerMask.GetMask("Default", "Ground", "Player", "Hitbox");
+        if (combatMask != 0)
+        {
+            SerializedObject weaponSerialized = new SerializedObject(weaponController);
+            weaponSerialized.FindProperty("hitLayerMask").intValue = combatMask;
+            weaponSerialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        PlayerStatsSO defaultStats = AssetDatabase.LoadAssetAtPath<PlayerStatsSO>(DefaultPlayerStatsPath);
+        if (defaultStats != null)
+        {
+            SerializedObject healthSerialized = new SerializedObject(playerHealth);
+            SerializedProperty statsProp = healthSerialized.FindProperty("playerStats");
+            if (statsProp != null && statsProp.objectReferenceValue == null)
+            {
+                statsProp.objectReferenceValue = defaultStats;
+                healthSerialized.ApplyModifiedPropertiesWithoutUndo();
+            }
+        }
 
         foreach (NetworkTransform staleTransform in root.GetComponentsInChildren<NetworkTransform>(true))
         {

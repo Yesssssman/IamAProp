@@ -94,11 +94,16 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     private const float DefaultRotationSmoothTime = 0.1f;
     private const float DefaultJumpForce = 12f;
     private const float DefaultPushForce = 2.5f;
+    private const float DefaultStationaryPushMultiplier = 0.5f;
+    private const float DefaultMovingPushMultiplier = 1f;
     private const float DefaultRagdollToppleSpeed = 3.5f;
     private const float DefaultDownwardForce = 0.5f;
     private const float DefaultCheckRadius = 0.2f;
     private const int DefaultGroundLayerMask = 1 << 3;
     private const float GroundedMaxRiseSpeed = 0.1f; // 바닥으로 판정하는 최대 상승 속도 (m/s)
+    private const float RagdollMomentumThresholdSqr = 0.01f; // 쓰러짐 시 이동 관성으로 인정할 최소 수평 속력 제곱
+    private const float MinMomentumPushScale = 0.5f; // 관성 쓰러짐 시 최소 힘 배율
+    private const float MaxMomentumPushScale = 1.5f; // 관성 쓰러짐 시 최대 힘 배율
 
     // ***************************************************************
     // Properties
@@ -150,6 +155,12 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
 
     /// <summary>현재 프롭의 쓰러짐 수평 임펄스 크기.</summary>
     protected float PushForce => propData != null ? propData.PushForce : DefaultPushForce;
+
+    /// <summary>정지 상태 쓰러짐 시 <see cref="PushForce"/>에 곱하는 배율.</summary>
+    protected float StationaryPushMultiplier => propData != null ? propData.StationaryPushMultiplier : DefaultStationaryPushMultiplier;
+
+    /// <summary>이동 중 쓰러짐 시 <see cref="PushForce"/>에 곱하는 배율.</summary>
+    protected float MovingPushMultiplier => propData != null ? propData.MovingPushMultiplier : DefaultMovingPushMultiplier;
 
     /// <summary>현재 프롭의 쓰러짐 각속도 토크 크기.</summary>
     protected float RagdollToppleSpeed => propData != null ? propData.RagdollToppleSpeed : DefaultRagdollToppleSpeed;
@@ -411,17 +422,37 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
                 _isRagdollIdle = true;
                 _rb.constraints = RigidbodyConstraints.None;
 
-                // 소유자, 서버 및 원격 관전자가 동일한 방향으로 쓰러지도록 입력 요와 현재 회전 기반 결정적 각도를 사용한다.
-                uint seed = (uint)(Mathf.RoundToInt(rd.CameraYaw * 100f) * 73856093
-                    ^ Mathf.RoundToInt(currentRotationY * 100f) * 19349663);
-                float angleRad = ((seed * 1103515245u + 12345u) & 0xFFFFu) * (Mathf.PI * 2f / 65536f);
-                Vector3 pushDirection = new Vector3(Mathf.Cos(angleRad), 0f, Mathf.Sin(angleRad));
-                Vector3 finalForce = (pushDirection * PushForce) + (Vector3.down * DownwardForce);
+                Vector3 horizontalMomentum = new Vector3(_planarVelocity.x, 0f, _planarVelocity.z);
+                if (horizontalMomentum.sqrMagnitude < RagdollMomentumThresholdSqr)
+                {
+                    horizontalMomentum = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
+                }
+
+                Vector3 pushDirection;
+                float pushMagnitude;
+
+                if (horizontalMomentum.sqrMagnitude >= RagdollMomentumThresholdSqr)
+                {
+                    float momentumSpeed = horizontalMomentum.magnitude;
+                    pushDirection = horizontalMomentum / momentumSpeed;
+                    float speedScale = MoveSpeed > 0f
+                        ? Mathf.Clamp(momentumSpeed / MoveSpeed, MinMomentumPushScale, MaxMomentumPushScale)
+                        : 1f;
+                    pushMagnitude = PushForce * MovingPushMultiplier * speedScale;
+                }
+                else
+                {
+                    pushDirection = Quaternion.Euler(0f, currentRotationY, 0f) * Vector3.forward;
+                    pushMagnitude = PushForce * StationaryPushMultiplier;
+                }
+
+                Vector3 finalForce = (pushDirection * pushMagnitude) + (Vector3.down * DownwardForce);
+                Vector3 torqueAxis = Vector3.Cross(Vector3.up, pushDirection);
 
                 if (!_rb.isKinematic)
                 {
                     _rb.AddForce(finalForce, ForceMode.Impulse);
-                    _rb.AddTorque((_rb.rotation * Vector3.right) * RagdollToppleSpeed);
+                    _rb.AddTorque(torqueAxis * RagdollToppleSpeed);
                 }
                 OnRagdollStateChanged(true);
             }

@@ -41,6 +41,9 @@ public class PlayerController : PropControllerBase
     /// <summary>로컬 플레이어 입력 액션 에셋 인스턴스.</summary>
     private PlayerControls _inputActions;
 
+    /// <summary>발사, 탄약 및 재장전을 처리하는 무기 전투 컴포넌트.</summary>
+    private PlayerWeaponController _weaponController;
+
     /// <summary>래그돌 회전과 무관하게 수직 자세를 유지하는 카메라 추적 앵커.</summary>
     private Transform _cameraAnchor;
 
@@ -159,6 +162,12 @@ public class PlayerController : PropControllerBase
     // ***************************************************************
 
     /// <inheritdoc/>
+    protected override void OnPropAwake()
+    {
+        _weaponController = GetComponent<PlayerWeaponController>();
+    }
+
+    /// <inheritdoc/>
     protected override PlayerInputData CollectTickInput()
     {
         if (cameraTransform == null && Camera.main != null)
@@ -171,7 +180,7 @@ public class PlayerController : PropControllerBase
         float aimYaw = cameraYaw;
         if (isAiming)
         {
-            Vector3 aimPoint = CalculateAimPoint();
+            Vector3 aimPoint = GetAimPoint();
             Vector3 toAim = aimPoint - transform.position;
             toAim.y = 0f;
             if (toAim.sqrMagnitude > 0.0001f)
@@ -191,10 +200,8 @@ public class PlayerController : PropControllerBase
         bool isAiming = _propAnim != null && _propAnim.CurrentWeaponType != EWeaponType.Hide;
         if (!isAiming) return 0f;
 
-        Vector3 aimPoint = CalculateAimPoint();
-        Vector3 pivotPos = aimPitchTarget != null
-            ? aimPitchTarget.position
-            : transform.position + Vector3.up * _tpsViewOffsetY;
+        Vector3 aimPoint = GetAimPoint();
+        Vector3 pivotPos = GetFireOrigin();
         Vector3 aimDir = aimPoint - pivotPos;
         float horizontalDist = new Vector2(aimDir.x, aimDir.z).magnitude;
         if (horizontalDist <= 0.0001f && Mathf.Abs(aimDir.y) <= 0.0001f) return 0f;
@@ -204,76 +211,20 @@ public class PlayerController : PropControllerBase
     }
 
     // ***************************************************************
-    // Input Event Handlers
+    // Public Control API
     // ***************************************************************
 
-    /// <summary>이동 입력 벡터를 갱신한다.</summary>
-    private void OnMovePerformed(InputAction.CallbackContext context)
+    /// <summary>조준 및 히트스캔 발사의 기준이 되는 월드 원점을 반환한다.</summary>
+    public Vector3 GetFireOrigin()
     {
-        _moveInput = context.ReadValue<Vector2>();
+        if (aimPitchTarget != null) return aimPitchTarget.position;
+
+        float offsetY = _tpsViewOffsetY > 0f ? _tpsViewOffsetY : DefaultTpsViewOffsetY;
+        return transform.position + Vector3.up * offsetY;
     }
-
-    /// <summary>이동 입력이 해제되면 입력 벡터를 초기화한다.</summary>
-    private void OnMoveCanceled(InputAction.CallbackContext context)
-    {
-        _moveInput = Vector2.zero;
-    }
-
-    /// <summary>바닥에 닿아 있을 때 점프 요청 플래그를 설정한다.</summary>
-    private void OnJump(InputAction.CallbackContext context)
-    {
-        if (!IsOwner || !_isGrounded) return;
-
-        _jumpRequested = true;
-    }
-
-    /// <summary>공격 입력 시작 시 상태를 갱신한다.</summary>
-    private void OnAttackStarted(InputAction.CallbackContext context)
-    {
-        if (!IsOwner) return;
-
-        _EplayerState = EPlayerState.Attack;
-        _propAnim?.SetAttackState(true);
-    }
-
-    /// <summary>공격 입력 종료 시 상태를 복원한다.</summary>
-    private void OnAttackEnd(InputAction.CallbackContext context)
-    {
-        if (!IsOwner) return;
-
-        _EplayerState = _isGrounded ? EPlayerState.Idle : EPlayerState.Air;
-        _propAnim?.SetAttackState(false);
-    }
-
-    /// <summary>무기 전환 입력에 따라 무기 모드를 변경한다.</summary>
-    private void ChangeWeaponMode(InputAction.CallbackContext context)
-    {
-        if (!IsOwner) return;
-
-        int weaponIndex = Mathf.Clamp(Mathf.RoundToInt(context.ReadValue<float>()) - 1, 0, 3);
-        EWeaponType weaponType = (EWeaponType)weaponIndex;
-        if (weaponType == EWeaponType.Hide)
-        {
-            _EplayerState = _isGrounded ? EPlayerState.Idle : EPlayerState.Air;
-        }
-
-        _propAnim?.SetWeaponMode(weaponType);
-    }
-
-    /// <summary>재장전 입력 시 손 재장전 시퀀스를 요청한다.</summary>
-    private void OnReloadStarted(InputAction.CallbackContext context)
-    {
-        if (!IsOwner) return;
-
-        _propAnim?.RequestReload();
-    }
-
-    // ***************************************************************
-    // Helpers
-    // ***************************************************************
 
     /// <summary>메인 카메라 정중앙(Viewport 0.5, 0.5) 레이캐스트로 조준 월드 좌표를 계산한다.</summary>
-    private Vector3 CalculateAimPoint()
+    public Vector3 GetAimPoint()
     {
         Camera mainCamera = Camera.main;
         if (mainCamera == null)
@@ -283,9 +234,7 @@ public class PlayerController : PropControllerBase
         }
 
         Ray ray = mainCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
-        Vector3 pivotPos = aimPitchTarget != null
-            ? aimPitchTarget.position
-            : transform.position + Vector3.up * _tpsViewOffsetY;
+        Vector3 pivotPos = GetFireOrigin();
         float minDistance = Vector3.Distance(ray.origin, pivotPos);
 
         int hitCount = Physics.RaycastNonAlloc(
@@ -313,6 +262,97 @@ public class PlayerController : PropControllerBase
 
         return closestPoint;
     }
+
+    // ***************************************************************
+    // Input Event Handlers
+    // ***************************************************************
+
+    /// <summary>이동 입력 벡터를 갱신한다.</summary>
+    private void OnMovePerformed(InputAction.CallbackContext context)
+    {
+        _moveInput = context.ReadValue<Vector2>();
+    }
+
+    /// <summary>이동 입력이 해제되면 입력 벡터를 초기화한다.</summary>
+    private void OnMoveCanceled(InputAction.CallbackContext context)
+    {
+        _moveInput = Vector2.zero;
+    }
+
+    /// <summary>바닥에 닿아 있을 때 점프 요청 플래그를 설정한다.</summary>
+    private void OnJump(InputAction.CallbackContext context)
+    {
+        if (!IsOwner || !_isGrounded) return;
+
+        _jumpRequested = true;
+    }
+
+    /// <summary>공격 입력 시작 시 무기 공격 또는 상태를 갱신한다.</summary>
+    private void OnAttackStarted(InputAction.CallbackContext context)
+    {
+        if (!IsOwner) return;
+
+        _EplayerState = EPlayerState.Attack;
+        if (_weaponController != null)
+        {
+            _weaponController.SetFireInput(true);
+        }
+        else
+        {
+            _propAnim?.SetAttackState(true);
+        }
+    }
+
+    /// <summary>공격 입력 종료 시 상태를 복원한다.</summary>
+    private void OnAttackEnd(InputAction.CallbackContext context)
+    {
+        if (!IsOwner) return;
+
+        _EplayerState = _isGrounded ? EPlayerState.Idle : EPlayerState.Air;
+        if (_weaponController != null)
+        {
+            _weaponController.SetFireInput(false);
+        }
+        else
+        {
+            _propAnim?.SetAttackState(false);
+        }
+    }
+
+    /// <summary>무기 전환 입력에 따라 무기 모드를 변경한다.</summary>
+    private void ChangeWeaponMode(InputAction.CallbackContext context)
+    {
+        if (!IsOwner) return;
+
+        int weaponIndex = Mathf.Clamp(Mathf.RoundToInt(context.ReadValue<float>()) - 1, 0, 3);
+        EWeaponType weaponType = (EWeaponType)weaponIndex;
+        if (weaponType == EWeaponType.Hide)
+        {
+            _EplayerState = _isGrounded ? EPlayerState.Idle : EPlayerState.Air;
+        }
+
+        _weaponController?.SetFireInput(false);
+        _propAnim?.SetWeaponMode(weaponType);
+    }
+
+    /// <summary>재장전 입력 시 무기 재장전 시퀀스를 요청한다.</summary>
+    private void OnReloadStarted(InputAction.CallbackContext context)
+    {
+        if (!IsOwner) return;
+
+        if (_weaponController != null)
+        {
+            _weaponController.TryStartReload();
+        }
+        else
+        {
+            _propAnim?.RequestReload();
+        }
+    }
+
+    // ***************************************************************
+    // Helpers
+    // ***************************************************************
 
     /// <summary>카메라 추적 앵커의 월드 위치와 수직 회전을 갱신한다.</summary>
     private void UpdateCameraAnchorPosition()

@@ -39,6 +39,7 @@ MonoBehaviour:
     gripScale: {x: 1, y: 1, z: 1}
     reloadClip: {fileID: 0}
     usesAimLocomotion: 0
+    weaponData: {fileID: 0}
   - weaponPrefab: {fileID: 5489145493786919654, guid: c331d4509e2a94446b4dedf64fcae8dd, type: 3}
     weaponAnimController: {fileID: 0}
     gripPosition: {x: -0.0139, y: 0.018, z: 0.0018}
@@ -46,6 +47,7 @@ MonoBehaviour:
     gripScale: {x: 0.4, y: 0.4, z: 0.4}
     reloadClip: {fileID: 0}
     usesAimLocomotion: 0
+    weaponData: {fileID: 11400000, guid: 0e5ab66a214064daf80a7ef147f5cf41, type: 2}
   - weaponPrefab: {fileID: 389447474382563802, guid: b27139442064d47fd9b21b582b2fd121, type: 3}
     weaponAnimController: {fileID: 9100000, guid: 593c2dd6af7de4bd38b08063b27a26a8, type: 2}
     gripPosition: {x: -0.0126, y: 0.0594, z: -0.0227}
@@ -53,6 +55,7 @@ MonoBehaviour:
     gripScale: {x: 1, y: 1, z: 1}
     reloadClip: {fileID: -7851223266158103639, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
     usesAimLocomotion: 1
+    weaponData: {fileID: 11400000, guid: 52c21af8a1c304783bfcf694026f9b8c, type: 2}
   - weaponPrefab: {fileID: 5803435650769594868, guid: 3f3191eb7a96f421a8fa7deafb3c1f96, type: 3}
     weaponAnimController: {fileID: 9100000, guid: bda809c67aa1b4b13b22130c52b507a9, type: 2}
     gripPosition: {x: -0.026, y: -0.008, z: -0.006}
@@ -60,3 +63,4 @@ MonoBehaviour:
     gripScale: {x: 1, y: 1, z: 1}
     reloadClip: {fileID: -8794803593805319676, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
     usesAimLocomotion: 1
+    weaponData: {fileID: 11400000, guid: 72839a025a9b5463f965a652766284f1, type: 2}

@@ -34,4 +34,7 @@ public struct WeaponSocketConfig
 
     /// <summary>장착 상태에서 이동 시 조준 달리기 클립(<c>AimRun</c>)을 사용하는지 여부.</summary>
     public bool usesAimLocomotion;
+
+    /// <summary>이 무기 슬롯의 전투 수치 및 탄약 설정 데이터.</summary>
+    public WeaponDataSO weaponData;
 }

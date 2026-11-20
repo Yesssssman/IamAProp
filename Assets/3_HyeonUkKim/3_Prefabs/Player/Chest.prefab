@@ -580,7 +580,9 @@ GameObject:
   - component: {fileID: 4765010759104181973}
   - component: {fileID: 4159930911269044539}
   - component: {fileID: 7493107775755073766}
-  m_Layer: 0
+  - component: {fileID: 6246328158675017490}
+  - component: {fileID: 6175173369040991702}
+  m_Layer: 6
   m_Name: Chest
   m_TagString: Player
   m_Icon: {fileID: 0}
@@ -762,7 +764,7 @@ MonoBehaviour:
   visualRoot: {fileID: 2730633786416741621}
   aimLayerMask:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 201
   defaultAimDistance: 100
 --- !u!114 &7493107775755073766
 MonoBehaviour:
@@ -788,6 +790,41 @@ MonoBehaviour:
   _interpolation: 2
   _clientAuthoritative: 1
   _sendToOwner: 0
+--- !u!114 &6246328158675017490
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6702709510663897090}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cf0c6025d33434d4585416219c050ec0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 4765010759104181973}
+  _networkObjectCache: {fileID: 0}
+  playerStats: {fileID: 11400000, guid: 0efc9cd7cbe0744e29af7bf98f44a944, type: 2}
+--- !u!114 &6175173369040991702
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6702709510663897090}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 034a176965d574344ac91391cd549200, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerWeaponController
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 4765010759104181973}
+  _networkObjectCache: {fileID: 0}
+  hitLayerMask:
+    serializedVersion: 2
+    m_Bits: 201
+  debugRayDuration: 1.5
 --- !u!1 &7452713500753112539
 GameObject:
   m_ObjectHideFlags: 0
@@ -956,6 +993,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 6858098751255699325}
     m_Modifications:
+    - target: {fileID: 929236115981877079, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
+      propertyPath: player
+      value: 
+      objectReference: {fileID: 7924284824165369166}
     - target: {fileID: 2309304906393934103, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
       propertyPath: m_Controller
       value: 

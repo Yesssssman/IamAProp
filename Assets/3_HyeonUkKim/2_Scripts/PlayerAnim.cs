@@ -59,6 +59,12 @@ public class PlayerAnim : PropAnimBase
     /// <summary>소총 드로우 애니메이션 상태(<c>AK_Draw</c>) 해시.</summary>
     private static readonly int AkDrawState = Animator.StringToHash("AK_Draw");
 
+    /// <summary>단검 1타 공격 애니메이션 상태(<c>Knife_Swing</c>) 해시.</summary>
+    private static readonly int KnifeSwingState = Animator.StringToHash("Knife_Swing");
+
+    /// <summary>단검 2타 공격 애니메이션 상태(<c>Knife_Swing2</c>) 해시.</summary>
+    private static readonly int KnifeSwing2State = Animator.StringToHash("Knife_Swing2");
+
     /// <summary>권총 발사 애니메이션 상태(<c>M1911_Shot</c>) 해시.</summary>
     private static readonly int M1911ShotState = Animator.StringToHash("M1911_Shot");
 
@@ -95,6 +101,21 @@ public class PlayerAnim : PropAnimBase
 
     /// <inheritdoc/>
     public override EWeaponType CurrentWeaponType => _weaponType.Value;
+
+    /// <inheritdoc/>
+    public override bool IsSwappingWeapon
+    {
+        get
+        {
+            if (_pendingWeaponSwapReset) return true;
+            if (handAnimator == null) return false;
+
+            int currentHash = handAnimator.GetCurrentAnimatorStateInfo(0).shortNameHash;
+            int nextHash = handAnimator.IsInTransition(0) ? handAnimator.GetNextAnimatorStateInfo(0).shortNameHash : 0;
+            return currentHash == KnifeDrawState || currentHash == M1911DrawState || currentHash == AkDrawState
+                || nextHash == KnifeDrawState || nextHash == M1911DrawState || nextHash == AkDrawState;
+        }
+    }
 
     // ***************************************************************
     // MonoBehaviour
@@ -231,6 +252,39 @@ public class PlayerAnim : PropAnimBase
         if (_weaponAnimator != null && _weaponAnimator.runtimeAnimatorController != null)
         {
             _weaponAnimator.SetBool(IsAttack, canAttack);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void TriggerAttack(int attackVariant = 0)
+    {
+        if (handAnimator == null) return;
+
+        EWeaponType currentWeapon = _weaponType.Value;
+        int shotState = currentWeapon switch
+        {
+            EWeaponType.KnifeMode => attackVariant == 1 ? KnifeSwing2State : KnifeSwingState,
+            EWeaponType.Pistol => M1911ShotState,
+            EWeaponType.Ak => AkShotState,
+            _ => 0
+        };
+        if (shotState == 0) return;
+
+        handAnimator.SetBool(IsAttack, false);
+        if (currentWeapon == EWeaponType.KnifeMode)
+        {
+            handAnimator.CrossFadeInFixedTime(shotState, 0.05f, 0, 0f);
+        }
+        else
+        {
+            handAnimator.Play(shotState, 0, 0f);
+        }
+
+        if (_weaponAnimator != null && _weaponAnimator.runtimeAnimatorController != null)
+        {
+            _weaponAnimator.SetBool(IsAttack, true);
+            _weaponAnimator.SetBool(IsReload, false);
+            _weaponAnimator.Play(WeaponShotState, 0, 0f);
         }
     }
 

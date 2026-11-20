@@ -30,6 +30,12 @@ public class PropDataSO : ScriptableObject
     [Header("래그돌 및 물리 설정")]
     [SerializeField] private float pushForce = 2.5f;
 
+    /// <summary>정지 상태에서 쓰러질 때 <see cref="pushForce"/>에 곱하는 배율.</summary>
+    [SerializeField] private float stationaryPushMultiplier = 0.5f;
+
+    /// <summary>이동 중 쓰러질 때 <see cref="pushForce"/>에 곱하는 배율.</summary>
+    [SerializeField] private float movingPushMultiplier = 1f;
+
     /// <summary>맨손 정지 쓰러짐 진입 시 부여하는 초기 각속도 토크 크기.</summary>
     [SerializeField] private float ragdollToppleSpeed = 3.5f;
 
@@ -80,6 +86,12 @@ public class PropDataSO : ScriptableObject
 
     /// <summary>쓰러짐 수평 임펄스 크기.</summary>
     public float PushForce => pushForce;
+
+    /// <summary>정지 상태 쓰러짐 힘 배율.</summary>
+    public float StationaryPushMultiplier => stationaryPushMultiplier;
+
+    /// <summary>이동 중 쓰러짐 힘 배율.</summary>
+    public float MovingPushMultiplier => movingPushMultiplier;
 
     /// <summary>쓰러짐 토크 크기.</summary>
     public float RagdollToppleSpeed => ragdollToppleSpeed;

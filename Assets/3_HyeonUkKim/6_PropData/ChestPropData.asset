@@ -14,10 +14,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PropDataSO
   propType: 1
   propTemplate: {fileID: 11400000, guid: c5d7eff3d58dc4967a552d55d104f25d, type: 2}
-  moveSpeed: 5
+  moveSpeed: 3
   rotationSmoothTime: 0.1
-  jumpForce: 12
+  jumpForce: 15
   pushForce: 2.5
+  stationaryPushMultiplier: 0.5
+  movingPushMultiplier: 1
   ragdollToppleSpeed: 3.5
   downwardForce: 0.5
   rigidbodyMass: 3
