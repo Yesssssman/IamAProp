@@ -58,7 +58,7 @@ namespace Networking
         public const string ALREADY_ONLINE = "ALREADY_ONLINE";
         public const string NO_AUTH_INFO_IN_LOCAL = "NO_AUTH_INFO_IN_LOCAL";
         public const string NO_REFRESH_TOKEN = "NO_REFRESH_TOKEN";
-        public const string NOT_IN_LOBBY = "NOT_IN_LOBBY";
+        public const string NOT_IN_ROOM = "NOT_IN_ROOM";
         public const string RELAY_CONNECTION_FAILED = "RELAY_CONNECTION_FAILED"; // Relay 참가 또는 호스트 접속 실패
         public const string CONNECTION_ERROR = "CONNECTION_ERROR"; // 서버 다운 또는 디바이스 오프라인
         public const string INVALID_RESPONSE = "INVALID_RESPONSE"; // 응답 본문이 JSON이 아님
