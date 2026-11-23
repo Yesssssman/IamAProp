@@ -61,3 +61,12 @@ MonoBehaviour:
   - {fileID: 8300000, guid: 712767e92f043411b9f4373ffdd61267, type: 3}
   shotVolume: 1
   reloadVolume: 1
+  recoilPitch: 2.8
+  recoilYawMin: -0.4
+  recoilYawMax: 0.4
+  recoilSnappiness: 25
+  recoilReturnSpeed: 12
+  maxRecoilPitch: 7
+  maxRecoilYaw: 2
+  shakeIntensity: 0.85
+  shakeDuration: 0.05

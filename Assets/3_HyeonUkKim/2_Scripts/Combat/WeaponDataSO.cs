@@ -160,6 +160,41 @@ public class WeaponDataSO : ScriptableObject
     [Range(0f, 1f)]
     [SerializeField] private float reloadVolume = 1f;
 
+    /// <summary>1발 발사 시 카메라가 위로 튀는 상하 반동 각도 (도 단위).</summary>
+    [Header("반동 및 화면 흔들림")]
+    [Min(0f)]
+    [SerializeField] private float recoilPitch;
+
+    /// <summary>1발 발사 시 카메라 좌우 반동 최소 각도 (도 단위).</summary>
+    [SerializeField] private float recoilYawMin;
+
+    /// <summary>1발 발사 시 카메라 좌우 반동 최대 각도 (도 단위).</summary>
+    [SerializeField] private float recoilYawMax;
+
+    /// <summary>반동 목표 각도로 튀어 오르는 반응 속도.</summary>
+    [Min(0.01f)]
+    [SerializeField] private float recoilSnappiness = 20f;
+
+    /// <summary>반동 오프셋이 원래 조준점으로 복귀하는 속도.</summary>
+    [Min(0.01f)]
+    [SerializeField] private float recoilReturnSpeed = 10f;
+
+    /// <summary>연사 시 누적되는 상하 반동 최대 각도 제한 (도 단위).</summary>
+    [Min(0f)]
+    [SerializeField] private float maxRecoilPitch = 10f;
+
+    /// <summary>연사 시 누적되는 좌우 반동 최대 절대 각도 제한 (도 단위).</summary>
+    [Min(0f)]
+    [SerializeField] private float maxRecoilYaw = 5f;
+
+    /// <summary>발사 순간 미세 펄스 화면 흔들림 강도.</summary>
+    [Min(0f)]
+    [SerializeField] private float shakeIntensity;
+
+    /// <summary>발사 순간 미세 펄스 화면 흔들림 지속 시간 (초 단위).</summary>
+    [Min(0f)]
+    [SerializeField] private float shakeDuration = 0.05f;
+
     // ***************************************************************
     // Properties
     // ***************************************************************
@@ -286,6 +321,33 @@ public class WeaponDataSO : ScriptableObject
 
     /// <summary>재장전 사운드 볼륨 배율.</summary>
     public float ReloadVolume => reloadVolume;
+
+    /// <summary>1발 발사 시 상하 반동 각도 (도 단위).</summary>
+    public float RecoilPitch => recoilPitch;
+
+    /// <summary>1발 발사 시 좌우 반동 최소 각도 (도 단위).</summary>
+    public float RecoilYawMin => recoilYawMin;
+
+    /// <summary>1발 발사 시 좌우 반동 최대 각도 (도 단위).</summary>
+    public float RecoilYawMax => recoilYawMax;
+
+    /// <summary>반동 반응 속도.</summary>
+    public float RecoilSnappiness => recoilSnappiness;
+
+    /// <summary>반동 원점 복귀 속도.</summary>
+    public float RecoilReturnSpeed => recoilReturnSpeed;
+
+    /// <summary>누적 상하 반동 최대 각도 제한 (도 단위).</summary>
+    public float MaxRecoilPitch => maxRecoilPitch;
+
+    /// <summary>누적 좌우 반동 최대 절대 각도 제한 (도 단위).</summary>
+    public float MaxRecoilYaw => maxRecoilYaw;
+
+    /// <summary>발사 순간 미세 펄스 화면 흔들림 강도.</summary>
+    public float ShakeIntensity => shakeIntensity;
+
+    /// <summary>발사 순간 미세 펄스 화면 흔들림 지속 시간 (초 단위).</summary>
+    public float ShakeDuration => shakeDuration;
 
     // ***************************************************************
     // Public Control API

@@ -322,6 +322,11 @@ public class PlayerWeaponController : NetworkBehaviour
         Vector3 direction = aimPoint - origin;
         direction = direction.sqrMagnitude > 0.0001f ? direction.normalized : transform.forward;
 
+        if (PredictionManager == null || !PredictionManager.IsReconciling)
+        {
+            _playerController?.ApplyWeaponCameraFeedback(weaponData);
+        }
+
         RequestFireServerRpc(origin, direction, activeSlot, activeWeaponId, attackVariant);
     }
 

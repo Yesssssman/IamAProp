@@ -58,3 +58,12 @@ MonoBehaviour:
   reloadClips: []
   shotVolume: 1
   reloadVolume: 1
+  recoilPitch: 0
+  recoilYawMin: 0
+  recoilYawMax: 0
+  recoilSnappiness: 20
+  recoilReturnSpeed: 10
+  maxRecoilPitch: 0
+  maxRecoilYaw: 0
+  shakeIntensity: 0
+  shakeDuration: 0.05

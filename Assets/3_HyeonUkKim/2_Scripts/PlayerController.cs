@@ -47,6 +47,9 @@ public class PlayerController : PropControllerBase
     /// <summary>4슬롯 무기 보유 및 줍기/버리기를 관리하는 인벤토리 컴포넌트.</summary>
     private PlayerWeaponInventory _weaponInventory;
 
+    /// <summary>로컬 소유자 시네머신 카메라의 무기 반동 및 미세 펄스 흔들림 확장 컴포넌트.</summary>
+    private CinemachineWeaponFeedback _cameraFeedback;
+
     /// <summary>래그돌 회전과 무관하게 수직 자세를 유지하는 카메라 추적 앵커.</summary>
     private Transform _cameraAnchor;
 
@@ -129,6 +132,13 @@ public class PlayerController : PropControllerBase
             {
                 orbitalFollow.HorizontalAxis.Value = transform.eulerAngles.y;
             }
+
+            _cameraFeedback = cam.GetComponent<CinemachineWeaponFeedback>();
+            if (_cameraFeedback == null)
+            {
+                _cameraFeedback = cam.gameObject.AddComponent<CinemachineWeaponFeedback>();
+            }
+            _cameraFeedback.ResetFeedback();
         }
 
         if (Camera.main != null)
@@ -146,6 +156,12 @@ public class PlayerController : PropControllerBase
         {
             Destroy(_cameraAnchor.gameObject);
             _cameraAnchor = null;
+        }
+
+        if (_cameraFeedback != null)
+        {
+            _cameraFeedback.ResetFeedback();
+            _cameraFeedback = null;
         }
 
         if (_inputActions == null) return;
@@ -246,6 +262,13 @@ public class PlayerController : PropControllerBase
     // ***************************************************************
     // Public Control API
     // ***************************************************************
+
+    /// <summary>로컬 소유자 카메라에 <paramref name="weaponData"/> 기반 발사 반동과 미세 펄스 흔들림을 적용한다.</summary>
+    public void ApplyWeaponCameraFeedback(WeaponDataSO weaponData)
+    {
+        if (!IsOwner || IsDead || weaponData == null || _cameraFeedback == null) return;
+        _cameraFeedback.ApplyWeaponFeedback(weaponData);
+    }
 
     /// <summary>조준 및 히트스캔 발사의 기준이 되는 월드 원점을 반환한다.</summary>
     public Vector3 GetFireOrigin()
