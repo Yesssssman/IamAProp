@@ -4,7 +4,8 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
 
-/// <summary>로컬 플레이어 사망 후 시체 포커스, 관전하기 UI 표시 및 킬러 3인칭 자유 회전 관전 카메라 전환을 제어한다.</summary>
+/// <summary>로컬 플레이어 사망 후 킬러 방향 포커스, 관전하기 UI 표시 및 킬러 3인칭 자유 회전 관전 카메라 전환을 제어한다.</summary>
+[DefaultExecutionOrder(-90)]
 [DisallowMultipleComponent]
 [RequireComponent(typeof(CinemachineCamera))]
 public class DeathCamController : MonoBehaviour
@@ -42,9 +43,16 @@ public class DeathCamController : MonoBehaviour
     [Header("데스캠 UI 및 타이밍")]
     [SerializeField] private DeathCamUI deathCamUIPrefab;
 
-    /// <summary>사망 직후 자신의 시체(래그돌)를 포커스하는 시간 (초 단위).</summary>
+    /// <summary>사망 및 관전 중 숨길 화면 중앙 크로스헤어 오브젝트.</summary>
+    [SerializeField] private GameObject crosshairObject;
+
+    /// <summary>사망 직후 킬러 방향을 바라보며 대기하는 시간 (초 단위).</summary>
     [Min(0f)]
     [SerializeField] private float deathFocusDuration = 3f;
+
+    /// <summary>사망 직후 카메라 시선이 킬러 방향으로 회전하는 보간 속도.</summary>
+    [Min(0.1f)]
+    [SerializeField] private float killerLookTurnSpeed = 10f;
 
     /// <summary>비활성 대기 상태에서 <see cref="spectateCamera"/>에 적용할 우선순위.</summary>
     [Header("카메라 우선순위")]
@@ -55,6 +63,9 @@ public class DeathCamController : MonoBehaviour
 
     /// <summary><see cref="playerCamera"/>의 마우스 시점 입력 컨트롤러.</summary>
     private CinemachineInputAxisController _playerInputAxisController;
+
+    /// <summary><see cref="playerCamera"/>의 시선 조준 컴포저.</summary>
+    private CinemachineRotationComposer _playerRotationComposer;
 
     /// <summary><see cref="spectateCamera"/>의 3인칭 공전 추적 컴포넌트.</summary>
     private CinemachineOrbitalFollow _spectateOrbitalFollow;
@@ -68,11 +79,17 @@ public class DeathCamController : MonoBehaviour
     /// <summary>관전 대상의 회전과 무관하게 수직 자세를 유지하는 로컬 전용 카메라 추적 앵커.</summary>
     private Transform _spectateAnchor;
 
+    /// <summary>사망 직후 기존 카메라 위치에서 킬러 방향만 바라보게 유도하는 로컬 전용 주시 앵커.</summary>
+    private Transform _killerLookAtAnchor;
+
     /// <summary>사망 시퀀스를 시작한 로컬 플레이어 참조.</summary>
     private PlayerController _localDeadPlayer;
 
     /// <summary>서버로부터 전달받은 킬러의 <see cref="NetworkObject"/> 참조.</summary>
     private NetworkObject _killerNetworkObject;
+
+    /// <summary>킬러의 카메라 기준 좌표를 조회하기 위한 <see cref="PlayerController"/> 참조.</summary>
+    private PlayerController _killerPlayer;
 
     /// <summary>현재 관전 중인 대상 플레이어 컨트롤러.</summary>
     private PlayerController _spectateTargetPlayer;
@@ -83,10 +100,22 @@ public class DeathCamController : MonoBehaviour
     /// <summary>현재 관전 중인 대상의 체력 컴포넌트.</summary>
     private PlayerHealth _spectateTargetHealth;
 
+    /// <summary>사망 직전 <see cref="_playerRotationComposer"/>의 원래 화면 구성 오프셋.</summary>
+    private Vector2 _savedPlayerScreenPosition;
+
+    /// <summary><see cref="_savedPlayerScreenPosition"/> 백업 여부.</summary>
+    private bool _hasSavedPlayerScreenPosition;
+
+    /// <summary>사망 포커스 중 현재 카메라가 바라보는 정규화 시선 방향.</summary>
+    private Vector3 _currentKillerLookDir;
+
+    /// <summary>사망 포커스 중 킬러 방향 주시가 활성화되었는지 여부.</summary>
+    private bool _hasKillerLookDir;
+
     /// <summary>현재 데스캠 진행 상태.</summary>
     private EDeathCamState _state;
 
-    /// <summary>시체 포커스 종료까지 남은 시간 (초 단위).</summary>
+    /// <summary>사망 포커스 종료까지 남은 시간 (초 단위).</summary>
     private float _focusRemainingTime;
 
     // ***************************************************************
@@ -129,9 +158,11 @@ public class DeathCamController : MonoBehaviour
         if (playerCamera != null)
         {
             _playerInputAxisController = playerCamera.GetComponent<CinemachineInputAxisController>();
+            _playerRotationComposer = playerCamera.GetComponent<CinemachineRotationComposer>();
         }
 
         _spectateAnchor = new GameObject("SpectateCameraAnchor").transform;
+        _killerLookAtAnchor = new GameObject("KillerLookAtAnchor").transform;
     }
 
     private void Update()
@@ -168,6 +199,33 @@ public class DeathCamController : MonoBehaviour
 
     private void LateUpdate()
     {
+        if ((_state == EDeathCamState.FocusingCorpse || _state == EDeathCamState.WaitingForSpectateClick)
+            && _hasKillerLookDir
+            && _killerLookAtAnchor != null)
+        {
+            if (_killerNetworkObject != null && _killerNetworkObject.IsSpawned)
+            {
+                Vector3 camPos = Camera.main != null
+                    ? Camera.main.transform.position
+                    : (playerCamera != null ? playerCamera.transform.position : Vector3.zero);
+                Vector3 killerPos = _killerPlayer != null
+                    ? _killerPlayer.GetCameraTargetPosition()
+                    : _killerNetworkObject.transform.position;
+                Vector3 toKiller = killerPos - camPos;
+                float dist = toKiller.magnitude;
+                if (dist > 0.01f)
+                {
+                    Vector3 targetDir = toKiller / dist;
+                    Quaternion currentRot = Quaternion.LookRotation(_currentKillerLookDir, Vector3.up);
+                    Quaternion targetRot = Quaternion.LookRotation(targetDir, Vector3.up);
+                    float turnT = 1f - Mathf.Exp(-killerLookTurnSpeed * Time.deltaTime);
+                    _currentKillerLookDir = (Quaternion.Slerp(currentRot, targetRot, turnT) * Vector3.forward).normalized;
+                    _killerLookAtAnchor.SetPositionAndRotation(camPos + _currentKillerLookDir * Mathf.Max(1f, dist), Quaternion.identity);
+                }
+            }
+            return;
+        }
+
         if (_state != EDeathCamState.Spectating || _spectateAnchor == null) return;
 
         bool isSpectatingOther = _spectateTargetPlayer != _localDeadPlayer;
@@ -193,6 +251,8 @@ public class DeathCamController : MonoBehaviour
 
     private void OnDestroy()
     {
+        RestorePlayerComposerScreenPosition();
+
         if (_deathCamUIInstance != null)
         {
             _deathCamUIInstance.OnSpectateClicked -= HandleSpectateClicked;
@@ -202,6 +262,12 @@ public class DeathCamController : MonoBehaviour
         {
             Destroy(_spectateAnchor.gameObject);
             _spectateAnchor = null;
+        }
+
+        if (_killerLookAtAnchor != null)
+        {
+            Destroy(_killerLookAtAnchor.gameObject);
+            _killerLookAtAnchor = null;
         }
     }
 
@@ -216,9 +282,10 @@ public class DeathCamController : MonoBehaviour
 
         playerCamera = cam;
         _playerInputAxisController = playerCamera.GetComponent<CinemachineInputAxisController>();
+        _playerRotationComposer = playerCamera.GetComponent<CinemachineRotationComposer>();
     }
 
-    /// <summary>로컬 플레이어 사망 시 시체 포커스 단계와 킬러 정보를 등록한다.</summary>
+    /// <summary>로컬 플레이어 사망 시 크로스헤어를 숨기고 현재 카메라 위치에서 킬러 방향을 바라보는 포커스 단계를 시작한다.</summary>
     public void BeginDeathSequence(PlayerController localDeadPlayer, NetworkObject killerNetworkObject)
     {
         if (localDeadPlayer == null) return;
@@ -238,11 +305,18 @@ public class DeathCamController : MonoBehaviour
 
         _localDeadPlayer = localDeadPlayer;
         _killerNetworkObject = killerNetworkObject;
+        _killerPlayer = killerNetworkObject != null ? killerNetworkObject.GetComponent<PlayerController>() : null;
         _spectateTargetPlayer = null;
         _spectateTargetTransform = null;
         _spectateTargetHealth = null;
+        _hasKillerLookDir = false;
 
         _deathCamUIInstance?.Hide();
+
+        if (crosshairObject != null)
+        {
+            crosshairObject.SetActive(false);
+        }
 
         if (spectateCamera != null)
         {
@@ -260,22 +334,57 @@ public class DeathCamController : MonoBehaviour
             _spectateInputAxisController.enabled = false;
         }
 
+        bool hasValidKiller = _killerNetworkObject != null && _killerNetworkObject.IsSpawned;
+
         if (playerCamera != null && _localDeadPlayer.CameraAnchor != null)
         {
             playerCamera.Follow = _localDeadPlayer.CameraAnchor;
-            playerCamera.LookAt = _localDeadPlayer.CameraAnchor;
+
+            if (hasValidKiller && _killerLookAtAnchor != null)
+            {
+                if (_playerRotationComposer != null)
+                {
+                    if (!_hasSavedPlayerScreenPosition)
+                    {
+                        _savedPlayerScreenPosition = _playerRotationComposer.Composition.ScreenPosition;
+                        _hasSavedPlayerScreenPosition = true;
+                    }
+
+                    ScreenComposerSettings composition = _playerRotationComposer.Composition;
+                    composition.ScreenPosition = Vector2.zero;
+                    _playerRotationComposer.Composition = composition;
+                }
+
+                Vector3 camPos = Camera.main != null ? Camera.main.transform.position : playerCamera.transform.position;
+                Vector3 initialForward = Camera.main != null ? Camera.main.transform.forward : playerCamera.transform.forward;
+                Vector3 killerPos = _killerPlayer != null
+                    ? _killerPlayer.GetCameraTargetPosition()
+                    : _killerNetworkObject.transform.position;
+
+                _currentKillerLookDir = initialForward.sqrMagnitude > 0.0001f ? initialForward.normalized : Vector3.forward;
+                _hasKillerLookDir = true;
+                _killerLookAtAnchor.SetPositionAndRotation(
+                    camPos + _currentKillerLookDir * Mathf.Max(1f, Vector3.Distance(camPos, killerPos)),
+                    Quaternion.identity);
+                playerCamera.LookAt = _killerLookAtAnchor;
+            }
+            else
+            {
+                RestorePlayerComposerScreenPosition();
+                playerCamera.LookAt = _localDeadPlayer.CameraAnchor;
+            }
         }
 
         if (_playerInputAxisController != null)
         {
-            _playerInputAxisController.enabled = true;
+            _playerInputAxisController.enabled = !hasValidKiller;
         }
 
         _focusRemainingTime = Mathf.Max(0f, deathFocusDuration);
         _state = EDeathCamState.FocusingCorpse;
     }
 
-    /// <summary>리스폰 또는 라운드 초기화 시 카메라, 우선순위, 타겟, 커서 및 데스캠 UI를 원래 상태로 원복한다.</summary>
+    /// <summary>리스폰 또는 라운드 초기화 시 카메라, 우선순위, 타겟, 커서, 크로스헤어 및 데스캠 UI를 원래 상태로 원복한다.</summary>
     public void ResetDeathCam()
     {
         PlayerController previousLocalPlayer = _localDeadPlayer;
@@ -284,11 +393,19 @@ public class DeathCamController : MonoBehaviour
         _focusRemainingTime = 0f;
         _localDeadPlayer = null;
         _killerNetworkObject = null;
+        _killerPlayer = null;
         _spectateTargetPlayer = null;
         _spectateTargetTransform = null;
         _spectateTargetHealth = null;
+        _hasKillerLookDir = false;
 
         _deathCamUIInstance?.Hide();
+        RestorePlayerComposerScreenPosition();
+
+        if (crosshairObject != null)
+        {
+            crosshairObject.SetActive(true);
+        }
 
         if (spectateCamera != null)
         {
@@ -396,6 +513,21 @@ public class DeathCamController : MonoBehaviour
     // ***************************************************************
     // Helpers
     // ***************************************************************
+
+    /// <summary>사망 포커스 중 변경한 <see cref="_playerRotationComposer"/>의 화면 구성 오프셋을 원래 값으로 복원한다.</summary>
+    private void RestorePlayerComposerScreenPosition()
+    {
+        if (!_hasSavedPlayerScreenPosition) return;
+
+        if (_playerRotationComposer != null)
+        {
+            ScreenComposerSettings composition = _playerRotationComposer.Composition;
+            composition.ScreenPosition = _savedPlayerScreenPosition;
+            _playerRotationComposer.Composition = composition;
+        }
+
+        _hasSavedPlayerScreenPosition = false;
+    }
 
     /// <summary><paramref name="preferredKiller"/> 또는 생존 중인 다른 플레이어를 관전 대상으로 선택하고, 없으면 본인 시체를 유지한다.</summary>
     private bool TrySelectSpectateTarget(NetworkObject preferredKiller)

@@ -1672,7 +1672,9 @@ MonoBehaviour:
   playerCamera: {fileID: 1729122831}
   spectateCamera: {fileID: 2043375590}
   deathCamUIPrefab: {fileID: 7658077482114458612, guid: e6d28e856bc45444da42e570bad1b3ff, type: 3}
+  crosshairObject: {fileID: 1255957696}
   deathFocusDuration: 3
+  killerLookTurnSpeed: 10
   inactiveSpectatePriority: 0
   activeSpectatePriority: 10
 --- !u!114 &2043375586
