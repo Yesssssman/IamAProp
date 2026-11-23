@@ -14,6 +14,9 @@ public class StepSoundTest : MonoBehaviour
     /// <summary>발소리 재생에 사용할 <see cref="AudioSource"/> 컴포넌트.</summary>
     private AudioSource _audioSource;
 
+    /// <summary>생존 여부를 조회하는 상위 체력 컴포넌트.</summary>
+    private PlayerHealth _playerHealth;
+
     // ***************************************************************
     // MonoBehaviour
     // ***************************************************************
@@ -21,6 +24,7 @@ public class StepSoundTest : MonoBehaviour
     private void Awake()
     {
         _audioSource = GetComponent<AudioSource>();
+        _playerHealth = GetComponentInParent<PlayerHealth>();
     }
 
     // ***************************************************************
@@ -30,6 +34,7 @@ public class StepSoundTest : MonoBehaviour
     /// <summary>애니메이션 이벤트에서 호출되어 <see cref="stepClip"/>을 1회 재생한다.</summary>
     public void PlayStepSound()
     {
+        if (_playerHealth != null && _playerHealth.IsDead) return;
         if (_audioSource != null && stepClip != null)
         {
             _audioSource.PlayOneShot(stepClip);

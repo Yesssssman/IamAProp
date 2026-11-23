@@ -42,6 +42,23 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     /// <summary>상하 조준 피치 각도 보간 속력.</summary>
     [SerializeField] private float aimPitchLerpSpeed = 20f;
 
+    /// <summary>총기 피격 사망 시 피격 방향으로 가하는 넉백 임펄스 크기.</summary>
+    [Header("사망 래그돌 설정")]
+    [Min(0f)]
+    [SerializeField] private float gunDeathForce = 20f;
+
+    /// <summary>근접 무기 피격 사망 시 타격 방향으로 가하는 넉백 임펄스 크기.</summary>
+    [Min(0f)]
+    [SerializeField] private float meleeDeathForce = 15f;
+
+    /// <summary>사망 시 위쪽으로 띄우는 상방 임펄스 크기.</summary>
+    [Min(0f)]
+    [SerializeField] private float deathUpwardForce = 6f;
+
+    /// <summary>피격 지점이 없을 때 시체가 굴러가도록 가하는 회전 토크 크기.</summary>
+    [Min(0f)]
+    [SerializeField] private float deathTorque = 6f;
+
     /// <summary>직전 물리 틱의 바닥 접촉 여부.</summary>
     public bool _wasGrounded;
 
@@ -57,14 +74,26 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     /// <summary>애니메이션 제어 인터페이스 참조.</summary>
     protected IPropAnimController _propAnim;
 
+    /// <summary>체력 및 사망 상태를 제공하는 컴포넌트.</summary>
+    protected PlayerHealth _playerHealth;
+
     /// <summary>현재 프롭 동작 상태.</summary>
     protected EPlayerState _EplayerState;
 
     /// <summary>현재 루트 <see cref="Rigidbody"/> 회전 제약이 해제된 맨손 쓰러짐 대기 상태 여부.</summary>
     protected bool _isRagdollIdle;
 
+    /// <summary>현재 사망 래그돌 상태가 활성화되었는지 여부.</summary>
+    protected bool _isDead;
+
     /// <summary>원격 클라이언트에 동기화되는 목표 상하 조준 각도 (도 단위).</summary>
     private readonly SyncVar<float> _syncedAimPitch = new();
+
+    /// <summary>이번 사망에서 피격 넉백 임펄스를 이미 적용했는지 여부.</summary>
+    private bool _hasAppliedDeathImpulse;
+
+    /// <summary>이번 사망 이후 서버의 사망 Reconcile 상태를 최소 1회 수신했는지 여부.</summary>
+    private bool _hasReceivedDeadReconcile;
 
     /// <summary>현재 시뮬레이션된 월드 공간 평면 이동 속도 벡터 (초당 월드 단위).</summary>
     private Vector3 _planarVelocity;
@@ -146,6 +175,9 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     /// <inheritdoc/>
     public bool IsFiring => _isFiring;
 
+    /// <inheritdoc/>
+    public bool IsDead => _isDead || (_playerHealth != null && _playerHealth.IsDead);
+
     /// <summary>상하 조준 최소 피치 각도 (도 단위).</summary>
     protected float MinAimPitch => minAimPitch;
 
@@ -205,6 +237,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
 
         _bodyCollider = GetComponentInChildren<Collider>();
         _propAnim = GetComponent<IPropAnimController>();
+        _playerHealth = GetComponent<PlayerHealth>();
         _EplayerState = EPlayerState.Idle;
 
         if (_groundCheck == null)
@@ -234,6 +267,16 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     protected virtual void LateUpdate()
     {
         if (!IsSpawned) return;
+
+        if (IsDead)
+        {
+            _currentAimPitch = 0f;
+            if (aimPitchTarget != null)
+            {
+                aimPitchTarget.localRotation = _aimPitchInitialLocalRotation;
+            }
+            return;
+        }
 
         float targetPitch;
         if (IsOwner)
@@ -283,6 +326,16 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
             _lastTickPosition = _rb.position;
         }
 
+        if (_playerHealth != null)
+        {
+            _playerHealth.OnDeathEffectsTriggered += HandleDeathEffectsTriggered;
+            _playerHealth.OnDeadStateChanged += HandleDeadStateChanged;
+            if (_playerHealth.IsDead)
+            {
+                EnterDeathRagdoll(default, applyImpulse: false);
+            }
+        }
+
         if (base.TimeManager != null)
         {
             base.TimeManager.OnTick += TimeManager_OnTick;
@@ -294,6 +347,16 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     public override void OnStopNetwork()
     {
         _lastCreatedInput = default;
+        _isDead = false;
+        _hasAppliedDeathImpulse = false;
+        _hasReceivedDeadReconcile = false;
+
+        if (_playerHealth != null)
+        {
+            _playerHealth.OnDeathEffectsTriggered -= HandleDeathEffectsTriggered;
+            _playerHealth.OnDeadStateChanged -= HandleDeadStateChanged;
+        }
+
         if (base.TimeManager != null)
         {
             base.TimeManager.OnTick -= TimeManager_OnTick;
@@ -316,10 +379,124 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
             _isGrounded,
             _wasGrounded,
             _isRagdollIdle,
+            IsDead,
             _isFiring,
             _turnSmoothVelocity,
             _lastTickPosition);
         PerformReconcile(rd);
+    }
+
+    // ***************************************************************
+    // Public Control API
+    // ***************************************************************
+
+    /// <summary>사망 즉시 HideMode 래그돌로 전환하고 필요 시 피격 방향 넉백 임펄스를 적용한다.</summary>
+    public void EnterDeathRagdoll(in DamageHitInfo hitInfo, bool applyImpulse)
+    {
+        bool wasDead = _isDead;
+        _isDead = true;
+        _isRagdollIdle = true;
+        _EplayerState = EPlayerState.Die;
+        _isFiring = false;
+        _planarVelocity = Vector3.zero;
+        _currentPlanarSpeed = 0f;
+        _turnSmoothVelocity = 0f;
+        _currentAimPitch = 0f;
+        _lastSentAimPitch = 0f;
+
+        if (aimPitchTarget != null)
+        {
+            aimPitchTarget.localRotation = _aimPitchInitialLocalRotation;
+        }
+
+        _propAnim?.EnterDeathHidePose();
+
+        if (_rb != null)
+        {
+            _rb.useGravity = true;
+            _rb.constraints = RigidbodyConstraints.None;
+        }
+
+        if (!wasDead)
+        {
+            OnRagdollStateChanged(true);
+            OnDeathEntered();
+        }
+
+        if (!applyImpulse || _hasAppliedDeathImpulse || _hasReceivedDeadReconcile || _rb == null || _rb.isKinematic)
+        {
+            return;
+        }
+
+        _hasAppliedDeathImpulse = true;
+
+        Vector3 hitDir = hitInfo.HitDirection.sqrMagnitude > 0.0001f
+            ? hitInfo.HitDirection.normalized
+            : -transform.forward;
+        // 큰 프롭이 작은 프롭을 내려다보며 공격할 때 하향 성분이 상방 힘을 상쇄해 바닥에 박히지 않도록 보정한다.
+        if (hitDir.y < 0f)
+        {
+            Vector3 horizontalHitDir = new Vector3(hitDir.x, 0f, hitDir.z);
+            if (horizontalHitDir.sqrMagnitude > 0.0001f)
+            {
+                hitDir = horizontalHitDir.normalized;
+            }
+        }
+
+        float knockbackForce = hitInfo.IsMelee ? meleeDeathForce : gunDeathForce;
+        Vector3 impulse = hitDir * knockbackForce + Vector3.up * deathUpwardForce;
+
+        if (hitInfo.HasHitPoint)
+        {
+            _rb.AddForceAtPosition(impulse, hitInfo.HitPoint, ForceMode.Impulse);
+        }
+        else
+        {
+            _rb.AddForce(impulse, ForceMode.Impulse);
+            if (deathTorque > 0f)
+            {
+                Vector3 horizontalDir = new Vector3(hitDir.x, 0f, hitDir.z);
+                Vector3 torqueAxis = horizontalDir.sqrMagnitude > 0.0001f
+                    ? Vector3.Cross(Vector3.up, horizontalDir.normalized)
+                    : transform.right;
+                _rb.AddTorque(torqueAxis * deathTorque, ForceMode.Impulse);
+            }
+        }
+    }
+
+    /// <summary>리스폰 또는 라운드 초기화 시 사망 래그돌과 물리 제약을 정상 상태로 원복한다.</summary>
+    public void ResetDeathState()
+    {
+        _isDead = false;
+        _isRagdollIdle = false;
+        _hasAppliedDeathImpulse = false;
+        _hasReceivedDeadReconcile = false;
+        _EplayerState = EPlayerState.Idle;
+        _isFiring = false;
+        _planarVelocity = Vector3.zero;
+        _currentPlanarSpeed = 0f;
+        _turnSmoothVelocity = 0f;
+        _currentAimPitch = 0f;
+        _lastSentAimPitch = 0f;
+
+        if (_rb != null)
+        {
+            float currentYaw = _rb.rotation.eulerAngles.y;
+            _rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+            if (!_rb.isKinematic)
+            {
+                _rb.linearVelocity = Vector3.zero;
+                _rb.angularVelocity = Vector3.zero;
+            }
+            Quaternion uprightRotation = Quaternion.Euler(0f, currentYaw, 0f);
+            transform.rotation = uprightRotation;
+            _rb.rotation = uprightRotation;
+            _lastTickPosition = _rb.position;
+        }
+
+        _propAnim?.ExitDeathHidePose();
+        OnRagdollStateChanged(false);
+        OnDeathReset();
     }
 
     // ***************************************************************
@@ -340,6 +517,12 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
 
     /// <summary>점프 임펄스를 적용한 틱에 호출된다.</summary>
     protected virtual void OnJumped() { }
+
+    /// <summary>사망 상태에 최초 진입할 때 호출된다.</summary>
+    protected virtual void OnDeathEntered() { }
+
+    /// <summary>사망 상태가 해제되어 원복될 때 호출된다.</summary>
+    protected virtual void OnDeathReset() { }
 
     /// <summary>맨손 정지 쓰러짐 대기 상태 진입 가능 여부를 판정한다.</summary>
     protected virtual bool CanEnterRagdollIdle(in PlayerInputData inputData, Vector3 inputDirection)
@@ -384,6 +567,24 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
         if (_rb == null) return;
 
         Vector3 currentTickPosition = _rb.position;
+
+        if (IsDead)
+        {
+            _isDead = true;
+            _isRagdollIdle = true;
+            _EplayerState = EPlayerState.Die;
+            _isFiring = false;
+            _planarVelocity = Vector3.zero;
+            _currentPlanarSpeed = 0f;
+            _turnSmoothVelocity = 0f;
+            if (_rb.constraints != RigidbodyConstraints.None)
+            {
+                _rb.constraints = RigidbodyConstraints.None;
+            }
+            _lastTickPosition = currentTickPosition;
+            return;
+        }
+
         float delta = (float)base.TimeManager.TickDelta;
 
         if (!IsServerStarted && !IsOwner)
@@ -546,8 +747,18 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     {
         if (_rb == null) return;
 
-        _isRagdollIdle = rd.IsRagdollIdle;
-        _rb.constraints = _isRagdollIdle
+        // 사망 직후 지연 도착한 사망 이전 틱의 Reconcile은 무시하여 자세 롤백과 떨림을 방지한다.
+        if (IsDead && !rd.IsDead) return;
+
+        _isDead = rd.IsDead;
+        if (_isDead)
+        {
+            _hasReceivedDeadReconcile = true;
+            _EplayerState = EPlayerState.Die;
+        }
+
+        _isRagdollIdle = rd.IsRagdollIdle || _isDead;
+        _rb.constraints = (_isDead || _isRagdollIdle)
             ? RigidbodyConstraints.None
             : RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
 
@@ -562,10 +773,10 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
 
         _isGrounded = rd.IsGrounded;
         _wasGrounded = rd.WasGrounded;
-        _isFiring = rd.IsFiring;
+        _isFiring = !_isDead && rd.IsFiring;
         _turnSmoothVelocity = rd.TurnSmoothVelocity;
-        _planarVelocity = rd.PlanarVelocity;
-        _currentPlanarSpeed = rd.PlanarSpeed;
+        _planarVelocity = _isDead ? Vector3.zero : rd.PlanarVelocity;
+        _currentPlanarSpeed = _isDead ? 0f : rd.PlanarSpeed;
         _lastTickPosition = rd.LastTickPosition;
     }
 
@@ -577,6 +788,30 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     [ServerRpc]
     private void SetAimPitchServerRpc(float pitch, Channel channel = Channel.Unreliable)
     {
+        if (IsDead) return;
         _syncedAimPitch.Value = Mathf.Clamp(pitch, minAimPitch, maxAimPitch);
+    }
+
+    // ***************************************************************
+    // Event Handlers
+    // ***************************************************************
+
+    /// <summary>사망 연출 이벤트 수신 시 HideMode 래그돌과 피격 방향 임펄스를 적용한다.</summary>
+    private void HandleDeathEffectsTriggered(DamageHitInfo hitInfo)
+    {
+        EnterDeathRagdoll(in hitInfo, applyImpulse: true);
+    }
+
+    /// <summary><see cref="PlayerHealth"/>의 사망 상태 동기화 변경에 따라 래그돌 진입 또는 원복을 처리한다.</summary>
+    private void HandleDeadStateChanged(bool isDead)
+    {
+        if (isDead)
+        {
+            EnterDeathRagdoll(default, applyImpulse: false);
+        }
+        else
+        {
+            ResetDeathState();
+        }
     }
 }

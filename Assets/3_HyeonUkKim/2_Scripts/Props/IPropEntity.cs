@@ -26,4 +26,7 @@ public interface IPropEntity
 
     /// <summary>현재 틱에 사격(조준) 상태인지 여부.</summary>
     bool IsFiring { get; }
+
+    /// <summary>프롭이 사망 상태인지 여부.</summary>
+    bool IsDead { get; }
 }

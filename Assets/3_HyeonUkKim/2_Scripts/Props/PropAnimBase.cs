@@ -88,7 +88,13 @@ public abstract class PropAnimBase : NetworkBehaviour, IPropAnimController
     protected static readonly int HitIndex = Animator.StringToHash("HitIndex");
 
     /// <summary>몸통 기본 이동 블렌드 상태(<c>UnArmedBlend</c>) 해시.</summary>
-    private static readonly int UnArmedBlendState = Animator.StringToHash("UnArmedBlend");
+    protected static readonly int UnArmedBlendState = Animator.StringToHash("UnArmedBlend");
+
+    /// <summary>피격 Additive 레이어 기본 빈 상태(<c>Empty</c>) 해시.</summary>
+    protected static readonly int HitEmptyState = Animator.StringToHash("Empty");
+
+    /// <summary>손 비무장 숨김 대기 상태(<c>Idle</c>) 해시.</summary>
+    protected static readonly int HandIdleState = Animator.StringToHash("Idle");
 
     /// <summary>맨손 달리기 애니메이션 상태(<c>Run</c>) 해시.</summary>
     private static readonly int UnarmedRunState = Animator.StringToHash("Run");
@@ -160,6 +166,7 @@ public abstract class PropAnimBase : NetworkBehaviour, IPropAnimController
     protected virtual void Update()
     {
         if (!IsSpawned || bodyAnimator == null || _propEntity == null) return;
+        if (_propEntity.IsDead || !bodyAnimator.enabled) return;
 
         float speedRatio = _propEntity.PlanarSpeedRatio;
 
@@ -263,12 +270,13 @@ public abstract class PropAnimBase : NetworkBehaviour, IPropAnimController
     /// <inheritdoc/>
     public virtual void SetJumpState(bool isJumping, bool inAir)
     {
-        if (!IsOwner || bodyAnimator == null) return;
+        if (!IsOwner || bodyAnimator == null || !bodyAnimator.enabled) return;
+        if (_propEntity != null && _propEntity.IsDead) return;
 
         bodyAnimator.SetBool(IsJumped, isJumping);
         bodyAnimator.SetBool(IsAir, inAir);
 
-        if (handAnimator != null)
+        if (handAnimator != null && handAnimator.enabled)
         {
             handAnimator.SetBool(IsJumped, isJumping);
             handAnimator.SetBool(IsAir, inAir);
@@ -290,9 +298,16 @@ public abstract class PropAnimBase : NetworkBehaviour, IPropAnimController
     /// <inheritdoc/>
     public virtual void TriggerHit(int hitIndex)
     {
+        if (_propEntity != null && _propEntity.IsDead) return;
         if (bodyAnimator == null || !bodyAnimator.isActiveAndEnabled) return;
 
         bodyAnimator.SetInteger(HitIndex, Mathf.Clamp(hitIndex, 0, HitClipCount - 1));
         bodyAnimator.SetTrigger(Hit);
     }
+
+    /// <inheritdoc/>
+    public virtual void EnterDeathHidePose() { }
+
+    /// <inheritdoc/>
+    public virtual void ExitDeathHidePose() { }
 }

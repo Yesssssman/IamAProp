@@ -44,6 +44,9 @@ public class PlayerAnim : PropAnimBase
     /// <summary>재장전 애니메이션 진입 직후 <c>isReload</c>를 초기화하기 위한 대기 플래그.</summary>
     private bool _pendingReloadReset;
 
+    /// <summary>사망 HideMode 포즈와 애니메이터 비활성화가 적용된 상태인지 여부.</summary>
+    private bool _isDeadVisualApplied;
+
     /// <summary>손 오버라이드 컨트롤러 갱신에 재사용하는 클립 매핑 버퍼.</summary>
     private readonly List<KeyValuePair<AnimationClip, AnimationClip>> _handOverrideBuffer = new(16);
 
@@ -133,6 +136,29 @@ public class PlayerAnim : PropAnimBase
         }
     }
 
+    /// <summary>손 애니메이터가 현재 장착 무기의 드로우 상태를 재생 중인지 여부.</summary>
+    public bool IsDrawAnimationActive
+    {
+        get
+        {
+            if (handAnimator == null || _weaponInventory == null || _appliedWeaponData == null || !_appliedWeaponData.UsesAmmo)
+            {
+                return false;
+            }
+
+            int expectedHash = _weaponInventory.ActiveSlot switch
+            {
+                EWeaponSlotType.Secondary => M1911DrawState,
+                EWeaponSlotType.Primary => AkDrawState,
+                _ => 0
+            };
+            if (expectedHash == 0) return false;
+
+            return !handAnimator.IsInTransition(0)
+                && handAnimator.GetCurrentAnimatorStateInfo(0).shortNameHash == expectedHash;
+        }
+    }
+
     // ***************************************************************
     // MonoBehaviour
     // ***************************************************************
@@ -149,6 +175,7 @@ public class PlayerAnim : PropAnimBase
         base.Update();
 
         if (!IsSpawned || bodyAnimator == null || _propEntity == null || handAnimator == null) return;
+        if (_isDeadVisualApplied || _propEntity.IsDead || !bodyAnimator.enabled || !handAnimator.enabled) return;
 
         int currentHash = handAnimator.GetCurrentAnimatorStateInfo(0).shortNameHash;
         int nextHash = handAnimator.IsInTransition(0) ? handAnimator.GetNextAnimatorStateInfo(0).shortNameHash : 0;
@@ -293,6 +320,11 @@ public class PlayerAnim : PropAnimBase
             _weaponInventory.OnEquippedWeaponChanged += HandleEquippedWeaponChanged;
             HandleEquippedWeaponChanged(_weaponInventory.EquippedState);
         }
+
+        if (_playerHealth != null && _playerHealth.IsDead)
+        {
+            EnterDeathHidePose();
+        }
     }
 
     public override void OnStopNetwork()
@@ -305,6 +337,7 @@ public class PlayerAnim : PropAnimBase
         _hasAppliedEquippedState = false;
         _appliedEquippedState = default;
         _appliedWeaponData = null;
+        _isDeadVisualApplied = false;
     }
 
     // ***************************************************************
@@ -314,12 +347,13 @@ public class PlayerAnim : PropAnimBase
     /// <inheritdoc/>
     public override void SetAttackState(bool attacking)
     {
-        if (!IsOwner || bodyAnimator == null) return;
+        if (!IsOwner || bodyAnimator == null || !bodyAnimator.enabled) return;
+        if (_playerHealth != null && _playerHealth.IsDead) return;
 
         bool canAttack = attacking && CurrentWeaponType != EWeaponType.Hide;
         bodyAnimator.SetBool(IsAttack, canAttack);
 
-        if (handAnimator != null)
+        if (handAnimator != null && handAnimator.enabled)
         {
             handAnimator.SetBool(IsAttack, canAttack);
         }
@@ -333,7 +367,8 @@ public class PlayerAnim : PropAnimBase
     /// <inheritdoc/>
     public override void TriggerAttack(int attackVariant = 0)
     {
-        if (handAnimator == null || _weaponInventory == null) return;
+        if (handAnimator == null || !handAnimator.enabled || _weaponInventory == null) return;
+        if (_playerHealth != null && _playerHealth.IsDead) return;
 
         EWeaponSlotType activeSlot = _weaponInventory.ActiveSlot;
         int shotState = activeSlot switch
@@ -367,6 +402,7 @@ public class PlayerAnim : PropAnimBase
     public override void SetWeaponMode(EWeaponType weaponType)
     {
         if (!IsOwner || _weaponInventory == null) return;
+        if (_playerHealth != null && _playerHealth.IsDead) return;
 
         _weaponInventory.TrySelectSlot((EWeaponSlotType)weaponType);
     }
@@ -374,7 +410,8 @@ public class PlayerAnim : PropAnimBase
     /// <inheritdoc/>
     public override void RequestReload()
     {
-        if (!IsOwner || handAnimator == null || _weaponInventory == null) return;
+        if (!IsOwner || handAnimator == null || !handAnimator.enabled || _weaponInventory == null) return;
+        if (_playerHealth != null && _playerHealth.IsDead) return;
         if (_appliedWeaponData == null || !_appliedWeaponData.UsesAmmo) return;
 
         EWeaponSlotType activeSlot = _weaponInventory.ActiveSlot;
@@ -409,6 +446,87 @@ public class PlayerAnim : PropAnimBase
         }
     }
 
+    /// <inheritdoc/>
+    public override void EnterDeathHidePose()
+    {
+        if (_isDeadVisualApplied) return;
+
+        _isDeadVisualApplied = true;
+        _pendingWeaponSwapReset = false;
+        _pendingReloadReset = false;
+        _currentMoveX = 0f;
+        _currentMoveZ = 0f;
+        _currentHandMoveX = 0f;
+
+        ClearEquippedWeaponObjects();
+
+        // 다리와 손이 완전히 숨겨진 HideMode 포즈를 1회 평가한 뒤 Animator를 꺼 물리가 우선되도록 고정한다.
+        if (bodyAnimator != null)
+        {
+            bodyAnimator.enabled = true;
+            if (_bodyWeaponControllers != null && _bodyWeaponControllers.Length > 0 && _bodyWeaponControllers[0] != null)
+            {
+                bodyAnimator.runtimeAnimatorController = _bodyWeaponControllers[0];
+            }
+
+            bodyAnimator.SetFloat(MoveX, 0f);
+            bodyAnimator.SetFloat(MoveZ, 0f);
+            bodyAnimator.SetInteger(WeaponMode, (int)EWeaponType.Hide);
+            bodyAnimator.SetBool(IsAir, false);
+            bodyAnimator.SetBool(IsJumped, false);
+            bodyAnimator.SetBool(IsAttack, false);
+            bodyAnimator.SetBool(IsReload, false);
+            bodyAnimator.SetBool(IsWeaponSwap, false);
+            bodyAnimator.ResetTrigger(Hit);
+            bodyAnimator.Play(UnArmedBlendState, 0, 0f);
+            if (bodyAnimator.layerCount > 1)
+            {
+                bodyAnimator.Play(HitEmptyState, 1, 0f);
+            }
+            bodyAnimator.Update(0f);
+            bodyAnimator.enabled = false;
+        }
+
+        if (handAnimator != null)
+        {
+            handAnimator.enabled = true;
+            handAnimator.SetFloat(MoveX, 0f);
+            handAnimator.SetInteger(WeaponMode, (int)EWeaponType.Hide);
+            handAnimator.SetBool(IsAir, false);
+            handAnimator.SetBool(IsJumped, false);
+            handAnimator.SetBool(IsAttack, false);
+            handAnimator.SetBool(IsReload, false);
+            handAnimator.SetBool(IsWeaponSwap, false);
+            handAnimator.Play(HandIdleState, 0, 0f);
+            handAnimator.Update(0f);
+            handAnimator.enabled = false;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void ExitDeathHidePose()
+    {
+        if (!_isDeadVisualApplied) return;
+
+        _isDeadVisualApplied = false;
+
+        if (bodyAnimator != null)
+        {
+            bodyAnimator.enabled = true;
+        }
+
+        if (handAnimator != null)
+        {
+            handAnimator.enabled = true;
+        }
+
+        if (_weaponInventory != null)
+        {
+            _hasAppliedEquippedState = false;
+            HandleEquippedWeaponChanged(_weaponInventory.EquippedState);
+        }
+    }
+
     // ***************************************************************
     // Network RPCs
     // ***************************************************************
@@ -417,6 +535,7 @@ public class PlayerAnim : PropAnimBase
     [ServerRpc]
     private void RequestReloadServerRpc()
     {
+        if (_playerHealth != null && _playerHealth.IsDead) return;
         BroadcastReloadObserversRpc();
     }
 
@@ -424,7 +543,8 @@ public class PlayerAnim : PropAnimBase
     [ObserversRpc(ExcludeOwner = true)]
     private void BroadcastReloadObserversRpc()
     {
-        if (handAnimator == null) return;
+        if (_isDeadVisualApplied || (_playerHealth != null && _playerHealth.IsDead)) return;
+        if (handAnimator == null || !handAnimator.enabled) return;
 
         handAnimator.SetBool(IsReload, true);
         if (_weaponAnimator != null && _weaponAnimator.runtimeAnimatorController != null)
@@ -438,6 +558,7 @@ public class PlayerAnim : PropAnimBase
     [ObserversRpc]
     private void PlayHitObserversRpc(int hitIndex)
     {
+        if (_isDeadVisualApplied || (_playerHealth != null && _playerHealth.IsDead)) return;
         TriggerHit(hitIndex);
     }
 
@@ -471,6 +592,12 @@ public class PlayerAnim : PropAnimBase
             ? _weaponInventory.GetWeaponDataById(newState.WeaponId)
             : null;
         _appliedWeaponData = weaponData;
+
+        if (_isDeadVisualApplied || (_playerHealth != null && _playerHealth.IsDead))
+        {
+            ClearEquippedWeaponObjects();
+            return;
+        }
 
         bool wasAir = bodyAnimator != null && bodyAnimator.GetBool(IsAir);
         bool wasJumped = bodyAnimator != null && bodyAnimator.GetBool(IsJumped);
@@ -554,26 +681,7 @@ public class PlayerAnim : PropAnimBase
 
         if (handScript != null)
         {
-            if (_weaponAnimator != null && _weaponAnimator.runtimeAnimatorController != null)
-            {
-                _weaponAnimator.SetBool(IsAttack, false);
-                _weaponAnimator.SetBool(IsReload, false);
-            }
-            _weaponAnimator = null;
-
-            GameObject prevLeft = handScript.GetLeftHandItem();
-            if (prevLeft != null)
-            {
-                prevLeft.SetActive(false);
-                Destroy(prevLeft);
-            }
-
-            GameObject prevRight = handScript.GetRightHandItem();
-            if (prevRight != null)
-            {
-                prevRight.SetActive(false);
-                Destroy(prevRight);
-            }
+            ClearEquippedWeaponObjects();
 
             if (weaponData != null && weaponData.EquippedPrefab != null)
             {
@@ -676,6 +784,37 @@ public class PlayerAnim : PropAnimBase
                     handAnimator.Play(drawStateHash, 0, 0f);
                 }
             }
+        }
+    }
+
+    // ***************************************************************
+    // Helpers
+    // ***************************************************************
+
+    /// <summary>양손에 장착된 무기 및 탄창 오브젝트와 무기 애니메이터 참조를 정리한다.</summary>
+    private void ClearEquippedWeaponObjects()
+    {
+        if (_weaponAnimator != null && _weaponAnimator.runtimeAnimatorController != null)
+        {
+            _weaponAnimator.SetBool(IsAttack, false);
+            _weaponAnimator.SetBool(IsReload, false);
+        }
+        _weaponAnimator = null;
+
+        if (handScript == null) return;
+
+        GameObject prevLeft = handScript.GetLeftHandItem();
+        if (prevLeft != null)
+        {
+            prevLeft.SetActive(false);
+            Destroy(prevLeft);
+        }
+
+        GameObject prevRight = handScript.GetRightHandItem();
+        if (prevRight != null)
+        {
+            prevRight.SetActive(false);
+            Destroy(prevRight);
         }
     }
 }

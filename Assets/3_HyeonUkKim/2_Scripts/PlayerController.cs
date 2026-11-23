@@ -178,6 +178,13 @@ public class PlayerController : PropControllerBase
     /// <inheritdoc/>
     protected override PlayerInputData CollectTickInput()
     {
+        if (IsDead)
+        {
+            _moveInput = Vector2.zero;
+            _jumpRequested = false;
+            return default;
+        }
+
         if (cameraTransform == null && Camera.main != null)
         {
             cameraTransform = Camera.main.transform;
@@ -205,6 +212,8 @@ public class PlayerController : PropControllerBase
     /// <inheritdoc/>
     protected override float ComputeOwnerTargetAimPitch()
     {
+        if (IsDead) return 0f;
+
         bool isAiming = _propAnim != null && _propAnim.CurrentWeaponType != EWeaponType.Hide;
         if (!isAiming) return 0f;
 
@@ -216,6 +225,22 @@ public class PlayerController : PropControllerBase
 
         float pitch = -Mathf.Atan2(aimDir.y, horizontalDist) * Mathf.Rad2Deg;
         return Mathf.Clamp(pitch, MinAimPitch, MaxAimPitch);
+    }
+
+    /// <inheritdoc/>
+    protected override void OnDeathEntered()
+    {
+        _moveInput = Vector2.zero;
+        _jumpRequested = false;
+        _weaponController?.CancelCombatActions();
+    }
+
+    /// <inheritdoc/>
+    protected override void OnDeathReset()
+    {
+        _moveInput = Vector2.zero;
+        _jumpRequested = false;
+        _weaponController?.CancelCombatActions();
     }
 
     // ***************************************************************
@@ -278,6 +303,12 @@ public class PlayerController : PropControllerBase
     /// <summary>이동 입력 벡터를 갱신한다.</summary>
     private void OnMovePerformed(InputAction.CallbackContext context)
     {
+        if (IsDead)
+        {
+            _moveInput = Vector2.zero;
+            return;
+        }
+
         _moveInput = context.ReadValue<Vector2>();
     }
 
@@ -290,7 +321,7 @@ public class PlayerController : PropControllerBase
     /// <summary>바닥에 닿아 있을 때 점프 요청 플래그를 설정한다.</summary>
     private void OnJump(InputAction.CallbackContext context)
     {
-        if (!IsOwner || !_isGrounded) return;
+        if (!IsOwner || IsDead || !_isGrounded) return;
 
         _jumpRequested = true;
     }
@@ -298,7 +329,7 @@ public class PlayerController : PropControllerBase
     /// <summary>공격 입력 시작 시 무기 공격 또는 상태를 갱신한다.</summary>
     private void OnAttackStarted(InputAction.CallbackContext context)
     {
-        if (!IsOwner) return;
+        if (!IsOwner || IsDead) return;
 
         _EplayerState = EPlayerState.Attack;
         if (_weaponController != null)
@@ -316,6 +347,12 @@ public class PlayerController : PropControllerBase
     {
         if (!IsOwner) return;
 
+        if (IsDead)
+        {
+            _weaponController?.SetFireInput(false);
+            return;
+        }
+
         _EplayerState = _isGrounded ? EPlayerState.Idle : EPlayerState.Air;
         if (_weaponController != null)
         {
@@ -330,7 +367,7 @@ public class PlayerController : PropControllerBase
     /// <summary>무기 전환 입력에 따라 보유 중인 슬롯으로 무기 모드를 변경한다.</summary>
     private void ChangeWeaponMode(InputAction.CallbackContext context)
     {
-        if (!IsOwner) return;
+        if (!IsOwner || IsDead) return;
 
         int slotIndex = Mathf.Clamp(Mathf.RoundToInt(context.ReadValue<float>()) - 1, 0, PlayerWeaponInventory.SlotCount - 1);
         EWeaponSlotType targetSlot = (EWeaponSlotType)slotIndex;
@@ -369,7 +406,7 @@ public class PlayerController : PropControllerBase
     /// <summary>재장전 입력 시 무기 재장전 시퀀스를 요청한다.</summary>
     private void OnReloadStarted(InputAction.CallbackContext context)
     {
-        if (!IsOwner) return;
+        if (!IsOwner || IsDead) return;
 
         if (_weaponController != null)
         {
@@ -384,7 +421,7 @@ public class PlayerController : PropControllerBase
     /// <summary><c>G</c> 입력 시 <c>Alt</c> 조합이 아닐 때만 주변 무기 획득을 요청한다.</summary>
     private void OnPickupStarted(InputAction.CallbackContext context)
     {
-        if (!IsOwner || _weaponInventory == null) return;
+        if (!IsOwner || IsDead || _weaponInventory == null) return;
         if (Keyboard.current != null && Keyboard.current.altKey.isPressed) return;
 
         _weaponController?.SetFireInput(false);
@@ -394,7 +431,7 @@ public class PlayerController : PropControllerBase
     /// <summary><c>Alt + G</c> 입력 시 현재 장착 무기를 바닥에 버리도록 요청한다.</summary>
     private void OnDropWeaponStarted(InputAction.CallbackContext context)
     {
-        if (!IsOwner || _weaponInventory == null) return;
+        if (!IsOwner || IsDead || _weaponInventory == null) return;
         if (_weaponInventory.ActiveSlot == EWeaponSlotType.Unarmed) return;
 
         _weaponController?.SetFireInput(false);

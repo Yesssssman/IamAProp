@@ -54,6 +54,9 @@ public class WeaponDataSO : ScriptableObject
     /// <summary>바닥 월드 픽업에 표시할 모델의 로컬 스케일.</summary>
     [SerializeField] private Vector3 worldPickupScale = Vector3.one;
 
+    /// <summary>바닥 월드 픽업의 무기 형태에 맞춘 복합 <see cref="BoxCollider"/> 목록 (비어 있으면 메쉬 바운드로 자동 생성).</summary>
+    [SerializeField] private WeaponColliderBox[] worldPickupColliders;
+
     /// <summary>장착 상태에서 이동 시 조준 달리기 클립(<c>AimRun</c>)을 사용하는지 여부.</summary>
     [SerializeField] private bool usesAimLocomotion = true;
 
@@ -196,6 +199,9 @@ public class WeaponDataSO : ScriptableObject
 
     /// <summary>바닥 월드 픽업 모델 스케일.</summary>
     public Vector3 WorldPickupScale => worldPickupScale;
+
+    /// <summary>바닥 월드 픽업용 복합 <see cref="BoxCollider"/> 정의 배열.</summary>
+    public WeaponColliderBox[] WorldPickupColliders => worldPickupColliders;
 
     /// <summary>장착 이동 시 조준 달리기 클립 사용 여부.</summary>
     public bool UsesAimLocomotion => usesAimLocomotion;

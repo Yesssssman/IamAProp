@@ -1,4 +1,19 @@
 using System;
+using UnityEngine;
+
+/// <summary>월드 무기 픽업의 복합 물리 충돌을 구성하는 개별 <see cref="BoxCollider"/> 정의.</summary>
+[Serializable]
+public struct WeaponColliderBox
+{
+    /// <summary>무기 모델 로컬 공간 기준 중심 위치.</summary>
+    public Vector3 center;
+
+    /// <summary>무기 모델 로컬 공간 기준 박스 크기.</summary>
+    public Vector3 size;
+
+    /// <summary>무기 모델 로컬 공간 기준 오일러 회전각 (도 단위).</summary>
+    public Vector3 rotation;
+}
 
 /// <summary>키 입력(1~4) 기준 무기 슬롯 카테고리.</summary>
 public enum EWeaponSlotType : byte

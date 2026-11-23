@@ -24,4 +24,10 @@ public interface IPropAnimController
 
     /// <summary>지정한 인덱스(0~3)의 피격 Additive 애니메이션을 재생한다.</summary>
     void TriggerHit(int hitIndex);
+
+    /// <summary>사망 시 HideMode 포즈를 적용하고 애니메이터를 비활성화한다.</summary>
+    void EnterDeathHidePose();
+
+    /// <summary>부활 또는 라운드 초기화 시 사망 포즈와 애니메이터 비활성화를 원복한다.</summary>
+    void ExitDeathHidePose();
 }

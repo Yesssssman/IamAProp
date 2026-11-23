@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using FishNet.Connection;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using FishNet.Transporting;
@@ -18,7 +20,6 @@ public class PlayerWeaponInventory : NetworkBehaviour
     private const float ServerPickupRangeTolerance = 0.25f; // 네트워크 지연을 감안한 서버 줍기 거리 허용 오차 (미터)
     private const float CrosshairCameraRangeBonus = 6.0f; // TPS 카메라 후방 거리를 보정하기 위한 크로스헤어 탐색 여유 거리 (미터)
     private const float DropWallMargin = 0.2f; // 벽 앞에서 무기를 버릴 때 관통을 막는 여유 거리 (미터)
-    private const float DropSpinSpeed = 4.0f; // 드롭된 무기에 부여하는 초기 회전 각속도 (rad/s)
 
     // ***************************************************************
     // Fields
@@ -37,21 +38,25 @@ public class PlayerWeaponInventory : NetworkBehaviour
     [Min(0.05f)]
     [SerializeField] private float crosshairPickupRadius = 0.25f;
 
-    /// <summary>무기를 버릴 때 플레이어 전방으로 띄울 스폰 거리 (미터).</summary>
+    /// <summary>무기를 버릴 때 플레이어 가슴/손 높이 기준 전방으로 띄울 스폰 거리 (미터).</summary>
     [Min(0f)]
-    [SerializeField] private float dropForwardOffset = 0.7f;
+    [SerializeField] private float dropForwardOffset = 0.65f;
 
-    /// <summary>무기를 버릴 때 기준 원점에서 위로 띄울 오프셋 (미터).</summary>
+    /// <summary>무기를 버릴 때 플레이어 가슴/손 높이 기준 위로 띄울 오프셋 (미터).</summary>
     [Min(0f)]
-    [SerializeField] private float dropUpwardOffset = 0.15f;
+    [SerializeField] private float dropUpwardOffset = 0.1f;
 
-    /// <summary>무기를 버릴 때 전방으로 가할 투척 속력 (m/s).</summary>
+    /// <summary>무기를 버릴 때 전방으로 가할 임펄스 힘 크기 (<see cref="ForceMode.Impulse"/>).</summary>
     [Min(0f)]
-    [SerializeField] private float dropThrowSpeed = 2.2f;
+    [SerializeField] private float dropForwardForce = 1.6f;
 
-    /// <summary>무기를 버릴 때 상향으로 가할 투척 속력 (m/s).</summary>
+    /// <summary>무기를 버릴 때 상방으로 가할 임펄스 힘 크기 (<see cref="ForceMode.Impulse"/>).</summary>
     [Min(0f)]
-    [SerializeField] private float dropUpwardSpeed = 1.2f;
+    [SerializeField] private float dropUpwardForce = 0.8f;
+
+    /// <summary>무기를 버릴 때 각 축에 무작위로 가할 회전 토크 최대 크기 (<see cref="ForceMode.VelocityChange"/>, rad/s).</summary>
+    [Min(0f)]
+    [SerializeField] private float dropRandomTorque = 2.5f;
 
     /// <summary>무기 드롭 시 벽 관통 여부를 검사할 지형 레이어 마스크.</summary>
     [SerializeField] private LayerMask dropObstacleMask = (1 << 0) | (1 << 3); // Default, Ground
@@ -159,6 +164,18 @@ public class PlayerWeaponInventory : NetworkBehaviour
                 WeaponId = string.Empty,
                 ChangeSequence = 1
             };
+        }
+        if (_playerHealth != null)
+        {
+            _playerHealth.OnDied += HandleServerDied;
+        }
+    }
+
+    public override void OnStopServer()
+    {
+        if (_playerHealth != null)
+        {
+            _playerHealth.OnDied -= HandleServerDied;
         }
     }
 
@@ -319,6 +336,24 @@ public class PlayerWeaponInventory : NetworkBehaviour
         RequestDropCurrentWeaponServerRpc();
     }
 
+    /// <summary>서버에서 보유 슬롯 데이터를 유지한 채 장착 슬롯만 맨손(<see cref="EWeaponSlotType.Unarmed"/>)으로 강제 전환한다.</summary>
+    [Server]
+    public void ForceSelectUnarmed()
+    {
+        if (!IsServerInitialized) return;
+        if (_equippedState.Value.Slot == EWeaponSlotType.Unarmed && string.IsNullOrEmpty(_equippedState.Value.WeaponId))
+        {
+            return;
+        }
+
+        _equippedState.Value = new EquippedWeaponState
+        {
+            Slot = EWeaponSlotType.Unarmed,
+            WeaponId = string.Empty,
+            ChangeSequence = (ushort)(_equippedState.Value.ChangeSequence + 1)
+        };
+    }
+
     /// <summary>서버에서 지정 슬롯 무기의 탄창 탄약을 1발 차감하고 슬롯 상태를 갱신한다.</summary>
     [Server]
     public bool TryConsumeAmmo(EWeaponSlotType slot, string expectedWeaponId, out WeaponSlotState updatedState)
@@ -453,6 +488,12 @@ public class PlayerWeaponInventory : NetworkBehaviour
     // Event Handlers
     // ***************************************************************
 
+    /// <summary>서버에서 플레이어가 사망할 때 장착 슬롯을 HideMode(<see cref="EWeaponSlotType.Unarmed"/>)로 전환한다.</summary>
+    private void HandleServerDied(NetworkConnection attacker)
+    {
+        ForceSelectUnarmed();
+    }
+
     /// <summary><see cref="_equippedState"/> 변경 시 구독 컴포넌트에 최신 장착 상태를 알린다.</summary>
     private void HandleEquippedStateChanged(EquippedWeaponState previousValue, EquippedWeaponState nextValue, bool asServer)
     {
@@ -479,19 +520,39 @@ public class PlayerWeaponInventory : NetworkBehaviour
     // Helpers
     // ***************************************************************
 
-    /// <summary>플레이어 콜라이더와 <paramref name="pickup"/> 콜라이더 사이의 최단 표면 거리(미터)를 계산한다.</summary>
+    /// <summary>플레이어 콜라이더와 <paramref name="pickup"/> 복합 콜라이더 사이의 최단 표면 거리(미터)를 계산한다.</summary>
     private float GetPickupDistance(WorldWeaponPickup pickup)
     {
-        Collider pickupCollider = pickup.PickupCollider;
-        Vector3 pickupCenter = pickupCollider != null ? pickupCollider.bounds.center : pickup.transform.position;
-        Vector3 playerPoint = _bodyCollider != null ? _bodyCollider.ClosestPoint(pickupCenter) : transform.position;
-        Vector3 pickupPoint = pickupCollider != null ? pickupCollider.ClosestPoint(playerPoint) : pickupCenter;
-        if (_bodyCollider != null)
+        IReadOnlyList<Collider> pickupColliders = pickup.PickupColliders;
+        if (pickupColliders == null || pickupColliders.Count == 0)
         {
-            playerPoint = _bodyCollider.ClosestPoint(pickupPoint);
+            Vector3 fallbackPickupPos = pickup.transform.position;
+            Vector3 fallbackPlayerPoint = _bodyCollider != null ? _bodyCollider.ClosestPoint(fallbackPickupPos) : transform.position;
+            return Vector3.Distance(fallbackPlayerPoint, fallbackPickupPos);
         }
 
-        return Vector3.Distance(playerPoint, pickupPoint);
+        float closestDistance = float.MaxValue;
+        for (int i = 0; i < pickupColliders.Count; i++)
+        {
+            Collider pickupCollider = pickupColliders[i];
+            if (pickupCollider == null || !pickupCollider.enabled) continue;
+
+            Vector3 pickupCenter = pickupCollider.bounds.center;
+            Vector3 playerPoint = _bodyCollider != null ? _bodyCollider.ClosestPoint(pickupCenter) : transform.position;
+            Vector3 pickupPoint = pickupCollider.ClosestPoint(playerPoint);
+            if (_bodyCollider != null)
+            {
+                playerPoint = _bodyCollider.ClosestPoint(pickupPoint);
+            }
+
+            float dist = Vector3.Distance(playerPoint, pickupPoint);
+            if (dist < closestDistance)
+            {
+                closestDistance = dist;
+            }
+        }
+
+        return closestDistance;
     }
 
     /// <summary>서버에서 플레이어 전방 안전 위치에 <paramref name="slotState"/>를 담은 월드 픽업을 스폰한다.</summary>
@@ -519,12 +580,12 @@ public class PlayerWeaponInventory : NetworkBehaviour
         WorldWeaponPickup pickup = Instantiate(weaponDatabase.WorldPickupPrefab, spawnPosition, spawnRotation);
         ServerManager.Spawn(pickup.NetworkObject);
 
-        Vector3 throwVelocity = forward * dropThrowSpeed + Vector3.up * dropUpwardSpeed;
-        Vector3 angularVelocity = new Vector3(
-            UnityEngine.Random.Range(-DropSpinSpeed, DropSpinSpeed),
-            UnityEngine.Random.Range(-DropSpinSpeed, DropSpinSpeed),
-            UnityEngine.Random.Range(-DropSpinSpeed, DropSpinSpeed));
+        Vector3 launchImpulse = forward * dropForwardForce + Vector3.up * dropUpwardForce;
+        Vector3 launchTorque = new Vector3(
+            UnityEngine.Random.Range(-dropRandomTorque, dropRandomTorque),
+            UnityEngine.Random.Range(-dropRandomTorque, dropRandomTorque),
+            UnityEngine.Random.Range(-dropRandomTorque, dropRandomTorque));
 
-        pickup.Initialize(slotState.WeaponId, slotState.CurrentAmmo, slotState.ReserveAmmo, throwVelocity, angularVelocity);
+        pickup.Initialize(slotState.WeaponId, slotState.CurrentAmmo, slotState.ReserveAmmo, launchImpulse, launchTorque);
     }
 }

@@ -662,10 +662,11 @@ MonoBehaviour:
   weaponDatabase: {fileID: 11400000, guid: 740399c9523ba4601a63a381b6dd3121, type: 2}
   pickupRange: 0.2
   crosshairPickupRadius: 0.25
-  dropForwardOffset: 0.7
-  dropUpwardOffset: 0.15
-  dropThrowSpeed: 2.2
-  dropUpwardSpeed: 1.2
+  dropForwardOffset: 0.65
+  dropUpwardOffset: 0.1
+  dropForwardForce: 1.6
+  dropUpwardForce: 0.8
+  dropRandomTorque: 2.5
   dropObstacleMask:
     serializedVersion: 2
     m_Bits: 9

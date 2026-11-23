@@ -78,6 +78,9 @@ public struct PlayerReconcileData : IReconcileData
     /// <summary>맨손 쓰러짐 대기 상태 활성화 여부.</summary>
     public bool IsRagdollIdle;
 
+    /// <summary>사망 래그돌 상태 활성화 여부.</summary>
+    public bool IsDead;
+
     /// <summary>현재 물리 틱의 사격(조준) 상태 활성화 여부.</summary>
     public bool IsFiring;
 
@@ -101,6 +104,7 @@ public struct PlayerReconcileData : IReconcileData
         bool isGrounded,
         bool wasGrounded,
         bool isRagdollIdle,
+        bool isDead,
         bool isFiring,
         float turnSmoothVelocity,
         Vector3 lastTickPosition)
@@ -114,6 +118,7 @@ public struct PlayerReconcileData : IReconcileData
         IsGrounded = isGrounded;
         WasGrounded = wasGrounded;
         IsRagdollIdle = isRagdollIdle;
+        IsDead = isDead;
         IsFiring = isFiring;
         TurnSmoothVelocity = turnSmoothVelocity;
         LastTickPosition = lastTickPosition;

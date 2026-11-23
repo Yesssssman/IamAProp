@@ -24,6 +24,16 @@ MonoBehaviour:
   gripRotation: {x: 274.73553, y: 179.99992, z: 222.94275}
   gripScale: {x: 1, y: 1, z: 1}
   worldPickupScale: {x: 1, y: 1, z: 1}
+  worldPickupColliders:
+  - center: {x: 0.002, y: 0.068, z: 0.158}
+    size: {x: 0.07, y: 0.135, z: 0.97}
+    rotation: {x: 0, y: 0, z: 0}
+  - center: {x: 0, y: -0.052, z: -0.06}
+    size: {x: 0.042, y: 0.125, z: 0.09}
+    rotation: {x: 18, y: 0, z: 0}
+  - center: {x: 0, y: -0.075, z: 0.16}
+    size: {x: 0.032, y: 0.185, z: 0.095}
+    rotation: {x: -12, y: 0, z: 0}
   usesAimLocomotion: 1
   handDrawClip: {fileID: -9154298136647773739, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
   handIdleClip: {fileID: -5609668889187248227, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}

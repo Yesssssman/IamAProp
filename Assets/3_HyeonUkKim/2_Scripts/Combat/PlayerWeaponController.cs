@@ -173,6 +173,12 @@ public class PlayerWeaponController : NetworkBehaviour
     {
         if (!IsSpawned || _playerAnim == null || _weaponInventory == null) return;
 
+        if (_playerHealth != null && _playerHealth.IsDead)
+        {
+            CancelCombatActions();
+            return;
+        }
+
         EWeaponSlotType activeSlot = _weaponInventory.ActiveSlot;
         string activeWeaponId = _weaponInventory.EquippedWeaponId;
 
@@ -381,11 +387,29 @@ public class PlayerWeaponController : NetworkBehaviour
     {
         if (!IsOwner) return;
 
+        if (_playerHealth != null && _playerHealth.IsDead)
+        {
+            _isFireHeld = false;
+            _fireRequested = false;
+            return;
+        }
+
         if (isHeld && !_isFireHeld)
         {
             _fireRequested = true;
         }
         _isFireHeld = isHeld;
+    }
+
+    /// <summary>진행 중인 사격 입력, 재장전 타이머 및 근접 콤보 상태를 즉시 초기화한다.</summary>
+    public void CancelCombatActions()
+    {
+        _isFireHeld = false;
+        _fireRequested = false;
+        _isOwnerReloading = false;
+        _isServerReloading = false;
+        _meleeComboStep = 0;
+        _meleeComboExpireTime = 0f;
     }
 
     /// <summary>현재 무기가 재장전 가능한 상태면 재장전 시퀀스를 시작한다.</summary>
@@ -426,6 +450,7 @@ public class PlayerWeaponController : NetworkBehaviour
     {
         if (!IsSpawned || weaponAudioSource == null || _weaponInventory == null) return;
         if (PredictionManager != null && PredictionManager.IsReconciling) return;
+        if (_playerHealth != null && _playerHealth.IsDead) return;
 
         WeaponDataSO weaponData = _weaponInventory.GetWeaponDataById(weaponId);
         if (weaponData == null || weaponData.ShotClip == null) return;
@@ -459,6 +484,24 @@ public class PlayerWeaponController : NetworkBehaviour
         if (reloadClip == null) return;
 
         weaponAudioSource.PlayOneShot(reloadClip, weaponData.ReloadVolume);
+    }
+
+    /// <summary>현재 장착 무기의 드로우 노리쇠/슬라이드 사운드(재장전 3단계 클립)를 재생한다.</summary>
+    public void PlayDrawSound()
+    {
+        if (!IsSpawned || weaponAudioSource == null || _playerAnim == null || _weaponInventory == null) return;
+        if (PredictionManager != null && PredictionManager.IsReconciling) return;
+        if (_playerHealth != null && _playerHealth.IsDead) return;
+        if (_playerController != null && _playerController.IsRagdollIdle) return;
+
+        WeaponDataSO weaponData = _weaponInventory.EquippedWeaponData;
+        if (weaponData == null || !weaponData.UsesAmmo) return;
+        if (!_playerAnim.IsDrawAnimationActive) return;
+
+        AudioClip drawClip = weaponData.GetReloadClip(3);
+        if (drawClip == null) return;
+
+        weaponAudioSource.PlayOneShot(drawClip, weaponData.ReloadVolume);
     }
 
     // ***************************************************************
@@ -557,7 +600,14 @@ public class PlayerWeaponController : NetworkBehaviour
             IDamageable damageable = closestHit.collider.GetComponentInParent<IDamageable>();
             if (damageable != null && !damageable.IsDead)
             {
-                damageable.TakeDamage(weaponData.Damage, Owner);
+                DamageHitInfo hitInfo = new DamageHitInfo
+                {
+                    HitDirection = direction,
+                    HitPoint = hitPoint,
+                    HasHitPoint = true,
+                    IsMelee = weaponData.Category == EWeaponCategory.Melee
+                };
+                damageable.TakeDamage(weaponData.Damage, Owner, in hitInfo);
                 hitDamageable = true;
                 Debug.Log($"[PlayerWeaponController] {name}({weaponData.WeaponName}) 적중 → {closestHit.collider.name} (데미지: {weaponData.Damage:F1}, 거리: {closestHit.distance:F2}m)");
             }
@@ -601,6 +651,8 @@ public class PlayerWeaponController : NetworkBehaviour
     [ObserversRpc]
     private void BroadcastFireObserversRpc(Vector3 origin, Vector3 hitPoint, bool hitDamageable, string weaponId, byte attackVariant)
     {
+        if (_playerHealth != null && _playerHealth.IsDead) return;
+
         if (!IsOwner)
         {
             _playerAnim?.TriggerAttack(attackVariant);
