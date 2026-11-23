@@ -1,4 +1,5 @@
 using FishNet.Connection;
+using FishNet.Object;
 using UnityEngine;
 
 /// <summary>피격 시 공격 방향, 충돌 지점 및 무기 유형을 담는 컨텍스트.</summary>
@@ -15,6 +16,9 @@ public struct DamageHitInfo
 
     /// <summary>근접 무기 공격에 의한 피격인지 여부.</summary>
     public bool IsMelee;
+
+    /// <summary>피격을 가한 공격자의 <see cref="NetworkObject"/> (환경 피해·자폭 시 <c>null</c>).</summary>
+    public NetworkObject AttackerObject;
 }
 
 /// <summary>서버 권위 데미지를 수신할 수 있는 피격 대상 계약.</summary>

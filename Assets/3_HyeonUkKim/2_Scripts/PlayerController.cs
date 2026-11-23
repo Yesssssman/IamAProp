@@ -1,4 +1,5 @@
 using FishNet.Component.Transforming.Beta;
+using FishNet.Object;
 using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -50,6 +51,9 @@ public class PlayerController : PropControllerBase
     /// <summary>로컬 소유자 시네머신 카메라의 무기 반동 및 미세 펄스 흔들림 확장 컴포넌트.</summary>
     private CinemachineWeaponFeedback _cameraFeedback;
 
+    /// <summary>사망 후 시체 포커스 및 킬러 관전을 제어하는 씬 데스캠 컨트롤러.</summary>
+    private DeathCamController _deathCamController;
+
     /// <summary>래그돌 회전과 무관하게 수직 자세를 유지하는 카메라 추적 앵커.</summary>
     private Transform _cameraAnchor;
 
@@ -61,6 +65,13 @@ public class PlayerController : PropControllerBase
 
     /// <summary>다음 네트워크 틱에 소비할 점프 입력 플래그.</summary>
     private bool _jumpRequested;
+
+    // ***************************************************************
+    // Properties
+    // ***************************************************************
+
+    /// <summary>로컬 소유자 시네머신 카메라가 추적하는 수직 기준 앵커 트랜스폼.</summary>
+    public Transform CameraAnchor => _cameraAnchor;
 
     // ***************************************************************
     // MonoBehaviour
@@ -99,31 +110,31 @@ public class PlayerController : PropControllerBase
         _inputActions.Player.Pickup.started += OnPickupStarted;
         _inputActions.Player.DropWeapon.started += OnDropWeaponStarted;
 
-        if (tpsViewPos == null)
-        {
-            tpsViewPos = transform.Find("TpsViewPos");
-        }
-
-        if (visualRoot == null)
-        {
-            NetworkTickSmoother smoother = GetComponentInChildren<NetworkTickSmoother>(true);
-            if (smoother != null)
-            {
-                visualRoot = smoother.transform;
-            }
-        }
-
-        _tpsViewOffsetY = tpsViewPos != null
-            ? tpsViewPos.localPosition.y * transform.localScale.y
-            : DefaultTpsViewOffsetY;
-
         _cameraAnchor = new GameObject("CameraAnchor").transform;
         _cameraAnchor.SetParent(transform, false);
         UpdateCameraAnchorPosition();
 
-        CinemachineCamera cam = FindAnyObjectByType<CinemachineCamera>();
+        _deathCamController = FindAnyObjectByType<DeathCamController>(FindObjectsInactive.Include);
+
+        CinemachineCamera cam = _deathCamController != null ? _deathCamController.PlayerCamera : null;
+        if (cam == null)
+        {
+            CinemachineCamera[] cameras = FindObjectsByType<CinemachineCamera>();
+            for (int i = 0; i < cameras.Length; i++)
+            {
+                if (cameras[i] != null && cameras[i].GetComponent<DeathCamController>() == null)
+                {
+                    cam = cameras[i];
+                    break;
+                }
+            }
+        }
+
         if (cam != null)
         {
+            _deathCamController?.BindPlayerCamera(cam);
+            _deathCamController?.ResetDeathCam();
+
             cam.Follow = _cameraAnchor;
             cam.LookAt = _cameraAnchor;
 
@@ -141,6 +152,11 @@ public class PlayerController : PropControllerBase
             _cameraFeedback.ResetFeedback();
         }
 
+        if (_playerHealth != null)
+        {
+            _playerHealth.OnOwnerDiedWithKiller += HandleOwnerDiedWithKiller;
+        }
+
         if (Camera.main != null)
         {
             cameraTransform = Camera.main.transform;
@@ -151,6 +167,17 @@ public class PlayerController : PropControllerBase
     {
         _moveInput = Vector2.zero;
         _jumpRequested = false;
+
+        if (_playerHealth != null)
+        {
+            _playerHealth.OnOwnerDiedWithKiller -= HandleOwnerDiedWithKiller;
+        }
+
+        if (IsOwner && _deathCamController != null)
+        {
+            _deathCamController.ResetDeathCam();
+        }
+        _deathCamController = null;
 
         if (_cameraAnchor != null)
         {
@@ -189,6 +216,24 @@ public class PlayerController : PropControllerBase
     {
         _weaponController = GetComponent<PlayerWeaponController>();
         _weaponInventory = GetComponent<PlayerWeaponInventory>();
+
+        if (tpsViewPos == null)
+        {
+            tpsViewPos = transform.Find("TpsViewPos");
+        }
+
+        if (visualRoot == null)
+        {
+            NetworkTickSmoother smoother = GetComponentInChildren<NetworkTickSmoother>(true);
+            if (smoother != null)
+            {
+                visualRoot = smoother.transform;
+            }
+        }
+
+        _tpsViewOffsetY = tpsViewPos != null
+            ? tpsViewPos.localPosition.y * transform.localScale.y
+            : DefaultTpsViewOffsetY;
     }
 
     /// <inheritdoc/>
@@ -249,6 +294,7 @@ public class PlayerController : PropControllerBase
         _moveInput = Vector2.zero;
         _jumpRequested = false;
         _weaponController?.CancelCombatActions();
+        _cameraFeedback?.ResetFeedback();
     }
 
     /// <inheritdoc/>
@@ -257,11 +303,24 @@ public class PlayerController : PropControllerBase
         _moveInput = Vector2.zero;
         _jumpRequested = false;
         _weaponController?.CancelCombatActions();
+        _cameraFeedback?.ResetFeedback();
+
+        if (IsOwner)
+        {
+            _deathCamController?.ResetDeathCam();
+        }
     }
 
     // ***************************************************************
     // Public Control API
     // ***************************************************************
+
+    /// <summary>보간된 시각 루트 기준 카메라 추적 월드 좌표를 반환한다.</summary>
+    public Vector3 GetCameraTargetPosition()
+    {
+        Vector3 basePosition = visualRoot != null ? visualRoot.position : transform.position;
+        return basePosition + Vector3.up * _tpsViewOffsetY;
+    }
 
     /// <summary>로컬 소유자 카메라에 <paramref name="weaponData"/> 기반 발사 반동과 미세 펄스 흔들림을 적용한다.</summary>
     public void ApplyWeaponCameraFeedback(WeaponDataSO weaponData)
@@ -463,13 +522,23 @@ public class PlayerController : PropControllerBase
     }
 
     // ***************************************************************
+    // Event Handlers
+    // ***************************************************************
+
+    /// <summary>소유자 사망 통보 수신 시 3초 시체 포커스 및 킬러 관전 시퀀스를 시작한다.</summary>
+    private void HandleOwnerDiedWithKiller(NetworkObject killerNetworkObject)
+    {
+        if (!IsOwner) return;
+        _deathCamController?.BeginDeathSequence(this, killerNetworkObject);
+    }
+
+    // ***************************************************************
     // Helpers
     // ***************************************************************
 
     /// <summary>카메라 추적 앵커의 월드 위치와 수직 회전을 갱신한다.</summary>
     private void UpdateCameraAnchorPosition()
     {
-        Vector3 basePosition = visualRoot != null ? visualRoot.position : transform.position;
-        _cameraAnchor.SetPositionAndRotation(basePosition + Vector3.up * _tpsViewOffsetY, Quaternion.identity);
+        _cameraAnchor.SetPositionAndRotation(GetCameraTargetPosition(), Quaternion.identity);
     }
 }

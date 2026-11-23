@@ -610,7 +610,8 @@ public class PlayerWeaponController : NetworkBehaviour
                     HitDirection = direction,
                     HitPoint = hitPoint,
                     HasHitPoint = true,
-                    IsMelee = weaponData.Category == EWeaponCategory.Melee
+                    IsMelee = weaponData.Category == EWeaponCategory.Melee,
+                    AttackerObject = NetworkObject
                 };
                 damageable.TakeDamage(weaponData.Damage, Owner, in hitInfo);
                 hitDamageable = true;

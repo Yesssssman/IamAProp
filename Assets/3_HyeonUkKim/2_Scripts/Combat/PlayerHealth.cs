@@ -28,6 +28,9 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     /// <summary>모든 클라이언트에 동기화되는 사망 상태.</summary>
     private readonly SyncVar<bool> _isDead = new(new SyncTypeSettings(0f, Channel.Reliable));
 
+    /// <summary>서버에서 마지막 치명타를 입힌 킬러의 <see cref="NetworkObject"/>.</summary>
+    private NetworkObject _lastKiller;
+
     // ***************************************************************
     // Events
     // ***************************************************************
@@ -47,6 +50,9 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     /// <summary>사망 상태가 전환될 때 최신 사망 여부를 알리는 이벤트.</summary>
     public event Action<bool> OnDeadStateChanged;
 
+    /// <summary>로컬 소유자 클라이언트에서 사망 확정 시 킬러 <see cref="NetworkObject"/>를 전달하는 이벤트.</summary>
+    public event Action<NetworkObject> OnOwnerDiedWithKiller;
+
     // ***************************************************************
     // Properties
     // ***************************************************************
@@ -63,6 +69,9 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     /// <summary>할당된 플레이어 스탯 데이터.</summary>
     public PlayerStatsSO PlayerStats => playerStats;
 
+    /// <summary>서버에 기록된 마지막 치명타 킬러 <see cref="NetworkObject"/>.</summary>
+    public NetworkObject LastKiller => _lastKiller;
+
     // ***************************************************************
     // NetworkBehaviour
     // ***************************************************************
@@ -71,6 +80,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     {
         _currentHealth.Value = MaxHealth;
         _isDead.Value = false;
+        _lastKiller = null;
     }
 
     public override void OnStartNetwork()
@@ -84,6 +94,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     {
         _currentHealth.OnChange -= HandleHealthChanged;
         _isDead.OnChange -= HandleIsDeadChanged;
+        _lastKiller = null;
     }
 
     // ***************************************************************
@@ -123,10 +134,40 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
         if (diedNow)
         {
+            NetworkObject killerObject = hitInfo.AttackerObject;
+            if (killerObject == null && attacker != null && attacker.IsValid)
+            {
+                foreach (NetworkObject ownedObject in attacker.Objects)
+                {
+                    if (ownedObject != null && ownedObject.GetComponent<PlayerController>() != null)
+                    {
+                        killerObject = ownedObject;
+                        break;
+                    }
+                }
+
+                if (killerObject == null)
+                {
+                    killerObject = attacker.FirstObject;
+                }
+            }
+
+            if (killerObject == NetworkObject)
+            {
+                killerObject = null;
+            }
+
+            _lastKiller = killerObject;
+
             Debug.Log($"[PlayerHealth] {name}(Owner:{OwnerId}) 사망 (공격자 ClientId:{attackerId})");
             OnDied?.Invoke(attacker);
             OnDeathEffectsTriggered?.Invoke(hitInfo);
             BroadcastDeathObserversRpc(hitInfo.HitDirection, hitInfo.HitPoint, hitInfo.HasHitPoint, hitInfo.IsMelee);
+
+            if (Owner != null && Owner.IsValid)
+            {
+                NotifyOwnerDeathTargetRpc(Owner, killerObject);
+            }
         }
     }
 
@@ -136,11 +177,19 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     {
         _currentHealth.Value = MaxHealth;
         _isDead.Value = false;
+        _lastKiller = null;
     }
 
     // ***************************************************************
     // Network RPCs
     // ***************************************************************
+
+    /// <summary>사망한 플레이어의 소유자 클라이언트에만 킬러 <see cref="NetworkObject"/> 정보를 전달한다.</summary>
+    [TargetRpc]
+    private void NotifyOwnerDeathTargetRpc(NetworkConnection target, NetworkObject killerNetworkObject)
+    {
+        OnOwnerDiedWithKiller?.Invoke(killerNetworkObject);
+    }
 
     /// <summary>모든 원격 클라이언트에 치명타 피격 정보와 사망 연출을 전파한다.</summary>
     [ObserversRpc]
