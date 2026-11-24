@@ -59,7 +59,7 @@ public static class PropPrefabSetupTool
         rb.angularDamping = propData != null ? propData.RigidbodyAngularDamping : 0.1f;
         rb.useGravity = true;
         rb.isKinematic = false;
-        rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+        rb.constraints = RigidbodyConstraints.FreezeRotation;
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
 
         Animator bodyAnimator = root.GetComponent<Animator>();

@@ -4,7 +4,7 @@ using FishNet.Object;
 using FishNet.Transporting;
 using UnityEngine;
 
-/// <summary>무기 인스턴스별 탄약/쿨다운 관리와 서버 권위 히트스캔(Raycast) 공격 판정을 처리한다.</summary>
+/// <summary>무기 인스턴스별 탄약/쿨다운 관리와 서버 권위 히트스캔(SphereCast) 공격 판정을 처리한다.</summary>
 [RequireComponent(typeof(PlayerController))]
 [RequireComponent(typeof(PlayerAnim))]
 [RequireComponent(typeof(PlayerWeaponInventory))]
@@ -22,6 +22,16 @@ public class PlayerWeaponController : NetworkBehaviour
         public float nextFireTime;
     }
 
+    /// <summary>씬 뷰 기즈모로 표시할 단일 사격 구체 캐스트 궤적 기록.</summary>
+    private struct ShotGizmoTrace
+    {
+        public Vector3 origin;
+        public Vector3 endPoint;
+        public float radius;
+        public bool hitDamageable;
+        public float expireTime;
+    }
+
     // ***************************************************************
     // Constants
     // ***************************************************************
@@ -31,6 +41,7 @@ public class PlayerWeaponController : NetworkBehaviour
     private const float MeleeComboBufferWindow = 0.14f; // 근접 공격 막바지에 선입력을 허용하는 남은 쿨다운 시간 (초)
     private const float MeleeComboGraceWindow = 0.25f; // 근접 쿨다운 종료 후 콤보를 이어갈 수 있는 유예 시간 (초)
     private const int DefaultCombatLayerMask = (1 << 0) | (1 << 3) | (1 << 6) | (1 << 7); // Default, Ground, Player, Hitbox
+    private const int MaxShotGizmoTraces = 16; // 동시에 표시할 최근 사격 궤적 기즈모 최대 개수
 
     // ***************************************************************
     // Fields
@@ -40,9 +51,16 @@ public class PlayerWeaponController : NetworkBehaviour
     [Header("히트스캔 설정")]
     [SerializeField] private LayerMask hitLayerMask = DefaultCombatLayerMask;
 
+    /// <summary>총기 히트스캔 구체 캐스트 기본 반지름 (미터).</summary>
+    [Min(0.01f)]
+    [SerializeField] private float shotSphereRadius = 0.05f;
+
     /// <summary>씬 뷰에 디버그 사격 궤적을 표시할 유지 시간 (초 단위).</summary>
     [Min(0f)]
     [SerializeField] private float debugRayDuration = 1.5f;
+
+    /// <summary>씬 뷰에 구체 캐스트 사격 궤적 기즈모를 표시할지 여부.</summary>
+    [SerializeField] private bool drawShotGizmos = true;
 
     /// <summary>총기 사격 및 재장전 사운드를 3D 공간에서 재생할 <see cref="AudioSource"/> 컴포넌트.</summary>
     [Header("사운드 설정")]
@@ -55,7 +73,16 @@ public class PlayerWeaponController : NetworkBehaviour
     private float[] _serverNextFireTimes;
 
     /// <summary>히트스캔 물리 캐스트 결과를 저장하는 재사용 버퍼.</summary>
-    private readonly RaycastHit[] _hitBuffer = new RaycastHit[16];
+    private readonly RaycastHit[] _hitBuffer = new RaycastHit[32];
+
+    /// <summary>총구 초근접 겹침 판정 결과를 저장하는 재사용 버퍼.</summary>
+    private readonly Collider[] _overlapBuffer = new Collider[16];
+
+    /// <summary>씬 뷰 기즈모 렌더링용 최근 사격 궤적 링 버퍼.</summary>
+    private readonly ShotGizmoTrace[] _shotGizmoTraces = new ShotGizmoTrace[MaxShotGizmoTraces];
+
+    /// <summary>다음 사격 궤적 기즈모를 기록할 링 버퍼 인덱스.</summary>
+    private int _shotGizmoWriteIndex;
 
     /// <summary>조준 좌표와 발사 원점을 제공하는 플레이어 컨트롤러.</summary>
     private PlayerController _playerController;
@@ -313,21 +340,84 @@ public class PlayerWeaponController : NetworkBehaviour
         _playerAnim.TriggerAttack(attackVariant);
         PlayShotSound(activeWeaponId);
 
-        Vector3 origin = _playerController != null
+        bool isMelee = weaponData.Category == EWeaponCategory.Melee;
+        Vector3 pivotOrigin = _playerController != null
             ? _playerController.GetFireOrigin()
             : transform.position + Vector3.up * 0.35f;
+        Vector3 clientOrigin = !isMelee && _playerAnim.CurrentMuzzlePoint != null
+            ? _playerAnim.CurrentMuzzlePoint.position
+            : pivotOrigin;
         Vector3 aimPoint = _playerController != null
             ? _playerController.GetAimPoint()
-            : origin + transform.forward * weaponData.Range;
-        Vector3 direction = aimPoint - origin;
-        direction = direction.sqrMagnitude > 0.0001f ? direction.normalized : transform.forward;
+            : clientOrigin + transform.forward * weaponData.Range;
 
         if (PredictionManager == null || !PredictionManager.IsReconciling)
         {
             _playerController?.ApplyWeaponCameraFeedback(weaponData);
         }
 
-        RequestFireServerRpc(origin, direction, activeSlot, activeWeaponId, attackVariant);
+        RequestFireServerRpc(clientOrigin, aimPoint, activeSlot, activeWeaponId, attackVariant);
+    }
+
+    private void OnDrawGizmos()
+    {
+        if (!drawShotGizmos || debugRayDuration <= 0f) return;
+
+        float now = Time.time;
+        for (int i = 0; i < _shotGizmoTraces.Length; i++)
+        {
+            ShotGizmoTrace trace = _shotGizmoTraces[i];
+            if (trace.expireTime <= now) continue;
+
+            Color mainColor = trace.hitDamageable ? Color.red : Color.yellow;
+            Gizmos.color = mainColor;
+            Gizmos.DrawLine(trace.origin, trace.endPoint);
+
+            if (trace.radius > 0f)
+            {
+                Gizmos.color = Color.cyan;
+                Gizmos.DrawWireSphere(trace.origin, trace.radius);
+
+                Gizmos.color = mainColor;
+                Gizmos.DrawWireSphere(trace.endPoint, trace.radius);
+
+                Vector3 delta = trace.endPoint - trace.origin;
+                if (delta.sqrMagnitude > 0.0001f)
+                {
+                    Vector3 dir = delta.normalized;
+                    Vector3 refUp = Mathf.Abs(Vector3.Dot(dir, Vector3.up)) < 0.99f ? Vector3.up : Vector3.right;
+                    Vector3 right = Vector3.Cross(dir, refUp).normalized * trace.radius;
+                    Vector3 up = Vector3.Cross(right, dir).normalized * trace.radius;
+
+                    Gizmos.color = new Color(mainColor.r, mainColor.g, mainColor.b, 0.55f);
+                    Gizmos.DrawLine(trace.origin + right, trace.endPoint + right);
+                    Gizmos.DrawLine(trace.origin - right, trace.endPoint - right);
+                    Gizmos.DrawLine(trace.origin + up, trace.endPoint + up);
+                    Gizmos.DrawLine(trace.origin - up, trace.endPoint - up);
+                }
+            }
+
+            Gizmos.color = mainColor;
+            float markerRadius = trace.radius > 0f ? Mathf.Min(trace.radius * 0.35f, 0.03f) : 0.02f;
+            Gizmos.DrawSphere(trace.endPoint, markerRadius);
+        }
+    }
+
+    private void OnDrawGizmosSelected()
+    {
+        if (!drawShotGizmos || _playerAnim == null || _playerAnim.CurrentMuzzlePoint == null) return;
+
+        WeaponDataSO weaponData = CurrentWeaponData;
+        if (weaponData == null || weaponData.Category == EWeaponCategory.Melee) return;
+
+        float previewRadius = Mathf.Max(
+            0.01f,
+            weaponData.ShotSphereRadiusOverride > 0f ? weaponData.ShotSphereRadiusOverride : shotSphereRadius);
+        Transform muzzle = _playerAnim.CurrentMuzzlePoint;
+
+        Gizmos.color = Color.green;
+        Gizmos.DrawWireSphere(muzzle.position, previewRadius);
+        Gizmos.DrawRay(muzzle.position, muzzle.forward * 0.5f);
     }
 
     // ***************************************************************
@@ -352,6 +442,8 @@ public class PlayerWeaponController : NetworkBehaviour
         }
 
         _isServerReloading = false;
+        Array.Clear(_shotGizmoTraces, 0, _shotGizmoTraces.Length);
+        _shotGizmoWriteIndex = 0;
     }
 
     public override void OnStartClient()
@@ -513,11 +605,11 @@ public class PlayerWeaponController : NetworkBehaviour
     // Network RPCs
     // ***************************************************************
 
-    /// <summary>서버에서 발사 조건을 검증하고 히트스캔 또는 근접 충돌 판정 및 데미지를 적용한다.</summary>
+    /// <summary>서버에서 발사 조건과 총구 원점을 검증하고 구체 캐스트 충돌 판정 및 데미지를 적용한다.</summary>
     [ServerRpc]
     private void RequestFireServerRpc(
-        Vector3 origin,
-        Vector3 direction,
+        Vector3 clientOrigin,
+        Vector3 aimPoint,
         EWeaponSlotType slot,
         string weaponId,
         byte attackVariant,
@@ -527,6 +619,7 @@ public class PlayerWeaponController : NetworkBehaviour
         if (_weaponInventory == null || _weaponInventory.ActiveSlot != slot) return;
         if (!string.Equals(_weaponInventory.EquippedWeaponId, weaponId, StringComparison.Ordinal)) return;
         if (_isServerReloading) return;
+        if (!IsFiniteVector(clientOrigin) || !IsFiniteVector(aimPoint)) return;
 
         WeaponDataSO weaponData = _weaponInventory.EquippedWeaponData;
         if (weaponData == null) return;
@@ -546,63 +639,173 @@ public class PlayerWeaponController : NetworkBehaviour
             SyncAmmoTargetRpc(Owner, slot, updatedAmmo.CurrentAmmo, updatedAmmo.ReserveAmmo);
         }
 
-        if (direction.sqrMagnitude < 0.0001f) return;
-        direction.Normalize();
-
-        Vector3 expectedOrigin = _playerController != null
-            ? _playerController.GetFireOrigin()
-            : transform.position + Vector3.up * 0.35f;
-        if (Vector3.Distance(origin, expectedOrigin) > MaxOriginOffset)
-        {
-            origin = expectedOrigin;
-        }
-
         _serverNextFireTimes[slotIndex] = Time.time + weaponData.AttackCooldown;
 
-        int hitCount = weaponData.MeleeCastRadius > 0f
-            ? Physics.SphereCastNonAlloc(
-                origin,
-                weaponData.MeleeCastRadius,
-                direction,
-                _hitBuffer,
-                weaponData.Range,
-                hitLayerMask,
-                QueryTriggerInteraction.Ignore)
-            : Physics.RaycastNonAlloc(
-                origin,
-                direction,
-                _hitBuffer,
-                weaponData.Range,
+        bool isMelee = weaponData.Category == EWeaponCategory.Melee;
+        Vector3 serverPivotOrigin = _playerController != null
+            ? _playerController.GetFireOrigin()
+            : transform.position + Vector3.up * 0.35f;
+        Vector3 serverMuzzleOrigin = !isMelee && _playerAnim != null && _playerAnim.CurrentMuzzlePoint != null
+            ? _playerAnim.CurrentMuzzlePoint.position
+            : serverPivotOrigin;
+
+        // 클라이언트 총구 좌표가 서버 총구 기준 허용 반경 내이고 사이에 장애물이 없을 때만 채택한다.
+        Vector3 fireOrigin = serverMuzzleOrigin;
+        Vector3 originDelta = clientOrigin - serverMuzzleOrigin;
+        float originDeltaDist = originDelta.magnitude;
+        if (originDeltaDist <= MaxOriginOffset)
+        {
+            bool blockedBetweenOrigins = false;
+            if (originDeltaDist > 0.001f)
+            {
+                int verifyHits = Physics.RaycastNonAlloc(
+                    serverMuzzleOrigin,
+                    originDelta / originDeltaDist,
+                    _hitBuffer,
+                    originDeltaDist,
+                    hitLayerMask,
+                    QueryTriggerInteraction.Ignore);
+                blockedBetweenOrigins = TryFindClosestNonSelfHit(verifyHits, out _);
+            }
+
+            if (!blockedBetweenOrigins)
+            {
+                fireOrigin = clientOrigin;
+            }
+        }
+
+        Vector3 toAimFromMuzzle = aimPoint - fireOrigin;
+        Vector3 toAimFromPivot = aimPoint - serverPivotOrigin;
+        Vector3 fallbackForward = toAimFromPivot.sqrMagnitude > 0.0001f
+            ? toAimFromPivot.normalized
+            : transform.forward;
+        Vector3 direction = toAimFromMuzzle.sqrMagnitude > 0.0001f && Vector3.Dot(toAimFromMuzzle, fallbackForward) > 0f
+            ? toAimFromMuzzle.normalized
+            : fallbackForward;
+
+        float castRadius = isMelee
+            ? weaponData.MeleeCastRadius
+            : Mathf.Max(0.01f, weaponData.ShotSphereRadiusOverride > 0f ? weaponData.ShotSphereRadiusOverride : shotSphereRadius);
+
+        bool hasValidHit = false;
+        Collider hitCollider = null;
+        Vector3 hitPoint = fireOrigin + direction * weaponData.Range;
+        float hitDistance = 0f;
+        Vector3 traceOrigin = fireOrigin;
+
+        // 1단계: 총기 사격 시 몸체 피벗~총구 구간의 벽 관통 차단 및 총구 뒤 초근접 적 검출
+        if (!isMelee)
+        {
+            Vector3 toMuzzle = fireOrigin - serverPivotOrigin;
+            float toMuzzleDist = toMuzzle.magnitude;
+            if (toMuzzleDist > 0.001f)
+            {
+                int barrelHits = Physics.RaycastNonAlloc(
+                    serverPivotOrigin,
+                    toMuzzle / toMuzzleDist,
+                    _hitBuffer,
+                    toMuzzleDist,
+                    hitLayerMask,
+                    QueryTriggerInteraction.Ignore);
+
+                if (TryFindClosestNonSelfHit(barrelHits, out RaycastHit barrelHit))
+                {
+                    hasValidHit = true;
+                    hitCollider = barrelHit.collider;
+                    hitPoint = barrelHit.point != Vector3.zero
+                        ? barrelHit.point
+                        : GetSafeClosestPoint(barrelHit.collider, serverPivotOrigin);
+                    hitDistance = barrelHit.distance;
+                    traceOrigin = serverPivotOrigin;
+                }
+            }
+        }
+
+        // 2단계: 시작 구체에 이미 겹쳐 있는 초근접 적 검출 (Physics.SphereCast의 초기 겹침 무시 보완)
+        if (!hasValidHit && castRadius > 0f)
+        {
+            int overlapCount = Physics.OverlapSphereNonAlloc(
+                fireOrigin,
+                castRadius,
+                _overlapBuffer,
                 hitLayerMask,
                 QueryTriggerInteraction.Ignore);
 
-        bool hasValidHit = false;
-        float closestDistance = float.MaxValue;
-        RaycastHit closestHit = default;
-
-        for (int i = 0; i < hitCount; i++)
-        {
-            RaycastHit hit = _hitBuffer[i];
-            if (hit.transform == null || hit.transform.IsChildOf(transform)) continue;
-
-            if (hit.distance < closestDistance)
+            float closestOverlapDistSqr = float.MaxValue;
+            for (int i = 0; i < overlapCount; i++)
             {
-                closestDistance = hit.distance;
-                closestHit = hit;
+                Collider col = _overlapBuffer[i];
+                if (col == null || col.transform.IsChildOf(transform)) continue;
+
+                IDamageable candidate = col.GetComponentInParent<IDamageable>();
+                if (candidate == null || candidate.IsDead) continue;
+
+                Vector3 closestPt = GetSafeClosestPoint(col, fireOrigin);
+                Vector3 toCandidate = closestPt - fireOrigin;
+                float distSqr = toCandidate.sqrMagnitude;
+                if (distSqr >= closestOverlapDistSqr) continue;
+
+                if (distSqr > 0.0001f)
+                {
+                    float dist = Mathf.Sqrt(distSqr);
+                    int losHits = Physics.RaycastNonAlloc(
+                        fireOrigin,
+                        toCandidate / dist,
+                        _hitBuffer,
+                        dist,
+                        hitLayerMask,
+                        QueryTriggerInteraction.Ignore);
+
+                    if (TryFindClosestNonSelfHit(losHits, out RaycastHit losHit)
+                        && losHit.collider.GetComponentInParent<IDamageable>() != candidate)
+                    {
+                        continue;
+                    }
+                }
+
+                closestOverlapDistSqr = distSqr;
+                hitCollider = col;
+                hitPoint = closestPt;
+                hitDistance = Mathf.Sqrt(distSqr);
                 hasValidHit = true;
             }
         }
 
-        Vector3 hitPoint = origin + direction * weaponData.Range;
-        bool hitDamageable = false;
-
-        if (hasValidHit)
+        // 3단계: 총구에서 크로스헤어 조준점 방향으로 구체 캐스트 실행
+        if (!hasValidHit)
         {
-            hitPoint = closestHit.point != Vector3.zero
-                ? closestHit.point
-                : closestHit.collider.ClosestPoint(origin);
+            int hitCount = castRadius > 0f
+                ? Physics.SphereCastNonAlloc(
+                    fireOrigin,
+                    castRadius,
+                    direction,
+                    _hitBuffer,
+                    weaponData.Range,
+                    hitLayerMask,
+                    QueryTriggerInteraction.Ignore)
+                : Physics.RaycastNonAlloc(
+                    fireOrigin,
+                    direction,
+                    _hitBuffer,
+                    weaponData.Range,
+                    hitLayerMask,
+                    QueryTriggerInteraction.Ignore);
 
-            IDamageable damageable = closestHit.collider.GetComponentInParent<IDamageable>();
+            if (TryFindClosestNonSelfHit(hitCount, out RaycastHit closestHit))
+            {
+                hasValidHit = true;
+                hitCollider = closestHit.collider;
+                hitPoint = closestHit.point != Vector3.zero
+                    ? closestHit.point
+                    : GetSafeClosestPoint(closestHit.collider, fireOrigin);
+                hitDistance = closestHit.distance;
+            }
+        }
+
+        bool hitDamageable = false;
+        if (hasValidHit && hitCollider != null)
+        {
+            IDamageable damageable = hitCollider.GetComponentInParent<IDamageable>();
             if (damageable != null && !damageable.IsDead)
             {
                 DamageHitInfo hitInfo = new DamageHitInfo
@@ -610,21 +813,22 @@ public class PlayerWeaponController : NetworkBehaviour
                     HitDirection = direction,
                     HitPoint = hitPoint,
                     HasHitPoint = true,
-                    IsMelee = weaponData.Category == EWeaponCategory.Melee,
+                    IsMelee = isMelee,
                     AttackerObject = NetworkObject
                 };
                 damageable.TakeDamage(weaponData.Damage, Owner, in hitInfo);
                 hitDamageable = true;
-                Debug.Log($"[PlayerWeaponController] {name}({weaponData.WeaponName}) 적중 → {closestHit.collider.name} (데미지: {weaponData.Damage:F1}, 거리: {closestHit.distance:F2}m)");
+                Debug.Log($"[PlayerWeaponController] {name}({weaponData.WeaponName}) 적중 → {hitCollider.name} (데미지: {weaponData.Damage:F1}, 거리: {hitDistance:F2}m)");
             }
             else
             {
-                Debug.Log($"[PlayerWeaponController] {name}({weaponData.WeaponName}) 충돌 → {closestHit.collider.name} (거리: {closestHit.distance:F2}m)");
+                Debug.Log($"[PlayerWeaponController] {name}({weaponData.WeaponName}) 충돌 → {hitCollider.name} (거리: {hitDistance:F2}m)");
             }
         }
 
-        Debug.DrawLine(origin, hitPoint, hitDamageable ? Color.red : Color.yellow, debugRayDuration);
-        BroadcastFireObserversRpc(origin, hitPoint, hitDamageable, weaponId, attackVariant);
+        RecordShotGizmo(traceOrigin, hitPoint, castRadius, hitDamageable);
+        Debug.DrawLine(traceOrigin, hitPoint, hitDamageable ? Color.red : Color.yellow, debugRayDuration);
+        BroadcastFireObserversRpc(traceOrigin, hitPoint, castRadius, hitDamageable, weaponId, attackVariant);
 
         if (hitDamageable)
         {
@@ -655,7 +859,7 @@ public class PlayerWeaponController : NetworkBehaviour
 
     /// <summary>클라이언트에 발사 애니메이션, 사격 사운드와 디버그 궤적을 전파한다.</summary>
     [ObserversRpc]
-    private void BroadcastFireObserversRpc(Vector3 origin, Vector3 hitPoint, bool hitDamageable, string weaponId, byte attackVariant)
+    private void BroadcastFireObserversRpc(Vector3 origin, Vector3 hitPoint, float castRadius, bool hitDamageable, string weaponId, byte attackVariant)
     {
         if (_playerHealth != null && _playerHealth.IsDead) return;
 
@@ -667,6 +871,7 @@ public class PlayerWeaponController : NetworkBehaviour
 
         if (!IsServerInitialized)
         {
+            RecordShotGizmo(origin, hitPoint, castRadius, hitDamageable);
             Debug.DrawLine(origin, hitPoint, hitDamageable ? Color.red : Color.yellow, debugRayDuration);
         }
     }
@@ -730,5 +935,65 @@ public class PlayerWeaponController : NetworkBehaviour
         _ownerStates[index].currentAmmo = state.CurrentAmmo;
         _ownerStates[index].reserveAmmo = state.ReserveAmmo;
         OnAmmoChanged?.Invoke((EWeaponType)slot, state.CurrentAmmo, state.ReserveAmmo);
+    }
+
+    // ***************************************************************
+    // Helpers
+    // ***************************************************************
+
+    /// <summary><see cref="_hitBuffer"/>에서 발사자 본인을 제외한 가장 가까운 충돌 결과를 찾는다.</summary>
+    private bool TryFindClosestNonSelfHit(int hitCount, out RaycastHit closestHit)
+    {
+        bool found = false;
+        float closestDistance = float.MaxValue;
+        closestHit = default;
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            RaycastHit hit = _hitBuffer[i];
+            if (hit.collider == null || hit.transform == null || hit.transform.IsChildOf(transform)) continue;
+
+            if (hit.distance < closestDistance)
+            {
+                closestDistance = hit.distance;
+                closestHit = hit;
+                found = true;
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>비볼록 <see cref="MeshCollider"/>에서도 예외 없이 <paramref name="point"/>에 가장 가까운 표면 좌표를 반환한다.</summary>
+    private static Vector3 GetSafeClosestPoint(Collider collider, Vector3 point)
+    {
+        if (collider is MeshCollider meshCollider && !meshCollider.convex)
+        {
+            return collider.ClosestPointOnBounds(point);
+        }
+
+        return collider.ClosestPoint(point);
+    }
+
+    /// <summary><paramref name="v"/>의 모든 성분이 유한한 실수인지 검사한다.</summary>
+    private static bool IsFiniteVector(Vector3 v)
+    {
+        return float.IsFinite(v.x) && float.IsFinite(v.y) && float.IsFinite(v.z);
+    }
+
+    /// <summary>최근 사격 구체 캐스트 궤적을 씬 뷰 기즈모 링 버퍼에 기록한다.</summary>
+    private void RecordShotGizmo(Vector3 origin, Vector3 endPoint, float radius, bool hitDamageable)
+    {
+        if (!drawShotGizmos || debugRayDuration <= 0f) return;
+
+        _shotGizmoTraces[_shotGizmoWriteIndex] = new ShotGizmoTrace
+        {
+            origin = origin,
+            endPoint = endPoint,
+            radius = radius,
+            hitDamageable = hitDamageable,
+            expireTime = Time.time + debugRayDuration
+        };
+        _shotGizmoWriteIndex = (_shotGizmoWriteIndex + 1) % _shotGizmoTraces.Length;
     }
 }

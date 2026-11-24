@@ -446,7 +446,7 @@ Rigidbody:
   m_UseGravity: 1
   m_IsKinematic: 0
   m_Interpolate: 0
-  m_Constraints: 80
+  m_Constraints: 112
   m_CollisionDetection: 2
 --- !u!114 &2070328220091570088
 MonoBehaviour:
@@ -469,6 +469,10 @@ MonoBehaviour:
   minAimPitch: -60
   maxAimPitch: 60
   aimPitchLerpSpeed: 20
+  gunDeathForce: 20
+  meleeDeathForce: 15
+  deathUpwardForce: 6
+  deathTorque: 6
   _wasGrounded: 0
   _isGrounded: 0
   cameraTransform: {fileID: 0}

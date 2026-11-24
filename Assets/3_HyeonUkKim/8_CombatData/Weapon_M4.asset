@@ -53,6 +53,7 @@ MonoBehaviour:
   isAutomatic: 1
   range: 100
   meleeCastRadius: 0
+  shotSphereRadiusOverride: 0.05
   usesAmmo: 1
   maxAmmo: 30
   maxReserveAmmo: 9000

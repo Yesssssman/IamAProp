@@ -44,6 +44,9 @@ public class PlayerAnim : PropAnimBase
     /// <summary>현재 장착 무기 프리팹의 1인칭 정조준 기준 앵커 트랜스폼.</summary>
     private Transform _currentAdsCameraAnchor;
 
+    /// <summary>현재 장착 무기 프리팹의 총구 기준 트랜스폼.</summary>
+    private Transform _currentMuzzlePoint;
+
     /// <summary>무기 교체 애니메이션 진입 직후 <c>isWeaponSwap</c>을 초기화하기 위한 대기 플래그.</summary>
     private bool _pendingWeaponSwapReset;
 
@@ -170,6 +173,9 @@ public class PlayerAnim : PropAnimBase
 
     /// <summary>현재 장착된 무기의 1인칭 정조준 기준 앵커(<c>AdsCameraAnchor</c>) 트랜스폼.</summary>
     public Transform CurrentAdsCameraAnchor => _currentAdsCameraAnchor;
+
+    /// <summary>현재 장착된 무기의 총구(<c>MuzzlePoint</c>) 트랜스폼.</summary>
+    public Transform CurrentMuzzlePoint => _currentMuzzlePoint;
 
     // ***************************************************************
     // MonoBehaviour
@@ -714,6 +720,7 @@ public class PlayerAnim : PropAnimBase
 
                 _currentWeaponObject = weaponObject;
                 _currentAdsCameraAnchor = weaponObject.transform.Find("AdsCameraAnchor");
+                _currentMuzzlePoint = weaponObject.transform.Find("MuzzlePoint");
 
                 GunScript gun = weaponObject.GetComponent<GunScript>();
                 if (gun != null && weaponData.HandReloadClip != null)
@@ -819,6 +826,7 @@ public class PlayerAnim : PropAnimBase
         _weaponAnimator = null;
         _currentWeaponObject = null;
         _currentAdsCameraAnchor = null;
+        _currentMuzzlePoint = null;
 
         if (handScript == null) return;
 

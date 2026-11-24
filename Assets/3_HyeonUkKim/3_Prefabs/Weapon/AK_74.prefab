@@ -31,6 +31,37 @@ Transform:
   m_Children: []
   m_Father: {fileID: 6611883853537997646}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &9099092273310573378
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8590750726537605361}
+  m_Layer: 0
+  m_Name: MuzzlePoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8590750726537605361
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9099092273310573378}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0.034, z: 0.654}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 6611883853537997646}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &5609259011770372116
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -93,6 +124,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 1592644857422062426, guid: 4fc18dcd97b9c2f4c88a7e5bda71352d, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2033312922990943567}
+    - targetCorrespondingSourceObject: {fileID: 1592644857422062426, guid: 4fc18dcd97b9c2f4c88a7e5bda71352d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 8590750726537605361}
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 4fc18dcd97b9c2f4c88a7e5bda71352d, type: 3}
 --- !u!4 &6611883853537997646 stripped

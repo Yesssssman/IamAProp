@@ -243,6 +243,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
                 _rb.linearDamping = propData.RigidbodyLinearDamping;
                 _rb.angularDamping = propData.RigidbodyAngularDamping;
             }
+            _rb.constraints = RigidbodyConstraints.FreezeRotation;
             _lastTickPosition = _rb.position;
         }
 
@@ -514,7 +515,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
         if (_rb != null)
         {
             float currentYaw = _rb.rotation.eulerAngles.y;
-            _rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+            _rb.constraints = RigidbodyConstraints.FreezeRotation;
             if (!_rb.isKinematic)
             {
                 _rb.linearVelocity = Vector3.zero;
@@ -730,13 +731,17 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
         else if (_isRagdollIdle)
         {
             _isRagdollIdle = false;
-            _rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+            _rb.constraints = RigidbodyConstraints.FreezeRotation;
             if (!_rb.isKinematic)
             {
                 _rb.angularVelocity = Vector3.zero;
             }
             _rb.rotation = Quaternion.Euler(0f, currentRotationY, 0f);
             OnRagdollStateChanged(false);
+        }
+        else if (!_rb.isKinematic && _rb.angularVelocity.sqrMagnitude > 0f)
+        {
+            _rb.angularVelocity = Vector3.zero;
         }
 
         float moveAngle = Mathf.Atan2(inputDirection.x, inputDirection.z) * Mathf.Rad2Deg + rd.CameraYaw;
@@ -804,9 +809,10 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
         }
 
         _isRagdollIdle = rd.IsRagdollIdle || _isDead;
-        _rb.constraints = (_isDead || _isRagdollIdle)
+        bool isRagdollPhysics = _isDead || _isRagdollIdle;
+        _rb.constraints = isRagdollPhysics
             ? RigidbodyConstraints.None
-            : RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+            : RigidbodyConstraints.FreezeRotation;
 
         transform.SetPositionAndRotation(rd.Position, rd.Rotation);
         _rb.position = rd.Position;
@@ -814,7 +820,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
         if (!_rb.isKinematic)
         {
             _rb.linearVelocity = rd.Velocity;
-            _rb.angularVelocity = rd.AngularVelocity;
+            _rb.angularVelocity = isRagdollPhysics ? rd.AngularVelocity : Vector3.zero;
         }
 
         _isGrounded = rd.IsGrounded;

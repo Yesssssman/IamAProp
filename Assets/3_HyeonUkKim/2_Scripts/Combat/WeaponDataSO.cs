@@ -129,6 +129,10 @@ public class WeaponDataSO : ScriptableObject
     [Min(0f)]
     [SerializeField] private float meleeCastRadius;
 
+    /// <summary>총기 히트스캔 구체 캐스트 반지름 오버라이드 (0 이하면 <see cref="PlayerWeaponController"/> 기본값 사용, 미터).</summary>
+    [Min(0f)]
+    [SerializeField] private float shotSphereRadiusOverride;
+
     /// <summary>공격 시 탄약을 소모하는지 여부 (근접 무기는 false).</summary>
     [Header("탄약 및 재장전")]
     [SerializeField] private bool usesAmmo = true;
@@ -308,6 +312,9 @@ public class WeaponDataSO : ScriptableObject
 
     /// <summary>근접 구체 캐스트 반지름 (미터).</summary>
     public float MeleeCastRadius => meleeCastRadius;
+
+    /// <summary>총기 구체 캐스트 반지름 오버라이드 (0 이하면 기본값 사용, 미터).</summary>
+    public float ShotSphereRadiusOverride => shotSphereRadiusOverride;
 
     /// <summary>탄약 소모 여부.</summary>
     public bool UsesAmmo => usesAmmo;
