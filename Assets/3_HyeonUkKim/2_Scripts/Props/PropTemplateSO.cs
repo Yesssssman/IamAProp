@@ -95,13 +95,60 @@ public struct WeaponSlotBaseHandClips
     public AnimationClip reloadClip;
 }
 
-/// <summary>모든 프롭이 공유하는 베이스 애니메이터 컨트롤러, 기준 클립 및 무기 소켓 로드아웃을 정의한다.</summary>
+/// <summary>무기 슬롯 및 하이드(맨손) 모드별 공통 평면 이동속도 설정 (초당 월드 단위).</summary>
+[Serializable]
+public struct PropMoveSpeedSettings
+{
+    /// <summary>1번 슬롯(기본 맨손 / 하이드 모드) 평면 이동속도 (초당 월드 단위).</summary>
+    [Min(0f)]
+    public float hideUnarmed;
+
+    /// <summary>2번 슬롯(근접무기 모드) 평면 이동속도 (초당 월드 단위).</summary>
+    [Min(0f)]
+    public float melee;
+
+    /// <summary>3번 슬롯(보조무기 모드) 평면 이동속도 (초당 월드 단위).</summary>
+    [Min(0f)]
+    public float secondary;
+
+    /// <summary>4번 슬롯(주무기 모드) 평면 이동속도 (초당 월드 단위).</summary>
+    [Min(0f)]
+    public float primary;
+
+    /// <summary>모드별 기본 평면 이동속도 프리셋.</summary>
+    public static PropMoveSpeedSettings Default => new PropMoveSpeedSettings
+    {
+        hideUnarmed = 3.0f,
+        melee = 3.0f,
+        secondary = 2.4f,
+        primary = 2.1f
+    };
+
+    /// <summary><paramref name="slot"/>에 해당하는 평면 이동속도를 반환한다.</summary>
+    public float GetSpeed(EWeaponSlotType slot)
+    {
+        return slot switch
+        {
+            EWeaponSlotType.Unarmed => hideUnarmed,
+            EWeaponSlotType.Melee => melee,
+            EWeaponSlotType.Secondary => secondary,
+            EWeaponSlotType.Primary => primary,
+            _ => hideUnarmed
+        };
+    }
+}
+
+/// <summary>모든 프롭이 공유하는 베이스 애니메이터 컨트롤러, 기준 클립, 공통 이동속도 및 무기 소켓 로드아웃을 정의한다.</summary>
 [CreateAssetMenu(fileName = "PropTemplate", menuName = "IamAProp/Prop Template")]
 public class PropTemplateSO : ScriptableObject
 {
     // ***************************************************************
     // Fields
     // ***************************************************************
+
+    /// <summary>모든 프롭이 공유하는 무기 슬롯 및 하이드 모드별 평면 이동속도 설정.</summary>
+    [Header("공통 모드별 이동속도")]
+    [SerializeField] private PropMoveSpeedSettings moveSpeeds = PropMoveSpeedSettings.Default;
 
     /// <summary>프롭 몸통 애니메이션 상태 머신의 기준 컨트롤러.</summary>
     [Header("공통 베이스 컨트롤러")]
@@ -187,6 +234,9 @@ public class PropTemplateSO : ScriptableObject
     // Properties
     // ***************************************************************
 
+    /// <summary>공통 모드별 평면 이동속도 설정.</summary>
+    public PropMoveSpeedSettings MoveSpeeds => moveSpeeds;
+
     /// <summary>몸통 기본 애니메이터 컨트롤러.</summary>
     public RuntimeAnimatorController BaseBodyController => baseBodyController;
 
@@ -202,6 +252,9 @@ public class PropTemplateSO : ScriptableObject
     // ***************************************************************
     // Public Control API
     // ***************************************************************
+
+    /// <summary><paramref name="slot"/>에 해당하는 공통 평면 이동속도를 반환한다.</summary>
+    public float GetMoveSpeed(EWeaponSlotType slot) => moveSpeeds.GetSpeed(slot);
 
     /// <summary><paramref name="bodyClips"/>를 매핑한 무기 모드별 몸통 <see cref="AnimatorOverrideController"/> 배열을 생성한다.</summary>
     public RuntimeAnimatorController[] CreateBodyControllers(in PropBodyClips bodyClips)

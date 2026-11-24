@@ -12,7 +12,7 @@ public interface IPropEntity
     /// <summary>현재 프롭의 월드 공간 평면 이동 속도 벡터 (초당 월드 단위).</summary>
     Vector3 PlanarVelocity { get; }
 
-    /// <summary>프롭의 최대 평면 이동 속력 (초당 월드 단위).</summary>
+    /// <summary>현재 무기 모드 기준 프롭의 최대 평면 이동 속력 (초당 월드 단위).</summary>
     float MoveSpeed { get; }
 
     /// <summary>최대 이동 속력 대비 정규화된 현재 평면 이동 속력 비율 (0~1).</summary>

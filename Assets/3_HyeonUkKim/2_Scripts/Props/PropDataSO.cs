@@ -16,11 +16,8 @@ public class PropDataSO : ScriptableObject
     /// <summary>모든 프롭이 공유하는 베이스 컨트롤러 및 무기 소켓 템플릿.</summary>
     [SerializeField] private PropTemplateSO propTemplate;
 
-    /// <summary>평면 이동 속력 (초당 월드 단위).</summary>
-    [Header("이동 및 점프 설정")]
-    [SerializeField] private float moveSpeed = 3f;
-
     /// <summary>이동 방향 회전 감쇠 시간 (초 단위).</summary>
+    [Header("이동 및 점프 설정")]
     [SerializeField] private float rotationSmoothTime = 0.1f;
 
     /// <summary>점프 시 가하는 수직 임펄스 크기.</summary>
@@ -83,8 +80,12 @@ public class PropDataSO : ScriptableObject
     /// <summary>공유 프롭 템플릿.</summary>
     public PropTemplateSO PropTemplate => propTemplate;
 
-    /// <summary>평면 이동 속력 (초당 월드 단위).</summary>
-    public float MoveSpeed => moveSpeed;
+    /// <summary>공유 템플릿의 모드별 평면 이동속도 설정.</summary>
+    public PropMoveSpeedSettings MoveSpeeds =>
+        propTemplate != null ? propTemplate.MoveSpeeds : PropMoveSpeedSettings.Default;
+
+    /// <summary>기본(맨손 / 하이드 모드) 평면 이동 속력 (초당 월드 단위).</summary>
+    public float MoveSpeed => GetMoveSpeed(EWeaponSlotType.Unarmed);
 
     /// <summary>이동 방향 회전 감쇠 시간 (초 단위).</summary>
     public float RotationSmoothTime => rotationSmoothTime;
@@ -139,6 +140,14 @@ public class PropDataSO : ScriptableObject
     // ***************************************************************
     // Public Control API
     // ***************************************************************
+
+    /// <summary><paramref name="slot"/>에 해당하는 평면 이동속도를 반환한다.</summary>
+    public float GetMoveSpeed(EWeaponSlotType slot)
+    {
+        return propTemplate != null
+            ? propTemplate.GetMoveSpeed(slot)
+            : PropMoveSpeedSettings.Default.GetSpeed(slot);
+    }
 
     /// <summary>이 프롭의 몸통 클립이 매핑된 무기 모드별 <see cref="RuntimeAnimatorController"/> 배열을 생성한다.</summary>
     public RuntimeAnimatorController[] CreateBodyControllers()

@@ -303,6 +303,12 @@ public class PlayerController : PropControllerBase
     }
 
     /// <inheritdoc/>
+    protected override EWeaponSlotType GetCurrentWeaponSlot()
+    {
+        return _weaponInventory != null ? _weaponInventory.ActiveSlot : base.GetCurrentWeaponSlot();
+    }
+
+    /// <inheritdoc/>
     protected override PlayerInputData CollectTickInput()
     {
         if (IsDead)
@@ -318,6 +324,7 @@ public class PlayerController : PropControllerBase
         }
 
         float cameraYaw = cameraTransform != null ? cameraTransform.eulerAngles.y : transform.eulerAngles.y;
+        EWeaponSlotType weaponSlot = GetCurrentWeaponSlot();
         bool isAiming = _propAnim != null && _propAnim.CurrentWeaponType != EWeaponType.Hide;
         float aimYaw = cameraYaw;
         if (isAiming && !IsAdsActive)
@@ -333,7 +340,7 @@ public class PlayerController : PropControllerBase
 
         bool jumpRequested = _jumpRequested;
         _jumpRequested = false;
-        return new PlayerInputData(_moveInput, cameraYaw, jumpRequested, isAiming, aimYaw);
+        return new PlayerInputData(_moveInput, cameraYaw, jumpRequested, isAiming, aimYaw, weaponSlot);
     }
 
     /// <inheritdoc/>

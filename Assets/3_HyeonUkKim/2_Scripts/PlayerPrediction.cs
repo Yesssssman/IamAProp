@@ -19,6 +19,9 @@ public struct PlayerInputData : IReplicateData
     /// <summary>사격 중 캐릭터 몸체가 바라볼 목표 수평 회전 각도 (도 단위, 월드 Y축).</summary>
     public float AimYaw;
 
+    /// <summary>해당 틱에 활성화된 무기 슬롯 모드.</summary>
+    public EWeaponSlotType WeaponSlot;
+
     /// <summary>FishNet 런타임이 할당하는 로컬 틱 번호.</summary>
     private uint _tick;
 
@@ -28,13 +31,15 @@ public struct PlayerInputData : IReplicateData
         float cameraYaw,
         bool jumpRequested,
         bool isFiring = false,
-        float aimYaw = 0f)
+        float aimYaw = 0f,
+        EWeaponSlotType weaponSlot = EWeaponSlotType.Unarmed)
     {
         MoveInput = moveInput;
         CameraYaw = cameraYaw;
         JumpRequested = jumpRequested;
         IsFiring = isFiring;
         AimYaw = aimYaw;
+        WeaponSlot = weaponSlot;
         _tick = 0;
     }
 
@@ -90,6 +95,9 @@ public struct PlayerReconcileData : IReconcileData
     /// <summary>직전 시뮬레이션 틱 시작 시점의 <see cref="Rigidbody"/> 월드 위치.</summary>
     public Vector3 LastTickPosition;
 
+    /// <summary>시뮬레이션 틱에 적용된 평면 최대 이동속도 (초당 월드 단위).</summary>
+    public float AppliedMoveSpeed;
+
     /// <summary>FishNet 런타임이 할당하는 로컬 틱 번호.</summary>
     private uint _tick;
 
@@ -107,7 +115,8 @@ public struct PlayerReconcileData : IReconcileData
         bool isDead,
         bool isFiring,
         float turnSmoothVelocity,
-        Vector3 lastTickPosition)
+        Vector3 lastTickPosition,
+        float appliedMoveSpeed)
     {
         Position = position;
         Rotation = rotation;
@@ -122,6 +131,7 @@ public struct PlayerReconcileData : IReconcileData
         IsFiring = isFiring;
         TurnSmoothVelocity = turnSmoothVelocity;
         LastTickPosition = lastTickPosition;
+        AppliedMoveSpeed = appliedMoveSpeed;
         _tick = 0;
     }
 

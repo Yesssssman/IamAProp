@@ -101,6 +101,12 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     /// <summary>현재 시뮬레이션된 평면 이동 속력 (초당 월드 단위).</summary>
     private float _currentPlanarSpeed;
 
+    /// <summary>마지막 시뮬레이션 또는 리컨실 틱에 적용된 평면 최대 이동속도 (초당 월드 단위).</summary>
+    private float _appliedMoveSpeed;
+
+    /// <summary><see cref="_appliedMoveSpeed"/>가 최소 1회 이상 갱신되었는지 여부.</summary>
+    private bool _hasAppliedMoveSpeed;
+
     /// <summary>현재 물리 틱의 사격(조준) 상태 활성화 여부.</summary>
     private bool _isFiring;
 
@@ -125,7 +131,6 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     /// <summary>직전 시뮬레이션 틱 시작 시점의 <see cref="Rigidbody"/> 월드 위치.</summary>
     private Vector3 _lastTickPosition;
 
-    private const float DefaultMoveSpeed = 5f;
     private const float DefaultRotationSmoothTime = 0.1f;
     private const float DefaultJumpForce = 12f;
     private const float DefaultDirectionalJumpForce = 6f;
@@ -156,7 +161,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     public Vector3 PlanarVelocity => _planarVelocity;
 
     /// <inheritdoc/>
-    public float MoveSpeed => propData != null ? propData.MoveSpeed : DefaultMoveSpeed;
+    public float MoveSpeed => _hasAppliedMoveSpeed ? _appliedMoveSpeed : GetCurrentMoveSpeed();
 
     /// <inheritdoc/>
     public float PlanarSpeedRatio
@@ -359,6 +364,8 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
         _isDead = false;
         _hasAppliedDeathImpulse = false;
         _hasReceivedDeadReconcile = false;
+        _appliedMoveSpeed = 0f;
+        _hasAppliedMoveSpeed = false;
 
         if (_playerHealth != null)
         {
@@ -391,13 +398,28 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
             IsDead,
             _isFiring,
             _turnSmoothVelocity,
-            _lastTickPosition);
+            _lastTickPosition,
+            MoveSpeed);
         PerformReconcile(rd);
     }
 
     // ***************************************************************
     // Public Control API
     // ***************************************************************
+
+    /// <summary>현재 무기 슬롯 및 하이드 모드에 해당하는 평면 이동속도를 반환한다.</summary>
+    public float GetCurrentMoveSpeed()
+    {
+        return GetMoveSpeed(GetCurrentWeaponSlot());
+    }
+
+    /// <summary>지정한 <paramref name="slot"/> 모드에 해당하는 평면 이동속도를 반환한다.</summary>
+    public float GetMoveSpeed(EWeaponSlotType slot)
+    {
+        return propData != null
+            ? propData.GetMoveSpeed(slot)
+            : PropMoveSpeedSettings.Default.GetSpeed(slot);
+    }
 
     /// <summary>사망 즉시 HideMode 래그돌로 전환하고 필요 시 피격 방향 넉백 임펄스를 적용한다.</summary>
     public void EnterDeathRagdoll(in DamageHitInfo hitInfo, bool applyImpulse)
@@ -513,6 +535,12 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     // Extension Hooks
     // ***************************************************************
 
+    /// <summary>현재 활성화된 무기 슬롯 모드를 반환한다.</summary>
+    protected virtual EWeaponSlotType GetCurrentWeaponSlot()
+    {
+        return _propAnim != null ? (EWeaponSlotType)_propAnim.CurrentWeaponType : EWeaponSlotType.Unarmed;
+    }
+
     /// <summary>네트워크 틱마다 소유자가 전송할 입력 데이터를 수집한다.</summary>
     protected virtual PlayerInputData CollectTickInput() => default;
 
@@ -597,6 +625,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
 
         float delta = (float)base.TimeManager.TickDelta;
 
+        bool hasInputWeaponSlot = state.ContainsCreated() || state.ContainsReplayed();
         if (!IsServerStarted && !IsOwner)
         {
             if (state.ContainsCreated())
@@ -612,8 +641,16 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
                 rd = _lastCreatedInput;
                 rd.JumpRequested = false;
                 rd.SetTick(currentTick);
+                hasInputWeaponSlot = true;
             }
         }
+
+        EWeaponSlotType activeSlot = IsServerInitialized || !hasInputWeaponSlot
+            ? GetCurrentWeaponSlot()
+            : rd.WeaponSlot;
+        float moveSpeed = GetMoveSpeed(activeSlot);
+        _appliedMoveSpeed = moveSpeed;
+        _hasAppliedMoveSpeed = true;
 
         if (_groundCheck != null)
         {
@@ -668,8 +705,8 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
                 {
                     float momentumSpeed = horizontalMomentum.magnitude;
                     pushDirection = horizontalMomentum / momentumSpeed;
-                    float speedScale = MoveSpeed > 0f
-                        ? Mathf.Clamp(momentumSpeed / MoveSpeed, MinMomentumPushScale, MaxMomentumPushScale)
+                    float speedScale = moveSpeed > 0f
+                        ? Mathf.Clamp(momentumSpeed / moveSpeed, MinMomentumPushScale, MaxMomentumPushScale)
                         : 1f;
                     pushMagnitude = PushForce * MovingPushMultiplier * speedScale;
                 }
@@ -720,7 +757,6 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
 
         if (isMoving)
         {
-            float moveSpeed = MoveSpeed;
             Vector3 moveDirection = (Quaternion.Euler(0f, moveAngle, 0f) * Vector3.forward).normalized;
             Vector3 targetPosition = _rb.position + moveDirection * (moveSpeed * delta);
             _rb.MovePosition(targetPosition);
@@ -787,6 +823,8 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
         _turnSmoothVelocity = rd.TurnSmoothVelocity;
         _planarVelocity = _isDead ? Vector3.zero : rd.PlanarVelocity;
         _currentPlanarSpeed = _isDead ? 0f : rd.PlanarSpeed;
+        _appliedMoveSpeed = rd.AppliedMoveSpeed;
+        _hasAppliedMoveSpeed = true;
         _lastTickPosition = rd.LastTickPosition;
     }
 

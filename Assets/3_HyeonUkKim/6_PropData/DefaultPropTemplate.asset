@@ -12,6 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a00a7201de6a242e391a1ae8ef553406, type: 3}
   m_Name: DefaultPropTemplate
   m_EditorClassIdentifier: Assembly-CSharp::PropTemplateSO
+  moveSpeeds:
+    hideUnarmed: 3
+    melee: 3
+    secondary: 2.4
+    primary: 2.1
   baseBodyController: {fileID: 9100000, guid: 35f3afcc8fb1db74cbb61a2feaf60bd0, type: 2}
   baseHandController: {fileID: 9100000, guid: bd6715ea4460c46bbb4903de43a0c252, type: 2}
   baseBodyHideClip: {fileID: -3246335567985755239, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
