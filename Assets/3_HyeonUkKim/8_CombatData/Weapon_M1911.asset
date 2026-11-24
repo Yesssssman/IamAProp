@@ -40,19 +40,19 @@ MonoBehaviour:
   handShotFrames: 17
   weaponShotFrames: 9
   handReloadTotalFrames: 107
-  weaponReloadStartFrame: 78
+  weaponReloadStartFrame: 98
   weaponReloadTotalFrames: 9
   handDrawTotalFrames: 47
   weaponDrawStartFrame: 19
   weaponDrawTotalFrames: 9
-  damage: 35
+  damage: 20
   fireRate: 4
   isAutomatic: 0
   range: 60
   meleeCastRadius: 0
   usesAmmo: 1
   maxAmmo: 7
-  maxReserveAmmo: 28
+  maxReserveAmmo: 2800
   reloadTime: 1.8
   shotClip: {fileID: 8300000, guid: 8d8f9f7ca40a24481b6e5511e984946d, type: 3}
   reloadClips:

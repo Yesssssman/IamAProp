@@ -95,6 +95,16 @@
                     "interactions": "",
                     "initialStateCheck": false,
                     "priority": 0
+                },
+                {
+                    "name": "Aim",
+                    "type": "Button",
+                    "id": "f4c9a2e1-8d3b-4a75-b612-9e0f4c3d1a07",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false,
+                    "priority": 0
                 }
             ],
             "bindings": [
@@ -169,7 +179,7 @@
                     "id": "40e0816e-a583-4560-889f-c7890a4e57a3",
                     "path": "<Pointer>/delta",
                     "interactions": "",
-                    "processors": "InvertVector2(invertX=false),ScaleVector2(x=50,y=50)",
+                    "processors": "InvertVector2(invertX=false),ScaleVector2(x=25,y=50)",
                     "groups": "",
                     "action": "Look",
                     "isComposite": false,
@@ -306,6 +316,17 @@
                     "action": "DropWeapon",
                     "isComposite": false,
                     "isPartOfComposite": true
+                },
+                {
+                    "name": "",
+                    "id": "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c08",
+                    "path": "<Mouse>/rightButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Aim",
+                    "isComposite": false,
+                    "isPartOfComposite": false
                 }
             ]
         }

@@ -113,6 +113,9 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     /// <summary>서버에 마지막으로 전송한 상하 조준 각도 (도 단위).</summary>
     private float _lastSentAimPitch;
 
+    /// <summary><see cref="aimPitchTarget"/>의 초기 로컬 위치.</summary>
+    private Vector3 _aimPitchInitialLocalPosition;
+
     /// <summary><see cref="aimPitchTarget"/>의 초기 로컬 회전값.</summary>
     private Quaternion _aimPitchInitialLocalRotation = Quaternion.identity;
 
@@ -177,6 +180,9 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
 
     /// <inheritdoc/>
     public bool IsDead => _isDead || (_playerHealth != null && _playerHealth.IsDead);
+
+    /// <summary>1D 상하 조준(Pitch) 회전을 적용하는 피벗 트랜스폼.</summary>
+    public Transform AimPitchTarget => aimPitchTarget;
 
     /// <summary>상하 조준 최소 피치 각도 (도 단위).</summary>
     protected float MinAimPitch => minAimPitch;
@@ -258,6 +264,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
 
         if (aimPitchTarget != null)
         {
+            _aimPitchInitialLocalPosition = aimPitchTarget.localPosition;
             _aimPitchInitialLocalRotation = aimPitchTarget.localRotation;
         }
 
@@ -273,6 +280,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
             _currentAimPitch = 0f;
             if (aimPitchTarget != null)
             {
+                aimPitchTarget.localPosition = _aimPitchInitialLocalPosition;
                 aimPitchTarget.localRotation = _aimPitchInitialLocalRotation;
             }
             return;
@@ -304,6 +312,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
         _currentAimPitch = Mathf.Lerp(_currentAimPitch, targetPitch, Time.deltaTime * aimPitchLerpSpeed);
         if (aimPitchTarget != null)
         {
+            aimPitchTarget.localPosition = _aimPitchInitialLocalPosition;
             aimPitchTarget.localRotation = _aimPitchInitialLocalRotation * Quaternion.Euler(_currentAimPitch, 0f, 0f);
         }
     }
@@ -406,6 +415,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
 
         if (aimPitchTarget != null)
         {
+            aimPitchTarget.localPosition = _aimPitchInitialLocalPosition;
             aimPitchTarget.localRotation = _aimPitchInitialLocalRotation;
         }
 

@@ -39,6 +39,9 @@ public class DeathCamController : MonoBehaviour
     /// <summary>킬러 3인칭 자유 회전 관전에 사용하는 전용 시네머신 카메라.</summary>
     [SerializeField] private CinemachineCamera spectateCamera;
 
+    /// <summary>사망 또는 관전 진입 시 1인칭 정조준을 강제 해제할 ADS 컨트롤러.</summary>
+    [SerializeField] private FpsAdsController fpsAdsController;
+
     /// <summary>사망 후 3초 경과 시 표시할 관전하기 UI 프리팹.</summary>
     [Header("데스캠 UI 및 타이밍")]
     [SerializeField] private DeathCamUI deathCamUIPrefab;
@@ -128,6 +131,9 @@ public class DeathCamController : MonoBehaviour
     /// <summary>현재 킬러 관전 모드가 활성화되어 있는지 여부.</summary>
     public bool IsSpectating => _state == EDeathCamState.Spectating;
 
+    /// <summary>사망 포커스, 관전 버튼 대기 또는 관전 상태 중 하나라도 활성화되어 있는지 여부.</summary>
+    public bool IsDeathCamActive => _state != EDeathCamState.Inactive;
+
     // ***************************************************************
     // MonoBehaviour
     // ***************************************************************
@@ -137,6 +143,11 @@ public class DeathCamController : MonoBehaviour
         if (spectateCamera == null)
         {
             spectateCamera = GetComponent<CinemachineCamera>();
+        }
+
+        if (fpsAdsController == null)
+        {
+            fpsAdsController = FindAnyObjectByType<FpsAdsController>(FindObjectsInactive.Include);
         }
 
         if (spectateCamera != null)
@@ -278,7 +289,7 @@ public class DeathCamController : MonoBehaviour
     /// <summary>플레이어 기본 카메라 참조를 연결한다.</summary>
     public void BindPlayerCamera(CinemachineCamera cam)
     {
-        if (cam == null || cam == spectateCamera) return;
+        if (cam == null || cam == spectateCamera || cam.GetComponent<FpsAdsController>() != null) return;
 
         playerCamera = cam;
         _playerInputAxisController = playerCamera.GetComponent<CinemachineInputAxisController>();
@@ -290,12 +301,16 @@ public class DeathCamController : MonoBehaviour
     {
         if (localDeadPlayer == null) return;
 
+        fpsAdsController?.ForceExitAds();
+
         if (playerCamera == null)
         {
             CinemachineCamera[] cameras = FindObjectsByType<CinemachineCamera>();
             for (int i = 0; i < cameras.Length; i++)
             {
-                if (cameras[i] != null && cameras[i] != spectateCamera)
+                if (cameras[i] != null
+                    && cameras[i] != spectateCamera
+                    && cameras[i].GetComponent<FpsAdsController>() == null)
                 {
                     BindPlayerCamera(cameras[i]);
                     break;
@@ -400,6 +415,7 @@ public class DeathCamController : MonoBehaviour
         _hasKillerLookDir = false;
 
         _deathCamUIInstance?.Hide();
+        fpsAdsController?.ForceExitAds();
         RestorePlayerComposerScreenPosition();
 
         if (crosshairObject != null)

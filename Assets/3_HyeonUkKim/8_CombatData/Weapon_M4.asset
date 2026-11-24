@@ -55,7 +55,7 @@ MonoBehaviour:
   meleeCastRadius: 0
   usesAmmo: 1
   maxAmmo: 30
-  maxReserveAmmo: 90
+  maxReserveAmmo: 9000
   reloadTime: 3
   shotClip: {fileID: 8300000, guid: d44826b5c59704bab8c38530fe916d45, type: 3}
   reloadClips:
@@ -73,3 +73,7 @@ MonoBehaviour:
   maxRecoilYaw: 3
   shakeIntensity: 0.7
   shakeDuration: 0.05
+  adsFovOverride: 0
+  adsAnchorLocalOffset: {x: 0, y: 0.015, z: -0.05}
+  adsAnchorLocalRotationOffset: {x: 0, y: 0, z: 0}
+  adsKickbackZOverride: 0

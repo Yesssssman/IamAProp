@@ -54,6 +54,12 @@ public class PlayerController : PropControllerBase
     /// <summary>사망 후 시체 포커스 및 킬러 관전을 제어하는 씬 데스캠 컨트롤러.</summary>
     private DeathCamController _deathCamController;
 
+    /// <summary>3인칭 ↔ 1인칭 정조준 시점 전환과 로컬 가시성을 제어하는 씬 ADS 컨트롤러.</summary>
+    private FpsAdsController _fpsAdsController;
+
+    /// <summary>장착 무기 상태와 재장전 애니메이션 상태를 조회할 플레이어 애니메이터.</summary>
+    private PlayerAnim _playerAnimComponent;
+
     /// <summary>래그돌 회전과 무관하게 수직 자세를 유지하는 카메라 추적 앵커.</summary>
     private Transform _cameraAnchor;
 
@@ -66,6 +72,9 @@ public class PlayerController : PropControllerBase
     /// <summary>다음 네트워크 틱에 소비할 점프 입력 플래그.</summary>
     private bool _jumpRequested;
 
+    /// <summary>현재 마우스 우클릭(정조준) 입력이 유지되고 있는지 여부.</summary>
+    private bool _isAimHeld;
+
     // ***************************************************************
     // Properties
     // ***************************************************************
@@ -73,9 +82,35 @@ public class PlayerController : PropControllerBase
     /// <summary>로컬 소유자 시네머신 카메라가 추적하는 수직 기준 앵커 트랜스폼.</summary>
     public Transform CameraAnchor => _cameraAnchor;
 
+    /// <summary><see cref="NetworkTickSmoother"/>로 보간되는 시각 루트 트랜스폼.</summary>
+    public Transform VisualRoot => visualRoot;
+
+    /// <summary>현재 장착 중인 무기의 <see cref="WeaponDataSO"/> 에셋.</summary>
+    public WeaponDataSO CurrentEquippedWeaponData => _weaponInventory != null ? _weaponInventory.EquippedWeaponData : null;
+
+    /// <summary>현재 1인칭 정조준(ADS) 모드가 활성화되어 있는지 여부.</summary>
+    public bool IsAdsActive => _fpsAdsController != null && _fpsAdsController.IsAdsActive;
+
     // ***************************************************************
     // MonoBehaviour
     // ***************************************************************
+
+    private void Update()
+    {
+        if (!IsOwner || _fpsAdsController == null) return;
+
+        if (_fpsAdsController.IsAdsActive)
+        {
+            if (!CanUseAds())
+            {
+                _fpsAdsController.ExitAds();
+            }
+        }
+        else if (_fpsAdsController.InputMode == EAdsInputMode.Hold && _isAimHeld && CanUseAds())
+        {
+            _fpsAdsController.EnterAds(CurrentEquippedWeaponData);
+        }
+    }
 
     protected override void LateUpdate()
     {
@@ -109,20 +144,29 @@ public class PlayerController : PropControllerBase
         _inputActions.Player.Reload.started += OnReloadStarted;
         _inputActions.Player.Pickup.started += OnPickupStarted;
         _inputActions.Player.DropWeapon.started += OnDropWeaponStarted;
+        _inputActions.Player.Aim.started += OnAimStarted;
+        _inputActions.Player.Aim.canceled += OnAimCanceled;
 
         _cameraAnchor = new GameObject("CameraAnchor").transform;
         _cameraAnchor.SetParent(transform, false);
         UpdateCameraAnchorPosition();
 
         _deathCamController = FindAnyObjectByType<DeathCamController>(FindObjectsInactive.Include);
+        _fpsAdsController = FindAnyObjectByType<FpsAdsController>(FindObjectsInactive.Include);
 
         CinemachineCamera cam = _deathCamController != null ? _deathCamController.PlayerCamera : null;
+        if (cam == null && _fpsAdsController != null)
+        {
+            cam = _fpsAdsController.TpsCamera;
+        }
         if (cam == null)
         {
             CinemachineCamera[] cameras = FindObjectsByType<CinemachineCamera>();
             for (int i = 0; i < cameras.Length; i++)
             {
-                if (cameras[i] != null && cameras[i].GetComponent<DeathCamController>() == null)
+                if (cameras[i] != null
+                    && cameras[i].GetComponent<DeathCamController>() == null
+                    && cameras[i].GetComponent<FpsAdsController>() == null)
                 {
                     cam = cameras[i];
                     break;
@@ -152,6 +196,13 @@ public class PlayerController : PropControllerBase
             _cameraFeedback.ResetFeedback();
         }
 
+        _fpsAdsController?.BindLocalPlayer(this, cam);
+
+        if (_weaponInventory != null)
+        {
+            _weaponInventory.OnEquippedWeaponChanged += HandleOwnerEquippedWeaponChanged;
+        }
+
         if (_playerHealth != null)
         {
             _playerHealth.OnOwnerDiedWithKiller += HandleOwnerDiedWithKiller;
@@ -167,11 +218,23 @@ public class PlayerController : PropControllerBase
     {
         _moveInput = Vector2.zero;
         _jumpRequested = false;
+        _isAimHeld = false;
 
         if (_playerHealth != null)
         {
             _playerHealth.OnOwnerDiedWithKiller -= HandleOwnerDiedWithKiller;
         }
+
+        if (_weaponInventory != null)
+        {
+            _weaponInventory.OnEquippedWeaponChanged -= HandleOwnerEquippedWeaponChanged;
+        }
+
+        if (IsOwner && _fpsAdsController != null)
+        {
+            _fpsAdsController.UnbindLocalPlayer(this);
+        }
+        _fpsAdsController = null;
 
         if (IsOwner && _deathCamController != null)
         {
@@ -202,6 +265,8 @@ public class PlayerController : PropControllerBase
         _inputActions.Player.Reload.started -= OnReloadStarted;
         _inputActions.Player.Pickup.started -= OnPickupStarted;
         _inputActions.Player.DropWeapon.started -= OnDropWeaponStarted;
+        _inputActions.Player.Aim.started -= OnAimStarted;
+        _inputActions.Player.Aim.canceled -= OnAimCanceled;
         _inputActions.Player.Disable();
         _inputActions.Dispose();
         _inputActions = null;
@@ -216,6 +281,7 @@ public class PlayerController : PropControllerBase
     {
         _weaponController = GetComponent<PlayerWeaponController>();
         _weaponInventory = GetComponent<PlayerWeaponInventory>();
+        _playerAnimComponent = GetComponent<PlayerAnim>();
 
         if (tpsViewPos == null)
         {
@@ -254,7 +320,7 @@ public class PlayerController : PropControllerBase
         float cameraYaw = cameraTransform != null ? cameraTransform.eulerAngles.y : transform.eulerAngles.y;
         bool isAiming = _propAnim != null && _propAnim.CurrentWeaponType != EWeaponType.Hide;
         float aimYaw = cameraYaw;
-        if (isAiming)
+        if (isAiming && !IsAdsActive)
         {
             Vector3 aimPoint = GetAimPoint();
             Vector3 toAim = aimPoint - transform.position;
@@ -278,6 +344,11 @@ public class PlayerController : PropControllerBase
         bool isAiming = _propAnim != null && _propAnim.CurrentWeaponType != EWeaponType.Hide;
         if (!isAiming) return 0f;
 
+        if (IsAdsActive && _fpsAdsController != null)
+        {
+            return Mathf.Clamp(_fpsAdsController.CurrentAimPitch, MinAimPitch, MaxAimPitch);
+        }
+
         Vector3 aimPoint = GetAimPoint();
         Vector3 pivotPos = GetFireOrigin();
         Vector3 aimDir = aimPoint - pivotPos;
@@ -293,8 +364,13 @@ public class PlayerController : PropControllerBase
     {
         _moveInput = Vector2.zero;
         _jumpRequested = false;
+        _isAimHeld = false;
         _weaponController?.CancelCombatActions();
         _cameraFeedback?.ResetFeedback();
+        if (IsOwner)
+        {
+            _fpsAdsController?.ForceExitAds();
+        }
     }
 
     /// <inheritdoc/>
@@ -302,11 +378,13 @@ public class PlayerController : PropControllerBase
     {
         _moveInput = Vector2.zero;
         _jumpRequested = false;
+        _isAimHeld = false;
         _weaponController?.CancelCombatActions();
         _cameraFeedback?.ResetFeedback();
 
         if (IsOwner)
         {
+            _fpsAdsController?.ForceExitAds();
             _deathCamController?.ResetDeathCam();
         }
     }
@@ -325,13 +403,25 @@ public class PlayerController : PropControllerBase
     /// <summary>로컬 소유자 카메라에 <paramref name="weaponData"/> 기반 발사 반동과 미세 펄스 흔들림을 적용한다.</summary>
     public void ApplyWeaponCameraFeedback(WeaponDataSO weaponData)
     {
-        if (!IsOwner || IsDead || weaponData == null || _cameraFeedback == null) return;
-        _cameraFeedback.ApplyWeaponFeedback(weaponData);
+        if (!IsOwner || IsDead || weaponData == null) return;
+
+        if (IsAdsActive && _fpsAdsController != null)
+        {
+            _fpsAdsController.ApplyWeaponFeedback(weaponData);
+            return;
+        }
+
+        _cameraFeedback?.ApplyWeaponFeedback(weaponData);
     }
 
     /// <summary>조준 및 히트스캔 발사의 기준이 되는 월드 원점을 반환한다.</summary>
     public Vector3 GetFireOrigin()
     {
+        if (IsOwner && IsAdsActive && Camera.main != null)
+        {
+            return Camera.main.transform.position;
+        }
+
         if (aimPitchTarget != null) return aimPitchTarget.position;
 
         float offsetY = _tpsViewOffsetY > 0f ? _tpsViewOffsetY : DefaultTpsViewOffsetY;
@@ -349,8 +439,7 @@ public class PlayerController : PropControllerBase
         }
 
         Ray ray = mainCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
-        Vector3 pivotPos = GetFireOrigin();
-        float minDistance = Vector3.Distance(ray.origin, pivotPos);
+        float minDistance = IsAdsActive ? 0f : Vector3.Distance(ray.origin, GetFireOrigin());
 
         int hitCount = Physics.RaycastNonAlloc(
             ray,
@@ -470,6 +559,7 @@ public class PlayerController : PropControllerBase
                 _EplayerState = _isGrounded ? EPlayerState.Idle : EPlayerState.Air;
             }
 
+            _fpsAdsController?.ExitAds();
             _weaponController?.SetFireInput(false);
             _weaponInventory.TrySelectSlot(targetSlot);
             return;
@@ -481,6 +571,7 @@ public class PlayerController : PropControllerBase
             _EplayerState = _isGrounded ? EPlayerState.Idle : EPlayerState.Air;
         }
 
+        _fpsAdsController?.ExitAds();
         _weaponController?.SetFireInput(false);
         _propAnim?.SetWeaponMode(weaponType);
     }
@@ -493,9 +584,14 @@ public class PlayerController : PropControllerBase
         if (_weaponController != null)
         {
             _weaponController.TryStartReload();
+            if (_weaponController.IsReloading)
+            {
+                _fpsAdsController?.ExitAds();
+            }
         }
         else
         {
+            _fpsAdsController?.ExitAds();
             _propAnim?.RequestReload();
         }
     }
@@ -506,6 +602,7 @@ public class PlayerController : PropControllerBase
         if (!IsOwner || IsDead || _weaponInventory == null) return;
         if (Keyboard.current != null && Keyboard.current.altKey.isPressed) return;
 
+        _fpsAdsController?.ExitAds();
         _weaponController?.SetFireInput(false);
         _weaponInventory.TryPickupNearbyWeapon();
     }
@@ -516,9 +613,48 @@ public class PlayerController : PropControllerBase
         if (!IsOwner || IsDead || _weaponInventory == null) return;
         if (_weaponInventory.ActiveSlot == EWeaponSlotType.Unarmed) return;
 
+        _fpsAdsController?.ExitAds();
         _weaponController?.SetFireInput(false);
         _EplayerState = _isGrounded ? EPlayerState.Idle : EPlayerState.Air;
         _weaponInventory.TryDropCurrentWeapon();
+    }
+
+    /// <summary>마우스 우클릭 입력 시작 시 토글 또는 홀드 방식에 따라 1인칭 정조준을 전환한다.</summary>
+    private void OnAimStarted(InputAction.CallbackContext context)
+    {
+        if (!IsOwner || _fpsAdsController == null) return;
+
+        _isAimHeld = true;
+
+        if (_fpsAdsController.InputMode == EAdsInputMode.Toggle)
+        {
+            if (_fpsAdsController.IsAdsActive)
+            {
+                _fpsAdsController.ExitAds();
+            }
+            else if (CanUseAds())
+            {
+                _fpsAdsController.EnterAds(CurrentEquippedWeaponData);
+            }
+            return;
+        }
+
+        if (CanUseAds())
+        {
+            _fpsAdsController.EnterAds(CurrentEquippedWeaponData);
+        }
+    }
+
+    /// <summary>마우스 우클릭 입력 해제 시 홀드 방식이면 3인칭 시점으로 복귀한다.</summary>
+    private void OnAimCanceled(InputAction.CallbackContext context)
+    {
+        if (!IsOwner) return;
+
+        _isAimHeld = false;
+        if (_fpsAdsController != null && _fpsAdsController.InputMode == EAdsInputMode.Hold)
+        {
+            _fpsAdsController.ExitAds();
+        }
     }
 
     // ***************************************************************
@@ -529,12 +665,42 @@ public class PlayerController : PropControllerBase
     private void HandleOwnerDiedWithKiller(NetworkObject killerNetworkObject)
     {
         if (!IsOwner) return;
+        _isAimHeld = false;
+        _fpsAdsController?.ForceExitAds();
         _deathCamController?.BeginDeathSequence(this, killerNetworkObject);
+    }
+
+    /// <summary>장착 무기 상태가 서버에 의해 변경되면 진행 중인 1인칭 정조준을 해제한다.</summary>
+    private void HandleOwnerEquippedWeaponChanged(EquippedWeaponState state)
+    {
+        if (!IsOwner) return;
+        _fpsAdsController?.ExitAds();
     }
 
     // ***************************************************************
     // Helpers
     // ***************************************************************
+
+    /// <summary>현재 플레이어가 1인칭 정조준(ADS)에 진입하거나 유지할 수 있는 상태인지 판정한다.</summary>
+    private bool CanUseAds()
+    {
+        if (!IsOwner || IsDead || IsRagdollIdle) return false;
+        if (_deathCamController != null && _deathCamController.IsDeathCamActive) return false;
+        if (_weaponInventory == null) return false;
+
+        EWeaponSlotType activeSlot = _weaponInventory.ActiveSlot;
+        if (activeSlot != EWeaponSlotType.Primary && activeSlot != EWeaponSlotType.Secondary) return false;
+
+        WeaponDataSO weaponData = _weaponInventory.EquippedWeaponData;
+        if (weaponData == null) return false;
+        if (weaponData.Category != EWeaponCategory.Primary && weaponData.Category != EWeaponCategory.Secondary) return false;
+
+        if (_weaponController != null && _weaponController.IsReloading) return false;
+        if (_propAnim != null && _propAnim.IsSwappingWeapon) return false;
+        if (_playerAnimComponent != null && _playerAnimComponent.IsReloadAnimationActive) return false;
+
+        return true;
+    }
 
     /// <summary>카메라 추적 앵커의 월드 위치와 수직 회전을 갱신한다.</summary>
     private void UpdateCameraAnchorPosition()

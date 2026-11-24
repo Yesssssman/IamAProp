@@ -38,6 +38,12 @@ public class PlayerAnim : PropAnimBase
     /// <summary>현재 오른손에 장착된 무기의 <see cref="Animator"/> 컴포넌트.</summary>
     private Animator _weaponAnimator;
 
+    /// <summary>현재 오른손에 장착된 무기 인스턴스.</summary>
+    private GameObject _currentWeaponObject;
+
+    /// <summary>현재 장착 무기 프리팹의 1인칭 정조준 기준 앵커 트랜스폼.</summary>
+    private Transform _currentAdsCameraAnchor;
+
     /// <summary>무기 교체 애니메이션 진입 직후 <c>isWeaponSwap</c>을 초기화하기 위한 대기 플래그.</summary>
     private bool _pendingWeaponSwapReset;
 
@@ -159,6 +165,12 @@ public class PlayerAnim : PropAnimBase
         }
     }
 
+    /// <summary>현재 장착된 무기 인스턴스 오브젝트.</summary>
+    public GameObject CurrentWeaponObject => _currentWeaponObject;
+
+    /// <summary>현재 장착된 무기의 1인칭 정조준 기준 앵커(<c>AdsCameraAnchor</c>) 트랜스폼.</summary>
+    public Transform CurrentAdsCameraAnchor => _currentAdsCameraAnchor;
+
     // ***************************************************************
     // MonoBehaviour
     // ***************************************************************
@@ -222,13 +234,15 @@ public class PlayerAnim : PropAnimBase
 
         if (activeHash == M1911ShotState || activeHash == AkShotState)
         {
+            bool isExitingShot = !useNextState && handAnimator.IsInTransition(0);
+            float normalizedTime = isExitingShot ? 1f : Mathf.Clamp01(activeHandState.normalizedTime);
             float handShotFrames = _appliedWeaponData != null && _appliedWeaponData.HandShotFrames > 0f
                 ? _appliedWeaponData.HandShotFrames
                 : DefaultHandShotFrames;
             float weaponShotFrames = _appliedWeaponData != null && _appliedWeaponData.WeaponShotFrames > 0f
                 ? _appliedWeaponData.WeaponShotFrames
                 : DefaultWeaponShotFrames;
-            float handFrame = Mathf.Repeat(activeHandState.normalizedTime, 1f) * handShotFrames;
+            float handFrame = normalizedTime * handShotFrames;
             if (handFrame < weaponShotFrames)
             {
                 _weaponAnimator.SetBool(IsAttack, true);
@@ -698,6 +712,9 @@ public class PlayerAnim : PropAnimBase
                     Quaternion.Euler(weaponData.GripRotation));
                 weaponObject.transform.localScale = weaponData.GripScale;
 
+                _currentWeaponObject = weaponObject;
+                _currentAdsCameraAnchor = weaponObject.transform.Find("AdsCameraAnchor");
+
                 GunScript gun = weaponObject.GetComponent<GunScript>();
                 if (gun != null && weaponData.HandReloadClip != null)
                 {
@@ -800,6 +817,8 @@ public class PlayerAnim : PropAnimBase
             _weaponAnimator.SetBool(IsReload, false);
         }
         _weaponAnimator = null;
+        _currentWeaponObject = null;
+        _currentAdsCameraAnchor = null;
 
         if (handScript == null) return;
 

@@ -109,6 +109,9 @@ public abstract class PropAnimBase : NetworkBehaviour, IPropAnimController
     /// <inheritdoc/>
     public virtual bool IsSwappingWeapon => false;
 
+    /// <summary>무기 및 탄창 장착을 관리하는 <see cref="HandScript"/> 참조.</summary>
+    public HandScript HandScript => handScript;
+
     // ***************************************************************
     // MonoBehaviour
     // ***************************************************************

@@ -195,6 +195,21 @@ public class WeaponDataSO : ScriptableObject
     [Min(0f)]
     [SerializeField] private float shakeDuration = 0.05f;
 
+    /// <summary>1인칭 정조준 시 이 무기 전용으로 사용할 시야각 (0 이하면 카메라 기본 ADS FOV 사용, 도 단위).</summary>
+    [Header("1인칭 정조준 (ADS)")]
+    [Min(0f)]
+    [SerializeField] private float adsFovOverride;
+
+    /// <summary>무기 프리팹의 <c>AdsCameraAnchor</c> 로컬 좌표에 추가로 더할 미세 위치 오프셋 (로컬 단위).</summary>
+    [SerializeField] private Vector3 adsAnchorLocalOffset;
+
+    /// <summary>무기 프리팹의 <c>AdsCameraAnchor</c> 로컬 회전에 추가로 더할 미세 오일러 각도 (도 단위).</summary>
+    [SerializeField] private Vector3 adsAnchorLocalRotationOffset;
+
+    /// <summary>1인칭 정조준 발사 시 이 무기 전용 Z축 후퇴 반동 거리 (0 이하면 카메라 기본값 사용, 미터).</summary>
+    [Min(0f)]
+    [SerializeField] private float adsKickbackZOverride;
+
     // ***************************************************************
     // Properties
     // ***************************************************************
@@ -348,6 +363,18 @@ public class WeaponDataSO : ScriptableObject
 
     /// <summary>발사 순간 미세 펄스 화면 흔들림 지속 시간 (초 단위).</summary>
     public float ShakeDuration => shakeDuration;
+
+    /// <summary>1인칭 정조준 시 이 무기 전용 시야각 (0 이하면 기본 ADS FOV 사용).</summary>
+    public float AdsFovOverride => adsFovOverride;
+
+    /// <summary><c>AdsCameraAnchor</c> 로컬 좌표 추가 미세 오프셋.</summary>
+    public Vector3 AdsAnchorLocalOffset => adsAnchorLocalOffset;
+
+    /// <summary><c>AdsCameraAnchor</c> 로컬 회전 추가 미세 오일러 각도 (도 단위).</summary>
+    public Vector3 AdsAnchorLocalRotationOffset => adsAnchorLocalRotationOffset;
+
+    /// <summary>1인칭 정조준 발사 시 이 무기 전용 Z축 후퇴 반동 거리 (0 이하면 기본값 사용, 미터).</summary>
+    public float AdsKickbackZOverride => adsKickbackZOverride;
 
     // ***************************************************************
     // Public Control API

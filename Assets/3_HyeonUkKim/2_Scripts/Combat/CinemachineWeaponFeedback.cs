@@ -1,7 +1,7 @@
 using Unity.Cinemachine;
 using UnityEngine;
 
-/// <summary>무기 발사 시 <see cref="CinemachineOrbitalFollow"/> 축 임시 주입으로 반동·원점 복귀를 적용하고, 보정 채널에 미세 펄스 화면 흔들림을 더한다.</summary>
+/// <summary>무기 발사 시 <see cref="CinemachineOrbitalFollow"/> 또는 <see cref="CinemachinePanTilt"/> 축 임시 주입으로 반동·원점 복귀를 적용하고, 보정 채널에 미세 펄스 화면 흔들림을 더한다.</summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(CinemachineCamera))]
 public class CinemachineWeaponFeedback : CinemachineExtension
@@ -62,6 +62,9 @@ public class CinemachineWeaponFeedback : CinemachineExtension
     /// <summary>같은 카메라에 부착된 오빗 추적 컴포넌트 참조.</summary>
     private CinemachineOrbitalFollow _orbitalFollow;
 
+    /// <summary>같은 카메라에 부착된 1인칭 팬/틸트 회전 컴포넌트 참조.</summary>
+    private CinemachinePanTilt _panTilt;
+
     /// <summary>파이프라인 전처리에서 백업한 순수 마우스 기준 수평 축 각도 (도 단위).</summary>
     private float _savedHorizontalAxisValue;
 
@@ -119,6 +122,7 @@ public class CinemachineWeaponFeedback : CinemachineExtension
     {
         base.Awake();
         _orbitalFollow = GetComponent<CinemachineOrbitalFollow>();
+        _panTilt = GetComponent<CinemachinePanTilt>();
     }
 
     private void OnDisable()
@@ -136,56 +140,74 @@ public class CinemachineWeaponFeedback : CinemachineExtension
     // Public Control API
     // ***************************************************************
 
-    /// <summary><paramref name="weaponData"/>의 수치로 1발 발사 반동과 미세 펄스 셰이크를 누적 적용한다.</summary>
-    public void ApplyWeaponFeedback(WeaponDataSO weaponData)
+    /// <summary><paramref name="weaponData"/>의 수치에 <paramref name="recoilScale"/>과 <paramref name="shakeScale"/>을 적용해 1발 발사 반동과 미세 펄스 셰이크를 누적한다.</summary>
+    public void ApplyWeaponFeedback(WeaponDataSO weaponData, float recoilScale = 1f, float shakeScale = 1f)
     {
         if (weaponData == null) return;
 
-        bool hasRecoil = weaponData.RecoilPitch > 0f
-            || !Mathf.Approximately(weaponData.RecoilYawMin, 0f)
-            || !Mathf.Approximately(weaponData.RecoilYawMax, 0f);
+        float safeRecoilScale = Mathf.Max(0f, recoilScale);
+        float safeShakeScale = Mathf.Max(0f, shakeScale);
+        float scaledRecoilPitch = weaponData.RecoilPitch * safeRecoilScale;
+        float scaledYawMin = weaponData.RecoilYawMin * safeRecoilScale;
+        float scaledYawMax = weaponData.RecoilYawMax * safeRecoilScale;
+
+        bool hasRecoil = scaledRecoilPitch > 0f
+            || !Mathf.Approximately(scaledYawMin, 0f)
+            || !Mathf.Approximately(scaledYawMax, 0f);
 
         if (hasRecoil)
         {
             _activeSnappiness = weaponData.RecoilSnappiness > 0f ? weaponData.RecoilSnappiness : defaultSnappiness;
             _activeReturnSpeed = weaponData.RecoilReturnSpeed > 0f ? weaponData.RecoilReturnSpeed : defaultReturnSpeed;
 
-            float yawMin = Mathf.Min(weaponData.RecoilYawMin, weaponData.RecoilYawMax);
-            float yawMax = Mathf.Max(weaponData.RecoilYawMin, weaponData.RecoilYawMax);
+            float yawMin = Mathf.Min(scaledYawMin, scaledYawMax);
+            float yawMax = Mathf.Max(scaledYawMin, scaledYawMax);
             float yawKick = Random.Range(yawMin, yawMax);
 
-            float effectiveMaxPitch = weaponData.MaxRecoilPitch > 0f
-                ? Mathf.Min(weaponData.MaxRecoilPitch, maxRecoilPitchLimit)
-                : maxRecoilPitchLimit;
-            float effectiveMaxYaw = weaponData.MaxRecoilYaw > 0f
+            float baseMaxYaw = weaponData.MaxRecoilYaw > 0f
                 ? Mathf.Min(weaponData.MaxRecoilYaw, maxRecoilYawLimit)
                 : maxRecoilYawLimit;
+            float effectiveMaxYaw = baseMaxYaw * safeRecoilScale;
 
-            if (_orbitalFollow == null)
+            if (_orbitalFollow == null && _panTilt == null)
             {
                 _orbitalFollow = GetComponent<CinemachineOrbitalFollow>();
+                _panTilt = GetComponent<CinemachinePanTilt>();
             }
 
             if (_orbitalFollow != null)
             {
                 float baseVertical = _isAxisInjected ? _savedVerticalAxisValue : _orbitalFollow.VerticalAxis.Value;
-                float minAllowedVertical = Mathf.Max(_orbitalFollow.VerticalAxis.Range.x, -effectiveMaxPitch);
-                float maxAllowedRecoilY = Mathf.Max(0f, baseVertical - minAllowedVertical);
+                float maxAllowedRecoilY = Mathf.Max(0f, baseVertical - _orbitalFollow.VerticalAxis.Range.x);
 
                 if (_targetRecoilOffset.y < maxAllowedRecoilY)
                 {
-                    _targetRecoilOffset.y = Mathf.Min(_targetRecoilOffset.y + weaponData.RecoilPitch, maxAllowedRecoilY);
+                    _targetRecoilOffset.y = Mathf.Min(_targetRecoilOffset.y + scaledRecoilPitch, maxAllowedRecoilY);
+                }
+            }
+            else if (_panTilt != null)
+            {
+                float baseVertical = _isAxisInjected ? _savedVerticalAxisValue : _panTilt.TiltAxis.Value;
+                float maxAllowedRecoilY = Mathf.Max(0f, baseVertical - _panTilt.TiltAxis.Range.x);
+
+                if (_targetRecoilOffset.y < maxAllowedRecoilY)
+                {
+                    _targetRecoilOffset.y = Mathf.Min(_targetRecoilOffset.y + scaledRecoilPitch, maxAllowedRecoilY);
                 }
             }
             else
             {
-                _targetRecoilOffset.y = Mathf.Clamp(_targetRecoilOffset.y + weaponData.RecoilPitch, -effectiveMaxPitch, effectiveMaxPitch);
+                float baseMaxPitch = weaponData.MaxRecoilPitch > 0f
+                    ? Mathf.Min(weaponData.MaxRecoilPitch, maxRecoilPitchLimit)
+                    : maxRecoilPitchLimit;
+                float effectiveMaxPitch = baseMaxPitch * safeRecoilScale;
+                _targetRecoilOffset.y = Mathf.Clamp(_targetRecoilOffset.y + scaledRecoilPitch, -effectiveMaxPitch, effectiveMaxPitch);
             }
 
             _targetRecoilOffset.x = Mathf.Clamp(_targetRecoilOffset.x + yawKick, -effectiveMaxYaw, effectiveMaxYaw);
         }
 
-        float incomingShake = weaponData.ShakeIntensity * shakeStrengthMultiplier;
+        float incomingShake = weaponData.ShakeIntensity * shakeStrengthMultiplier * safeShakeScale;
         if (incomingShake > 0f && maxShakeIntensity > 0f)
         {
             float duration = weaponData.ShakeDuration > 0f ? weaponData.ShakeDuration : defaultShakeDuration;
@@ -239,9 +261,10 @@ public class CinemachineWeaponFeedback : CinemachineExtension
             return;
         }
 
-        if (_orbitalFollow == null && vcam != null)
+        if (_orbitalFollow == null && _panTilt == null && vcam != null)
         {
             _orbitalFollow = vcam.GetComponent<CinemachineOrbitalFollow>();
+            _panTilt = vcam.GetComponent<CinemachinePanTilt>();
         }
 
         if (_orbitalFollow != null)
@@ -257,6 +280,24 @@ public class CinemachineWeaponFeedback : CinemachineExtension
                     _targetRecoilOffset.y = Mathf.Max(0f, _targetRecoilOffset.y - absorbed);
                     currentBaseVertical = _orbitalFollow.VerticalAxis.ClampValue(currentBaseVertical - absorbed);
                     _orbitalFollow.VerticalAxis.Value = currentBaseVertical;
+                }
+            }
+            _lastBaseVerticalAxisValue = currentBaseVertical;
+            _hasLastBaseVerticalAxis = true;
+        }
+        else if (_panTilt != null)
+        {
+            float currentBaseVertical = _panTilt.TiltAxis.Value;
+            if (_hasLastBaseVerticalAxis)
+            {
+                float userDownDelta = currentBaseVertical - _lastBaseVerticalAxisValue;
+                if (userDownDelta > 0f && _currentRecoilOffset.y > 0f)
+                {
+                    float absorbed = Mathf.Min(userDownDelta, _currentRecoilOffset.y);
+                    _currentRecoilOffset.y = Mathf.Max(0f, _currentRecoilOffset.y - absorbed);
+                    _targetRecoilOffset.y = Mathf.Max(0f, _targetRecoilOffset.y - absorbed);
+                    currentBaseVertical = _panTilt.TiltAxis.ClampValue(currentBaseVertical - absorbed);
+                    _panTilt.TiltAxis.Value = currentBaseVertical;
                 }
             }
             _lastBaseVerticalAxisValue = currentBaseVertical;
@@ -286,13 +327,24 @@ public class CinemachineWeaponFeedback : CinemachineExtension
             }
         }
 
-        if (_currentRecoilOffset.sqrMagnitude <= 0f || _orbitalFollow == null) return;
+        if (_currentRecoilOffset.sqrMagnitude <= 0f) return;
 
-        _savedHorizontalAxisValue = _orbitalFollow.HorizontalAxis.Value;
-        _savedVerticalAxisValue = _orbitalFollow.VerticalAxis.Value;
-        _orbitalFollow.HorizontalAxis.Value = _orbitalFollow.HorizontalAxis.ClampValue(_savedHorizontalAxisValue + _currentRecoilOffset.x);
-        _orbitalFollow.VerticalAxis.Value = _orbitalFollow.VerticalAxis.ClampValue(_savedVerticalAxisValue - _currentRecoilOffset.y);
-        _isAxisInjected = true;
+        if (_orbitalFollow != null)
+        {
+            _savedHorizontalAxisValue = _orbitalFollow.HorizontalAxis.Value;
+            _savedVerticalAxisValue = _orbitalFollow.VerticalAxis.Value;
+            _orbitalFollow.HorizontalAxis.Value = _orbitalFollow.HorizontalAxis.ClampValue(_savedHorizontalAxisValue + _currentRecoilOffset.x);
+            _orbitalFollow.VerticalAxis.Value = _orbitalFollow.VerticalAxis.ClampValue(_savedVerticalAxisValue - _currentRecoilOffset.y);
+            _isAxisInjected = true;
+        }
+        else if (_panTilt != null)
+        {
+            _savedHorizontalAxisValue = _panTilt.PanAxis.Value;
+            _savedVerticalAxisValue = _panTilt.TiltAxis.Value;
+            _panTilt.PanAxis.Value = _panTilt.PanAxis.ClampValue(_savedHorizontalAxisValue + _currentRecoilOffset.x);
+            _panTilt.TiltAxis.Value = _panTilt.TiltAxis.ClampValue(_savedVerticalAxisValue - _currentRecoilOffset.y);
+            _isAxisInjected = true;
+        }
     }
 
     protected override void PostPipelineStageCallback(
@@ -311,7 +363,7 @@ public class CinemachineWeaponFeedback : CinemachineExtension
 
         if (stage != CinemachineCore.Stage.Noise || deltaTime < 0f) return;
 
-        bool hasFallbackRecoil = !_isAxisInjected && _orbitalFollow == null && _currentRecoilOffset.sqrMagnitude > 0f;
+        bool hasFallbackRecoil = !_isAxisInjected && _orbitalFollow == null && _panTilt == null && _currentRecoilOffset.sqrMagnitude > 0f;
         bool hasShake = false;
         Vector3 shakeLocalPos = Vector3.zero;
         Vector3 shakeEuler = Vector3.zero;
@@ -369,7 +421,7 @@ public class CinemachineWeaponFeedback : CinemachineExtension
     // Helpers
     // ***************************************************************
 
-    /// <summary>파이프라인 전처리에서 임시 주입한 <see cref="_orbitalFollow"/> 축 값을 순수 기준값으로 복원한다.</summary>
+    /// <summary>파이프라인 전처리에서 임시 주입한 카메라 축 값을 순수 기준값으로 복원한다.</summary>
     private void RestoreInjectedAxes()
     {
         if (!_isAxisInjected) return;
@@ -378,6 +430,11 @@ public class CinemachineWeaponFeedback : CinemachineExtension
         {
             _orbitalFollow.HorizontalAxis.Value = _savedHorizontalAxisValue;
             _orbitalFollow.VerticalAxis.Value = _savedVerticalAxisValue;
+        }
+        else if (_panTilt != null)
+        {
+            _panTilt.PanAxis.Value = _savedHorizontalAxisValue;
+            _panTilt.TiltAxis.Value = _savedVerticalAxisValue;
         }
         _isAxisInjected = false;
     }

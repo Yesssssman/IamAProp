@@ -402,42 +402,42 @@ ModelImporter:
       bodyMask: 01000000010000000100000001000000010000000100000001000000010000000100000001000000010000000100000001000000u
       curves: []
       events:
-      - time: 0.028037384
+      - time: 0.23364486
         functionName: DropMagazineInGun
         data: 
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
-      - time: 0.028037384
-        functionName: ShowLeftHandMagazine
-        data: 
-        objectReferenceParameter: {instanceID: 0}
-        floatParameter: 0
-        intParameter: 0
-        messageOptions: 0
-      - time: 0.028037384
+      - time: 0.23364486
         functionName: OnReloadSound
         data: 
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
         intParameter: 1
         messageOptions: 0
-      - time: 0.22429907
+      - time: 0.3084112
+        functionName: ShowLeftHandMagazine
+        data: 
+        objectReferenceParameter: {instanceID: 0}
+        floatParameter: 0
+        intParameter: 0
+        messageOptions: 0
+      - time: 0.6542056
         functionName: EquipMagazineToGun
         data: 
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
-      - time: 0.22429907
+      - time: 0.6542056
         functionName: OnReloadSound
         data: 
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
         intParameter: 2
         messageOptions: 0
-      - time: 0.72897196
+      - time: 0.92523366
         functionName: OnReloadSound
         data: 
         objectReferenceParameter: {instanceID: 0}
