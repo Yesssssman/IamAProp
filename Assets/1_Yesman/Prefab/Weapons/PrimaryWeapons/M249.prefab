@@ -72,6 +72,11 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 8565067864921847993}
   m_SourcePrefab: {fileID: 100100000, guid: aa65289485fbc3a428dd3140844c9564, type: 3}
+--- !u!1 &277429911317141550 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 7588432464406803556, guid: aa65289485fbc3a428dd3140844c9564, type: 3}
+  m_PrefabInstance: {fileID: 7680368098261740618}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1071478488713762944 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: -1997190210111949622, guid: aa65289485fbc3a428dd3140844c9564, type: 3}
@@ -140,6 +145,7 @@ MonoBehaviour:
   opaqueDuration: 3
   fadeDuration: 2
   fadeMaterial: {fileID: 2100000, guid: 0e999001c4934b14099eb6040c23badf, type: 2}
+  bullets: {fileID: 277429911317141550}
 --- !u!1 &7374450627556872475 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: aa65289485fbc3a428dd3140844c9564, type: 3}

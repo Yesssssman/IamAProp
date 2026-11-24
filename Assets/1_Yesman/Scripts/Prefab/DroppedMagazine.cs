@@ -14,6 +14,9 @@ public class DroppedMagazine : MonoBehaviour
     /// <summary>페이드 아웃 동안 사용하는 투명 머티리얼.</summary>
     [SerializeField] private Material fadeMaterial;
 
+    /// <summary>탄창 안의 총알 오브젝트. 떨어진 탄창에서는 숨김. 총알이 따로 없는 탄창이면 null.</summary>
+    [SerializeField] private GameObject bullets;
+
     private Renderer magazineRenderer;
 
     /// <summary>페이드 아웃 중의 알파 값을 담는 블록. 페이드 아웃 전에는 null.</summary>
@@ -25,6 +28,14 @@ public class DroppedMagazine : MonoBehaviour
     private void Awake()
     {
         magazineRenderer = GetComponent<Renderer>();
+    }
+
+    private void OnEnable()
+    {
+        if (bullets)
+        {
+            bullets.SetActive(false);
+        }
     }
 
     private void Update()

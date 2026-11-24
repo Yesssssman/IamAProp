@@ -29,9 +29,16 @@ public class AnimationPreview : MonoBehaviour
 
         if (handClip)
         {
+            HandScript hand = GetComponentInChildren<HandScript>();
+
+            // 손 클립의 사운드 이벤트 수신자. 프리뷰에는 PlayerWeaponController가 없어 소리는 재생하지 않음
+            if (!hand.GetComponent<HandReloadAudioRelay>())
+            {
+                hand.gameObject.AddComponent<HandReloadAudioRelay>();
+            }
+
             handPlayable = AnimationClipPlayable.Create(graph, handClip);
-            AnimationPlayableOutput.Create(graph, "Hand", GetComponentInChildren<HandScript>().GetComponent<Animator>())
-                .SetSourcePlayable(handPlayable);
+            AnimationPlayableOutput.Create(graph, "Hand", hand.GetComponent<Animator>()).SetSourcePlayable(handPlayable);
         }
 
         graph.Play();
