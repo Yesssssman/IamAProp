@@ -64,12 +64,15 @@ MonoBehaviour:
   - {fileID: 8300000, guid: 0898f36efc04c4b9aafb88dbc13238fa, type: 3}
   shotVolume: 1
   reloadVolume: 1
-  recoilPitch: 3.6
+  recoilPitch: 2.4
   recoilYawMin: -1.1
   recoilYawMax: 1.1
   recoilSnappiness: 20
   recoilReturnSpeed: 4
-  maxRecoilPitch: 45
   maxRecoilYaw: 5
   shakeIntensity: 1
   shakeDuration: 0.05
+  adsFovOverride: 0
+  adsAnchorLocalOffset: {x: 0, y: 0, z: 0}
+  adsAnchorLocalRotationOffset: {x: 0, y: 0, z: 0}
+  adsKickbackZOverride: 0

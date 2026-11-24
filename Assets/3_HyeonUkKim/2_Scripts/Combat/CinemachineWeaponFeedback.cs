@@ -12,6 +12,7 @@ public class CinemachineWeaponFeedback : CinemachineExtension
 
     private const float RecoilEpsilonSqr = 0.000001f; // 반동 오프셋을 0으로 스냅할 제곱 임계값
     private const float OverlappingShakeBoost = 0.25f; // 연사 중 기존 펄스와 겹칠 때 가산할 강도 비율
+    private const float FallbackMaxPitch = 85f; // 축 추적 컴포넌트가 없을 때 사용할 수직 반동 안전 상한 (도 단위)
 
     // ***************************************************************
     // Fields
@@ -26,9 +27,9 @@ public class CinemachineWeaponFeedback : CinemachineExtension
     [Min(0.01f)]
     [SerializeField] private float defaultReturnSpeed = 10f;
 
-    /// <summary>모든 무기 공통으로 제한할 상하 반동 최대 각도 (도 단위).</summary>
+    /// <summary>연사 중 원점 복귀 감쇠를 보류할 무기 발사 간격 배율.</summary>
     [Min(0f)]
-    [SerializeField] private float maxRecoilPitchLimit = 15f;
+    [SerializeField] private float recoveryDelayMultiplier = 1.25f;
 
     /// <summary>모든 무기 공통으로 제한할 좌우 반동 최대 절대 각도 (도 단위).</summary>
     [Min(0f)]
@@ -91,6 +92,9 @@ public class CinemachineWeaponFeedback : CinemachineExtension
 
     /// <summary>최근 발사 무기의 원점 복귀 속도.</summary>
     private float _activeReturnSpeed = 10f;
+
+    /// <summary>원점 복귀 감쇠 시작까지 남은 유예 시간 (초 단위).</summary>
+    private float _recoveryDelayRemaining;
 
     /// <summary>현재 진행 중인 미세 펄스 셰이크의 총 지속 시간 (초 단위).</summary>
     private float _shakeDuration = 0.05f;
@@ -159,6 +163,7 @@ public class CinemachineWeaponFeedback : CinemachineExtension
         {
             _activeSnappiness = weaponData.RecoilSnappiness > 0f ? weaponData.RecoilSnappiness : defaultSnappiness;
             _activeReturnSpeed = weaponData.RecoilReturnSpeed > 0f ? weaponData.RecoilReturnSpeed : defaultReturnSpeed;
+            _recoveryDelayRemaining = weaponData.AttackCooldown * recoveryDelayMultiplier;
 
             float yawMin = Mathf.Min(scaledYawMin, scaledYawMax);
             float yawMax = Mathf.Max(scaledYawMin, scaledYawMax);
@@ -197,11 +202,7 @@ public class CinemachineWeaponFeedback : CinemachineExtension
             }
             else
             {
-                float baseMaxPitch = weaponData.MaxRecoilPitch > 0f
-                    ? Mathf.Min(weaponData.MaxRecoilPitch, maxRecoilPitchLimit)
-                    : maxRecoilPitchLimit;
-                float effectiveMaxPitch = baseMaxPitch * safeRecoilScale;
-                _targetRecoilOffset.y = Mathf.Clamp(_targetRecoilOffset.y + scaledRecoilPitch, -effectiveMaxPitch, effectiveMaxPitch);
+                _targetRecoilOffset.y = Mathf.Clamp(_targetRecoilOffset.y + scaledRecoilPitch, -FallbackMaxPitch, FallbackMaxPitch);
             }
 
             _targetRecoilOffset.x = Mathf.Clamp(_targetRecoilOffset.x + yawKick, -effectiveMaxYaw, effectiveMaxYaw);
@@ -236,6 +237,7 @@ public class CinemachineWeaponFeedback : CinemachineExtension
     {
         RestoreInjectedAxes();
         _hasLastBaseVerticalAxis = false;
+        _recoveryDelayRemaining = 0f;
         _targetRecoilOffset = Vector2.zero;
         _currentRecoilOffset = Vector2.zero;
         _shakeTimeRemaining = 0f;
@@ -306,7 +308,11 @@ public class CinemachineWeaponFeedback : CinemachineExtension
 
         if (deltaTime > 0f)
         {
-            if (_targetRecoilOffset.sqrMagnitude > 0f)
+            if (_recoveryDelayRemaining > 0f)
+            {
+                _recoveryDelayRemaining = Mathf.Max(0f, _recoveryDelayRemaining - deltaTime);
+            }
+            else if (_targetRecoilOffset.sqrMagnitude > 0f)
             {
                 float returnLerp = 1f - Mathf.Exp(-_activeReturnSpeed * deltaTime);
                 _targetRecoilOffset = Vector2.Lerp(_targetRecoilOffset, Vector2.zero, returnLerp);

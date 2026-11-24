@@ -1089,7 +1089,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CinemachineWeaponFeedback
   defaultSnappiness: 20
   defaultReturnSpeed: 10
-  maxRecoilPitchLimit: 15
+  recoveryDelayMultiplier: 1.25
   maxRecoilYawLimit: 8
   defaultShakeDuration: 0.05
   shakeStrengthMultiplier: 1
@@ -2604,7 +2604,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CinemachineWeaponFeedback
   defaultSnappiness: 20
   defaultReturnSpeed: 10
-  maxRecoilPitchLimit: 45
+  recoveryDelayMultiplier: 1.25
   maxRecoilYawLimit: 8
   defaultShakeDuration: 0.05
   shakeStrengthMultiplier: 1

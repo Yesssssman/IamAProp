@@ -179,10 +179,6 @@ public class WeaponDataSO : ScriptableObject
     [Min(0.01f)]
     [SerializeField] private float recoilReturnSpeed = 10f;
 
-    /// <summary>연사 시 누적되는 상하 반동 최대 각도 제한 (도 단위).</summary>
-    [Min(0f)]
-    [SerializeField] private float maxRecoilPitch = 10f;
-
     /// <summary>연사 시 누적되는 좌우 반동 최대 절대 각도 제한 (도 단위).</summary>
     [Min(0f)]
     [SerializeField] private float maxRecoilYaw = 5f;
@@ -351,9 +347,6 @@ public class WeaponDataSO : ScriptableObject
 
     /// <summary>반동 원점 복귀 속도.</summary>
     public float RecoilReturnSpeed => recoilReturnSpeed;
-
-    /// <summary>누적 상하 반동 최대 각도 제한 (도 단위).</summary>
-    public float MaxRecoilPitch => maxRecoilPitch;
 
     /// <summary>누적 좌우 반동 최대 절대 각도 제한 (도 단위).</summary>
     public float MaxRecoilYaw => maxRecoilYaw;

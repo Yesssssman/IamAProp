@@ -66,7 +66,10 @@ MonoBehaviour:
   recoilYawMax: 0.4
   recoilSnappiness: 25
   recoilReturnSpeed: 12
-  maxRecoilPitch: 7
   maxRecoilYaw: 2
   shakeIntensity: 0.85
   shakeDuration: 0.05
+  adsFovOverride: 0
+  adsAnchorLocalOffset: {x: 0, y: 0, z: 0}
+  adsAnchorLocalRotationOffset: {x: 0, y: 0, z: 0}
+  adsKickbackZOverride: 0

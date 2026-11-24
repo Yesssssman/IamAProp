@@ -69,7 +69,6 @@ MonoBehaviour:
   recoilYawMax: 0.55
   recoilSnappiness: 22
   recoilReturnSpeed: 10
-  maxRecoilPitch: 8
   maxRecoilYaw: 3
   shakeIntensity: 0.7
   shakeDuration: 0.05
