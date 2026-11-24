@@ -182,3 +182,9 @@ MonoBehaviour:
   opaqueDuration: 3
   fadeDuration: 2
   fadeMaterial: {fileID: 2100000, guid: 0e999001c4934b14099eb6040c23badf, type: 2}
+  bullets: {fileID: 7189032854576094720}
+--- !u!1 &7189032854576094720 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: -5765681538271507551, guid: 3f419b19f25b2464c8462124788d6591, type: 3}
+  m_PrefabInstance: {fileID: 5492346980180055457}
+  m_PrefabAsset: {fileID: 0}

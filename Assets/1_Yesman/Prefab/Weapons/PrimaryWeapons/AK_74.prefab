@@ -118,6 +118,11 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
+--- !u!1 &3054660102333972175 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: -4903053988574823810, guid: 710251e190a68604e877a168a81d1d56, type: 3}
+  m_PrefabInstance: {fileID: 1265669216108004529}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &4349934742021031369 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: -5922622823359544968, guid: 710251e190a68604e877a168a81d1d56, type: 3}
@@ -186,3 +191,4 @@ MonoBehaviour:
   opaqueDuration: 3
   fadeDuration: 2
   fadeMaterial: {fileID: 2100000, guid: 0e999001c4934b14099eb6040c23badf, type: 2}
+  bullets: {fileID: 3054660102333972175}
