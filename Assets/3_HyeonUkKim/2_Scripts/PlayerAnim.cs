@@ -38,6 +38,9 @@ public class PlayerAnim : PropAnimBase
     /// <summary>현재 오른손에 장착된 무기의 <see cref="Animator"/> 컴포넌트.</summary>
     private Animator _weaponAnimator;
 
+    /// <summary>현재 장착 무기 애니메이터에 전용 <c>Draw</c> 상태가 존재하는지 여부.</summary>
+    private bool _hasWeaponDrawState;
+
     /// <summary>현재 오른손에 장착된 무기 인스턴스.</summary>
     private GameObject _currentWeaponObject;
 
@@ -94,6 +97,9 @@ public class PlayerAnim : PropAnimBase
 
     /// <summary>총기 재장전 애니메이션 상태(<c>Reload</c>) 해시.</summary>
     private static readonly int WeaponReloadState = Animator.StringToHash("Reload");
+
+    /// <summary>총기 드로우 애니메이션 상태(<c>Draw</c>) 해시.</summary>
+    private static readonly int WeaponDrawState = Animator.StringToHash("Draw");
 
     // ***************************************************************
     // Properties
@@ -293,9 +299,10 @@ public class PlayerAnim : PropAnimBase
             float weaponFrame = handFrame - _appliedWeaponData.WeaponDrawStartFrame;
             if (weaponFrame >= 0f && weaponFrame < _appliedWeaponData.WeaponDrawTotalFrames)
             {
-                _weaponAnimator.SetBool(IsReload, true);
+                int drawState = _hasWeaponDrawState ? WeaponDrawState : WeaponReloadState;
+                _weaponAnimator.SetBool(IsReload, !_hasWeaponDrawState);
                 _weaponAnimator.SetBool(IsAttack, false);
-                _weaponAnimator.Play(WeaponReloadState, 0, weaponFrame / _appliedWeaponData.WeaponDrawTotalFrames);
+                _weaponAnimator.Play(drawState, 0, weaponFrame / _appliedWeaponData.WeaponDrawTotalFrames);
             }
             else
             {
@@ -755,6 +762,7 @@ public class PlayerAnim : PropAnimBase
                     if (_weaponAnimator.runtimeAnimatorController != null)
                     {
                         _weaponAnimator.Rebind();
+                        _hasWeaponDrawState = _weaponAnimator.HasState(0, WeaponDrawState);
                         _weaponAnimator.SetBool(IsAttack, false);
                         _weaponAnimator.SetBool(IsReload, false);
                         _weaponAnimator.Play(WeaponIdleState, 0, 0f);
@@ -824,6 +832,7 @@ public class PlayerAnim : PropAnimBase
             _weaponAnimator.SetBool(IsReload, false);
         }
         _weaponAnimator = null;
+        _hasWeaponDrawState = false;
         _currentWeaponObject = null;
         _currentAdsCameraAnchor = null;
         _currentMuzzlePoint = null;

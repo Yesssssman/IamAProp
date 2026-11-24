@@ -17,5 +17,6 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 52c21af8a1c304783bfcf694026f9b8c, type: 2}
   - {fileID: 11400000, guid: 72839a025a9b5463f965a652766284f1, type: 2}
   - {fileID: 11400000, guid: 7aed69aaf27bb48fba53cbf746201ffc, type: 2}
+  - {fileID: 11400000, guid: 2c6f82447c0ba4ab9a1f6fa30806d334, type: 2}
   defaultMeleeWeapon: {fileID: 11400000, guid: 0e5ab66a214064daf80a7ef147f5cf41, type: 2}
   worldPickupPrefab: {fileID: 8298750971163431968, guid: 339113f73d6c3465bb10696548536737, type: 3}
