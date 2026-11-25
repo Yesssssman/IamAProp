@@ -1,3 +1,4 @@
+using System;
 using FishNet.Component.Transforming.Beta;
 using FishNet.Object;
 using Unity.Cinemachine;
@@ -76,8 +77,21 @@ public class PlayerController : PropControllerBase
     private bool _isAimHeld;
 
     // ***************************************************************
+    // Events
+    // ***************************************************************
+
+    /// <summary>로컬 소유자(<see cref="NetworkBehaviour.IsOwner"/>) 플레이어가 클라이언트에서 시작될 때 발생하는 이벤트.</summary>
+    public static event Action<PlayerController> OnLocalPlayerStarted;
+
+    /// <summary>로컬 소유자(<see cref="NetworkBehaviour.IsOwner"/>) 플레이어가 클라이언트에서 정지될 때 발생하는 이벤트.</summary>
+    public static event Action<PlayerController> OnLocalPlayerStopped;
+
+    // ***************************************************************
     // Properties
     // ***************************************************************
+
+    /// <summary>현재 클라이언트에 활성화된 로컬 소유자 <see cref="PlayerController"/> 인스턴스.</summary>
+    public static PlayerController LocalPlayer { get; private set; }
 
     /// <summary>로컬 소유자 시네머신 카메라가 추적하는 수직 기준 앵커 트랜스폼.</summary>
     public Transform CameraAnchor => _cameraAnchor;
@@ -212,10 +226,19 @@ public class PlayerController : PropControllerBase
         {
             cameraTransform = Camera.main.transform;
         }
+
+        LocalPlayer = this;
+        OnLocalPlayerStarted?.Invoke(this);
     }
 
     public override void OnStopClient()
     {
+        if (LocalPlayer == this)
+        {
+            LocalPlayer = null;
+            OnLocalPlayerStopped?.Invoke(this);
+        }
+
         _moveInput = Vector2.zero;
         _jumpRequested = false;
         _isAimHeld = false;

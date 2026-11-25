@@ -48,6 +48,10 @@ public class WeaponDataSO : ScriptableObject
     /// <summary>무기 분류 (주무기, 보조무기, 근접무기).</summary>
     [SerializeField] private EWeaponCategory category = EWeaponCategory.Primary;
 
+    /// <summary>인게임 HUD 툴바 및 무기 정보에 표시할 무기 아이콘.</summary>
+    [Header("UI 표시")]
+    [SerializeField] private Sprite weaponIcon;
+
     /// <summary>오른손 소켓에 장착할 무기 프리팹.</summary>
     [Header("장착 및 월드 비주얼")]
     [SerializeField] private GameObject equippedPrefab;
@@ -276,6 +280,9 @@ public class WeaponDataSO : ScriptableObject
 
     /// <summary>무기 분류.</summary>
     public EWeaponCategory Category => category;
+
+    /// <summary>인게임 HUD 툴바 및 무기 정보에 표시할 무기 아이콘.</summary>
+    public Sprite WeaponIcon => weaponIcon;
 
     /// <summary>오른손 소켓 장착용 프리팹.</summary>
     public GameObject EquippedPrefab => equippedPrefab;
