@@ -356,9 +356,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 453481867b26f7c43b5bf38802a5f50e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: FishNet.Runtime::FishNet.Component.Transforming.Beta.NetworkTickSmoother
-  _componentIndexCache: 255
+  _componentIndexCache: 6
   _addedNetworkObject: {fileID: 8263648830346335679}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 8263648830346335679}
   _initializationSettings:
     TargetTransform: {fileID: 4441109541528529596}
     DetachOnStart: 0
@@ -532,7 +532,7 @@ MonoBehaviour:
   _spectatorInterpolation: 2
   _enableTeleport: 0
   _teleportThreshold: 1
-  <PrefabId>k__BackingField: 9
+  <PrefabId>k__BackingField: 11
   <SpawnableCollectionId>k__BackingField: 0
   <AssetPathHash>k__BackingField: 16342885132488585998
   SceneId: 0
@@ -551,6 +551,9 @@ MonoBehaviour:
   - {fileID: 2070328220091570088}
   - {fileID: 4588156390618512503}
   - {fileID: 1166752771365685723}
+  - {fileID: 1050192809316243485}
+  - {fileID: 3091578901884997298}
+  - {fileID: 9140214828632691384}
   - {fileID: 1221300615577752590}
   InitializedParentNetworkBehaviour: {fileID: 0}
   InitializedNestedNetworkObjects: []
@@ -562,7 +565,7 @@ MonoBehaviour:
   _initializeOrder: 0
   _preventDespawnOnDisconnect: 0
   _defaultDespawnType: 0
-  _initializedTimestamp: -8584066254995701388
+  _initializedTimestamp: -8584060264533404678
 --- !u!114 &1166752771365685723
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -624,9 +627,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf0c6025d33434d4585416219c050ec0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
-  _componentIndexCache: 255
+  _componentIndexCache: 3
   _addedNetworkObject: {fileID: 8263648830346335679}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 8263648830346335679}
   playerStats: {fileID: 11400000, guid: 0efc9cd7cbe0744e29af7bf98f44a944, type: 2}
 --- !u!114 &3091578901884997298
 MonoBehaviour:
@@ -640,13 +643,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 034a176965d574344ac91391cd549200, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerWeaponController
-  _componentIndexCache: 255
+  _componentIndexCache: 4
   _addedNetworkObject: {fileID: 8263648830346335679}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 8263648830346335679}
   hitLayerMask:
     serializedVersion: 2
     m_Bits: 201
+  shotSphereRadius: 0.05
   debugRayDuration: 1.5
+  drawShotGizmos: 1
   weaponAudioSource: {fileID: 3476453936752349195}
 --- !u!114 &9140214828632691384
 MonoBehaviour:
@@ -660,9 +665,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 91845990a9c754f138ac6a5abce9436c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerWeaponInventory
-  _componentIndexCache: 255
+  _componentIndexCache: 5
   _addedNetworkObject: {fileID: 8263648830346335679}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 8263648830346335679}
   weaponDatabase: {fileID: 11400000, guid: 740399c9523ba4601a63a381b6dd3121, type: 2}
   pickupRange: 0.2
   crosshairPickupRadius: 0.25

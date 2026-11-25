@@ -17,12 +17,16 @@ MonoBehaviour:
   weaponType: 3
   slotType: 3
   category: 0
+  weaponIcon: {fileID: 0}
   equippedPrefab: {fileID: 6627065953784350130, guid: b1636bf50a29342cb834428189182cb9, type: 3}
   worldVisualPrefab: {fileID: 0}
   weaponAnimController: {fileID: 9100000, guid: e521bc96c857b429997b8cb3c5d503dd, type: 2}
   gripPosition: {x: -0.0255, y: -0.002, z: -0.0091}
   gripRotation: {x: 274.73553, y: 179.99992, z: 222.94275}
   gripScale: {x: 1, y: 1, z: 1}
+  shellGripPosition: {x: 0.017, y: 0.025, z: -0.014}
+  shellGripRotation: {x: 72.7, y: 234.8, z: 91.1}
+  shellGripScale: {x: 0.9174, y: 0.9174, z: 0.9174}
   worldPickupScale: {x: 1, y: 1, z: 1}
   worldPickupColliders:
   - center: {x: 0.009, y: 0.015, z: 0.127}

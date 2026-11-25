@@ -71,6 +71,15 @@ public class WeaponDataSO : ScriptableObject
     /// <summary>오른손 본 기준 무기 로컬 스케일.</summary>
     [SerializeField] private Vector3 gripScale = Vector3.one;
 
+    /// <summary>왼손 본 기준 샷건 산탄(<c>BenelliM4_Bullet</c>) 로컬 위치.</summary>
+    [SerializeField] private Vector3 shellGripPosition;
+
+    /// <summary>왼손 본 기준 샷건 산탄 로컬 오일러 회전각 (도 단위).</summary>
+    [SerializeField] private Vector3 shellGripRotation;
+
+    /// <summary>왼손 본 기준 샷건 산탄 로컬 스케일.</summary>
+    [SerializeField] private Vector3 shellGripScale = Vector3.one;
+
     /// <summary>바닥 월드 픽업에 표시할 모델의 로컬 스케일.</summary>
     [SerializeField] private Vector3 worldPickupScale = Vector3.one;
 
@@ -301,6 +310,15 @@ public class WeaponDataSO : ScriptableObject
 
     /// <summary>오른손 본 기준 무기 로컬 스케일.</summary>
     public Vector3 GripScale => gripScale;
+
+    /// <summary>왼손 본 기준 샷건 산탄 로컬 위치.</summary>
+    public Vector3 ShellGripPosition => shellGripPosition;
+
+    /// <summary>왼손 본 기준 샷건 산탄 로컬 오일러 회전각 (도 단위).</summary>
+    public Vector3 ShellGripRotation => shellGripRotation;
+
+    /// <summary>왼손 본 기준 샷건 산탄 로컬 스케일.</summary>
+    public Vector3 ShellGripScale => shellGripScale;
 
     /// <summary>바닥 월드 픽업 모델 스케일.</summary>
     public Vector3 WorldPickupScale => worldPickupScale;

@@ -907,23 +907,14 @@ public class PlayerAnim : PropAnimBase
                     Transform shellSource = weaponObject.transform.Find("BenelliM4_Bullet");
                     if (shellSource != null)
                     {
-                        AnimationEvent insertEvent = Array.Find(
-                            weaponData.HandReloadLoopClip.events,
-                            evt => evt.functionName == nameof(HandReloadAudioRelay.OnReloadShellInserted));
-                        if (insertEvent != null)
-                        {
-                            weaponData.HandReloadLoopClip.SampleAnimation(handScript.gameObject, insertEvent.time);
-                        }
-
-                        GameObject shell = Instantiate(shellSource.gameObject, handScript.GetLeftHand(), true);
+                        GameObject shell = Instantiate(shellSource.gameObject, handScript.GetLeftHand(), false);
+                        shell.transform.SetLocalPositionAndRotation(
+                            weaponData.ShellGripPosition,
+                            Quaternion.Euler(weaponData.ShellGripRotation));
+                        shell.transform.localScale = weaponData.ShellGripScale;
                         shell.SetActive(false);
                         handScript.SetLeftHandItem(shell);
                         shellSource.gameObject.SetActive(false);
-
-                        if (handAnimator != null)
-                        {
-                            handAnimator.Update(0f);
-                        }
                     }
                 }
 
