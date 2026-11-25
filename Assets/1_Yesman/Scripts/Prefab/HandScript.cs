@@ -84,4 +84,23 @@ public class HandScript : MonoBehaviour
             player.EquipMagazineToGun();
         }
     }
+
+    /// <summary>손 클립의 이벤트를 <see cref="PlayerScript.RemoveGrenadePin"/>으로 전달함.</summary>
+    public void RemoveGrenadePin()
+    {
+        if (player)
+        {
+            player.RemoveGrenadePin();
+        }
+    }
+
+    /// <summary>손 클립의 이벤트를 <see cref="PlayerScript.ThrowGrenade"/>로 전달함.</summary>
+    /// <param name="speed">던지는 속도 (m/s). 애니메이션 이벤트의 Float 인자.</param>
+    public void ThrowGrenade(float speed)
+    {
+        if (player)
+        {
+            player.ThrowGrenade(speed);
+        }
+    }
 }

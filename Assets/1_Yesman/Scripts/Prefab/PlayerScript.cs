@@ -6,6 +6,10 @@ public class PlayerScript : MonoBehaviour
     [SerializeField]
     private HandScript hand;
 
+    /// <summary>수류탄을 던지는 방향이 프롭의 앞 방향에서 위로 기울어진 각도 (도).</summary>
+    [SerializeField]
+    private float grenadeThrowPitch = 30f;
+
     // ********************** 인벤토리 전용 함수들 *************************
 
     // 장착 무기 변경
@@ -64,6 +68,43 @@ public class PlayerScript : MonoBehaviour
         if (leftHandItem)
         {
             leftHandItem.SetActive(false);
+        }
+    }
+
+    /// <summary>오른손에 들고 있는 수류탄의 핀을 뽑아 왼쪽으로 떨어트림.</summary>
+    public void RemoveGrenadePin()
+    {
+        GameObject rightHandItem = hand.GetRightHandItem();
+
+        if (!rightHandItem)
+        {
+            return;
+        }
+
+        GrenadeScript grenadeScript = rightHandItem.GetComponent<GrenadeScript>();
+
+        if (grenadeScript)
+        {
+            grenadeScript.RemovePin(-transform.right);
+        }
+    }
+
+    /// <summary>오른손에 들고 있는 수류탄을 앞쪽 위로 던짐.</summary>
+    /// <param name="speed">던지는 속도 (m/s).</param>
+    public void ThrowGrenade(float speed)
+    {
+        GameObject rightHandItem = hand.GetRightHandItem();
+
+        if (!rightHandItem)
+        {
+            return;
+        }
+
+        GrenadeScript grenadeScript = rightHandItem.GetComponent<GrenadeScript>();
+
+        if (grenadeScript)
+        {
+            grenadeScript.Throw(Quaternion.AngleAxis(-grenadeThrowPitch, transform.right) * transform.forward * speed);
         }
     }
 }

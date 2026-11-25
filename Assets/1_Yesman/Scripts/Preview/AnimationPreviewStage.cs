@@ -50,6 +50,9 @@ public class AnimationPreviewStage : MonoBehaviour
 
         /// <summary><see cref="weaponClip"/>이 시작하는 <see cref="clip"/>의 프레임.</summary>
         public int weaponClipFrame;
+
+        /// <summary>이 손 클립을 핀을 뽑은 수류탄으로 시작하는지 여부. 수류탄이 아니면 무시함.</summary>
+        public bool pinRemoved;
     }
 
     [Serializable]
@@ -120,6 +123,16 @@ public class AnimationPreviewStage : MonoBehaviour
                         {
                             preview.PlayWeapon(weaponObject.GetComponent<Animator>(), handClip.weaponClip,
                                 handClip.weaponClipFrame / handClip.clip.frameRate);
+                        }
+
+                        GrenadeScript grenade = weaponObject.GetComponent<GrenadeScript>();
+
+                        if (grenade)
+                        {
+                            // 던진 수류탄과 뽑은 핀을 클립이 처음으로 돌아갈 때마다 되돌림
+                            bool pinned = !handClip.pinRemoved;
+                            grenade.ResetGrenade(pinned);
+                            preview.HandClipLooped += () => grenade.ResetGrenade(pinned);
                         }
 
                         GunScript gun = weaponObject.GetComponent<GunScript>();
