@@ -61,6 +61,15 @@ MonoBehaviour:
   range: 100
   meleeCastRadius: 0
   shotSphereRadiusOverride: 0.05
+  damageFalloff:
+    enableDamageFalloff: 1
+    useLinearFalloff: 0
+    level2Distance: 25
+    level3Distance: 50
+    level4Distance: 80
+    level2To3Damage: 23
+    level3To4Damage: 18
+    minDamage: 14
   pelletsPerShot: 1
   spreadPresets: []
   adsSpreadMultiplier: 1

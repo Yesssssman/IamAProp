@@ -599,10 +599,11 @@ public class FpsAdsController : MonoBehaviour
         Quaternion rotDelta = targetRot * Quaternion.Inverse(anchorWorldRot);
         Quaternion alignedPivotRot = rotDelta * originalPivotRot;
         Vector3 rotatedAnchorOffset = rotDelta * (anchorWorldPos - originalPivotPos);
-        Vector3 kickOffset = _currentWeaponKickZ > 0f
-            ? (targetRot * Vector3.forward) * (_currentWeaponKickZ * alignWeight)
+        float totalPullbackZ = _currentWeaponKickZ + _localPlayer.CurrentWallRetractDistance;
+        Vector3 pullbackOffset = totalPullbackZ > 0f
+            ? (targetRot * Vector3.forward) * (totalPullbackZ * alignWeight)
             : Vector3.zero;
-        Vector3 alignedPivotPos = targetPos - rotatedAnchorOffset - kickOffset;
+        Vector3 alignedPivotPos = targetPos - rotatedAnchorOffset - pullbackOffset;
 
         if (alignWeight >= 0.999f)
         {
