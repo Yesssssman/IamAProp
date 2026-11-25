@@ -32,6 +32,9 @@ public class PlayerAnim : PropAnimBase
     /// <summary>최초 1회 장착 무기 동기화가 적용되었는지 여부.</summary>
     private bool _hasAppliedEquippedState;
 
+    /// <summary>소유자 클라이언트의 예측 탄약 수를 제공하는 무기 컨트롤러 컴포넌트.</summary>
+    private PlayerWeaponController _weaponController;
+
     /// <summary>현재 적용된 무기의 <see cref="WeaponDataSO"/> 에셋.</summary>
     private WeaponDataSO _appliedWeaponData;
 
@@ -43,6 +46,9 @@ public class PlayerAnim : PropAnimBase
 
     /// <summary>현재 오른손에 장착된 무기 인스턴스.</summary>
     private GameObject _currentWeaponObject;
+
+    /// <summary>현재 장착 무기 인스턴스의 <see cref="GunScript"/>. 총기가 아니면 null.</summary>
+    private GunScript _currentGun;
 
     /// <summary>현재 장착 무기 프리팹의 1인칭 정조준 기준 앵커 트랜스폼.</summary>
     private Transform _currentAdsCameraAnchor;
@@ -246,6 +252,7 @@ public class PlayerAnim : PropAnimBase
     {
         base.Awake();
         _weaponInventory = GetComponent<PlayerWeaponInventory>();
+        _weaponController = GetComponent<PlayerWeaponController>();
         _playerHealth = GetComponent<PlayerHealth>();
     }
 
@@ -521,6 +528,12 @@ public class PlayerAnim : PropAnimBase
             _weaponAnimator.SetBool(IsAttack, true);
             _weaponAnimator.SetBool(IsReload, false);
             _weaponAnimator.Play(WeaponShotState, 0, 0f);
+        }
+
+        if (_currentGun != null)
+        {
+            // 남은 탄약 수는 소유자의 예측 값만 전달하고, 원격 프록시는 알리지 않는다.
+            _currentGun.Fire(IsOwner && _weaponController != null ? _weaponController.CurrentAmmo : (int?)null);
         }
     }
 
@@ -965,6 +978,12 @@ public class PlayerAnim : PropAnimBase
                     }
                 }
 
+                _currentGun = gun;
+                if (gun != null && IsOwner)
+                {
+                    gun.SetLoadedAmmo(_weaponInventory.GetSlotState(newState.Slot).CurrentAmmo);
+                }
+
                 _weaponAnimator = weaponObject.GetComponent<Animator>();
                 if (_weaponAnimator != null)
                 {
@@ -1051,6 +1070,7 @@ public class PlayerAnim : PropAnimBase
         _weaponAnimator = null;
         _hasWeaponDrawState = false;
         _currentWeaponObject = null;
+        _currentGun = null;
         _currentAdsCameraAnchor = null;
         _currentMuzzlePoint = null;
         _currentCasingEjectPoint = null;
