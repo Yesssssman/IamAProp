@@ -19,6 +19,9 @@ public class AnimationPreview : MonoBehaviour
     /// <summary>무기 클립이 시작하는 손 클립의 시각 (초).</summary>
     private float weaponClipTime;
 
+    /// <summary>반복하지 않는 손 클립이 처음으로 되돌아간 직후 호출.</summary>
+    public event Action HandClipLooped;
+
     /// <summary>프롭과 손의 <see cref="Animator"/>에 두 클립을 재생하기 시작함.</summary>
     /// <param name="handClip">손 클립. null이면 손은 재생하지 않음.</param>
     public void Play(AnimationClip propClip, AnimationClip handClip)
@@ -76,6 +79,7 @@ public class AnimationPreview : MonoBehaviour
             // 같은 시각으로 두 번 호출하면 이전 시각도 0이 되어 이벤트를 호출하지 않음.
             handPlayable.SetTime(0d);
             handPlayable.SetTime(0d);
+            HandClipLooped?.Invoke();
         }
 
         if (weaponPlayable.IsValid())
