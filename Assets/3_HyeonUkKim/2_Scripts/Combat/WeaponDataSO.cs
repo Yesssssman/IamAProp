@@ -24,6 +24,54 @@ public struct WeaponSpreadPreset
     }
 }
 
+/// <summary>사거리에 따른 4단계 데미지 감소(Damage Falloff) 설정.</summary>
+[Serializable]
+public struct DamageFalloffSettings
+{
+    /// <summary>거리별 데미지 감소 적용 여부 (근접 무기는 <c>false</c>).</summary>
+    public bool enableDamageFalloff;
+
+    /// <summary>구간 내 선형 보간(Lerp) 적용 여부 (<c>false</c>면 계단식 Step 적용).</summary>
+    public bool useLinearFalloff;
+
+    /// <summary>1~2레벨 구간 상한 거리 (0 ~ 이 거리까지 기본 데미지 유지, 미터).</summary>
+    [Min(0f)]
+    public float level2Distance;
+
+    /// <summary>2~3레벨 구간 상한 거리 (미터).</summary>
+    [Min(0f)]
+    public float level3Distance;
+
+    /// <summary>3~4레벨 구간 상한 거리 (초과 시 <see cref="minDamage"/> 적용, 미터).</summary>
+    [Min(0f)]
+    public float level4Distance;
+
+    /// <summary>2~3레벨 구간(1차 감소)에 적용할 데미지.</summary>
+    [Min(0f)]
+    public float level2To3Damage;
+
+    /// <summary>3~4레벨 구간(2차 감소)에 적용할 데미지.</summary>
+    [Min(0f)]
+    public float level3To4Damage;
+
+    /// <summary>4레벨 초과 구간에 적용할 최소 데미지.</summary>
+    [Min(0f)]
+    public float minDamage;
+
+    /// <summary>신규 무기 에셋 생성 시 사용할 기본 거리 감쇠 설정.</summary>
+    public static DamageFalloffSettings Default => new()
+    {
+        enableDamageFalloff = true,
+        useLinearFalloff = false,
+        level2Distance = 20f,
+        level3Distance = 40f,
+        level4Distance = 65f,
+        level2To3Damage = 20f,
+        level3To4Damage = 15f,
+        minDamage = 10f
+    };
+}
+
 /// <summary>개별 무기의 식별자, 장착 비주얼, 애니메이션 오버라이드, 전투 수치 및 사운드 데이터를 정의한다.</summary>
 [CreateAssetMenu(fileName = "WeaponData", menuName = "IamAProp/Combat/Weapon Data")]
 public class WeaponDataSO : ScriptableObject
@@ -170,6 +218,10 @@ public class WeaponDataSO : ScriptableObject
     /// <summary>총기 히트스캔 구체 캐스트 반지름 오버라이드 (0 이하면 <see cref="PlayerWeaponController"/> 기본값 사용, 미터).</summary>
     [Min(0f)]
     [SerializeField] private float shotSphereRadiusOverride;
+
+    /// <summary>거리별 4단계 데미지 감소 설정.</summary>
+    [Header("거리별 데미지 감소 (Damage Falloff)")]
+    [SerializeField] private DamageFalloffSettings damageFalloff = DamageFalloffSettings.Default;
 
     /// <summary>1회 발사 시 동시 발사할 펠릿(Raycast) 개수 (1이면 단일 사격, 2 이상이면 고정 탄착군 다중 Raycast).</summary>
     [Header("다중 펠릿 및 고정 탄착군")]
@@ -402,6 +454,9 @@ public class WeaponDataSO : ScriptableObject
     /// <summary>총기 구체 캐스트 반지름 오버라이드 (0 이하면 기본값 사용, 미터).</summary>
     public float ShotSphereRadiusOverride => shotSphereRadiusOverride;
 
+    /// <summary>거리별 4단계 데미지 감소 설정.</summary>
+    public DamageFalloffSettings DamageFalloff => damageFalloff;
+
     /// <summary>1회 발사 시 동시 발사할 펠릿(Raycast) 개수.</summary>
     public int PelletsPerShot => Mathf.Max(1, pelletsPerShot);
 
@@ -490,8 +545,80 @@ public class WeaponDataSO : ScriptableObject
     public ParticleSystem CasingParticlePrefab => casingParticlePrefab;
 
     // ***************************************************************
+    // ScriptableObject
+    // ***************************************************************
+
+    private void OnValidate()
+    {
+        damage = Mathf.Max(0f, damage);
+
+        damageFalloff.level2Distance = Mathf.Max(0f, damageFalloff.level2Distance);
+        damageFalloff.level3Distance = Mathf.Max(damageFalloff.level2Distance, damageFalloff.level3Distance);
+        damageFalloff.level4Distance = Mathf.Max(damageFalloff.level3Distance, damageFalloff.level4Distance);
+
+        damageFalloff.level2To3Damage = Mathf.Clamp(damageFalloff.level2To3Damage, 0f, damage);
+        damageFalloff.level3To4Damage = Mathf.Clamp(damageFalloff.level3To4Damage, 0f, damageFalloff.level2To3Damage);
+        damageFalloff.minDamage = Mathf.Clamp(damageFalloff.minDamage, 0f, damageFalloff.level3To4Damage);
+    }
+
+    // ***************************************************************
     // Public Control API
     // ***************************************************************
+
+    /// <summary>사거리(<paramref name="distance"/>)에 따른 4단계 감소 데미지를 계산한다.</summary>
+    public float EvaluateDamage(float distance)
+    {
+        return EvaluateDamage(distance, out _);
+    }
+
+    /// <summary>사거리(<paramref name="distance"/>)에 따른 최종 데미지와 적용된 거리 레벨(1~4)을 계산한다.</summary>
+    public float EvaluateDamage(float distance, out int falloffLevel)
+    {
+        float baseDamage = Mathf.Max(0f, damage);
+        if (!damageFalloff.enableDamageFalloff || category == EWeaponCategory.Melee)
+        {
+            falloffLevel = 1;
+            return baseDamage;
+        }
+
+        float safeDistance = float.IsFinite(distance) ? Mathf.Max(0f, distance) : float.PositiveInfinity;
+        float d2 = Mathf.Max(0f, damageFalloff.level2Distance);
+        float d3 = Mathf.Max(d2, damageFalloff.level3Distance);
+        float d4 = Mathf.Max(d3, damageFalloff.level4Distance);
+
+        float tier2Damage = Mathf.Clamp(damageFalloff.level2To3Damage, 0f, baseDamage);
+        float tier3Damage = Mathf.Clamp(damageFalloff.level3To4Damage, 0f, tier2Damage);
+        float minDmg = Mathf.Clamp(damageFalloff.minDamage, 0f, tier3Damage);
+
+        if (safeDistance <= d2)
+        {
+            falloffLevel = 1;
+            return baseDamage;
+        }
+
+        if (safeDistance <= d3)
+        {
+            falloffLevel = 2;
+            if (!damageFalloff.useLinearFalloff) return tier2Damage;
+
+            float span = d3 - d2;
+            float t = span > 0.0001f ? Mathf.Clamp01((safeDistance - d2) / span) : 1f;
+            return Mathf.Lerp(baseDamage, tier2Damage, t);
+        }
+
+        if (safeDistance <= d4)
+        {
+            falloffLevel = 3;
+            if (!damageFalloff.useLinearFalloff) return tier3Damage;
+
+            float span = d4 - d3;
+            float t = span > 0.0001f ? Mathf.Clamp01((safeDistance - d3) / span) : 1f;
+            return Mathf.Lerp(tier2Damage, tier3Damage, t);
+        }
+
+        falloffLevel = 4;
+        return minDmg;
+    }
 
     /// <summary>재장전 단계 번호(<paramref name="step"/>: 1부터 시작)에 해당하는 오디오 클립을 반환한다.</summary>
     public AudioClip GetReloadClip(int step)

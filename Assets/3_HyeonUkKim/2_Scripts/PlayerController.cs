@@ -15,6 +15,7 @@ public class PlayerController : PropControllerBase
     // ***************************************************************
 
     private const float DefaultTpsViewOffsetY = 0.45f; // TpsViewPos가 없을 때 사용할 기본 추적 높이
+    private const int DefaultWallRetractLayerMask = (1 << 0) | (1 << 3); // Default, Ground
 
     // ***************************************************************
     // Fields
@@ -36,6 +37,37 @@ public class PlayerController : PropControllerBase
 
     /// <summary>크로스헤어 레이캐스트 미충돌 시 사용할 카메라 전방 기본 조준 거리 (미터).</summary>
     [SerializeField] private float defaultAimDistance = 100f;
+
+    /// <summary>벽 근접 시 총기 후퇴(Wall-Retract) 기능 활성화 여부.</summary>
+    [Header("벽 근접 총기 후퇴 (Wall-Retract)")]
+    [SerializeField] private bool enableWallRetract = true;
+
+    /// <summary>총기 후퇴 감지에 포함할 벽/지형 레이어 마스크.</summary>
+    [SerializeField] private LayerMask wallRetractLayerMask = DefaultWallRetractLayerMask;
+
+    /// <summary>벽 근접 감지 구체 캐스트 반지름 (미터).</summary>
+    [Min(0.01f)]
+    [SerializeField] private float wallRetractCheckRadius = 0.04f;
+
+    /// <summary>총구와 벽 사이에 유지할 최소 여유 간격 (미터).</summary>
+    [Min(0f)]
+    [SerializeField] private float wallRetractClearance = 0.08f;
+
+    /// <summary>벽 근접 시 총기를 뒤로 당길 수 있는 최대 거리 (미터).</summary>
+    [Min(0f)]
+    [SerializeField] private float wallRetractMaxDistance = 0.65f;
+
+    /// <summary>총기 후퇴 및 원복 보간 속도.</summary>
+    [Min(0.1f)]
+    [SerializeField] private float wallRetractSpeed = 18f;
+
+    /// <summary>1인칭 정조준(ADS) 진입을 제한하는 총기 후퇴 거리 임계값 (미터).</summary>
+    [Min(0f)]
+    [SerializeField] private float adsEnterWallRetractThreshold = 0.05f;
+
+    /// <summary>1인칭 정조준(ADS) 유지 중 자동 해제되는 총기 후퇴 거리 임계값 (미터).</summary>
+    [Min(0f)]
+    [SerializeField] private float adsExitWallRetractThreshold = 0.12f;
 
     /// <summary>크로스헤어 레이캐스트 결과를 저장하는 재사용 버퍼.</summary>
     private readonly RaycastHit[] _aimHits = new RaycastHit[16];
@@ -76,6 +108,9 @@ public class PlayerController : PropControllerBase
     /// <summary>현재 마우스 우클릭(정조준) 입력이 유지되고 있는지 여부.</summary>
     private bool _isAimHeld;
 
+    /// <summary>벽 근접 감지로 현재 적용 중인 총기 후퇴 거리 (미터).</summary>
+    private float _currentWallRetract;
+
     // ***************************************************************
     // Events
     // ***************************************************************
@@ -104,6 +139,9 @@ public class PlayerController : PropControllerBase
 
     /// <summary>현재 1인칭 정조준(ADS) 모드가 활성화되어 있는지 여부.</summary>
     public bool IsAdsActive => _fpsAdsController != null && _fpsAdsController.IsAdsActive;
+
+    /// <summary>벽 근접 감지로 현재 적용 중인 총기 후퇴 거리 (미터).</summary>
+    public float CurrentWallRetractDistance => _currentWallRetract;
 
     // ***************************************************************
     // MonoBehaviour
@@ -134,6 +172,131 @@ public class PlayerController : PropControllerBase
         }
 
         base.LateUpdate();
+
+        if (!IsSpawned || IsDead || IsRagdollIdle || aimPitchTarget == null)
+        {
+            _currentWallRetract = 0f;
+            return;
+        }
+
+        WeaponDataSO equippedWeapon = CurrentEquippedWeaponData;
+        Transform muzzlePoint = _playerAnimComponent != null ? _playerAnimComponent.CurrentMuzzlePoint : null;
+        float targetRetract = 0f;
+        Vector3 retractAxis = aimPitchTarget.forward;
+
+        if (enableWallRetract
+            && equippedWeapon != null
+            && equippedWeapon.Category != EWeaponCategory.Melee
+            && muzzlePoint != null)
+        {
+            Vector3 restPivotPos = aimPitchTarget.position;
+            Vector3 restMuzzlePos = muzzlePoint.position;
+            float radius = Mathf.Max(0.01f, wallRetractCheckRadius);
+            float clearance = Mathf.Max(0f, wallRetractClearance);
+            float maxRetract = Mathf.Max(0f, wallRetractMaxDistance);
+
+            Vector3 castOrigin;
+            Vector3 castDir;
+            float barrelLength;
+
+            Transform adsAnchor = _playerAnimComponent.CurrentAdsCameraAnchor;
+            if (IsOwner
+                && IsAdsActive
+                && _fpsAdsController != null
+                && _fpsAdsController.FpsAdsCamera != null
+                && adsAnchor != null)
+            {
+                castOrigin = GetCameraTargetPosition();
+                castDir = _fpsAdsController.FpsAdsCamera.State.GetFinalOrientation() * Vector3.forward;
+                barrelLength = Vector3.Distance(adsAnchor.position, restMuzzlePos);
+                retractAxis = castDir;
+            }
+            else
+            {
+                Vector3 localMuzzle = aimPitchTarget.InverseTransformPoint(restMuzzlePos);
+                float forwardLength = Mathf.Max(0f, localMuzzle.z);
+                Vector3 alignedStart = aimPitchTarget.TransformPoint(new Vector3(localMuzzle.x, localMuzzle.y, 0f));
+                Vector3 lateralDelta = alignedStart - restPivotPos;
+                float lateralDist = lateralDelta.magnitude;
+
+                bool lateralBlocked = false;
+                if (lateralDist > 0.001f)
+                {
+                    int lateralHits = Physics.RaycastNonAlloc(
+                        restPivotPos,
+                        lateralDelta / lateralDist,
+                        _aimHits,
+                        lateralDist,
+                        wallRetractLayerMask,
+                        QueryTriggerInteraction.Ignore);
+                    lateralBlocked = TryFindClosestWallDistance(lateralHits, out _);
+                }
+
+                if (!lateralBlocked && forwardLength > 0.001f)
+                {
+                    castOrigin = alignedStart;
+                    castDir = aimPitchTarget.forward;
+                    barrelLength = forwardLength;
+                    retractAxis = castDir;
+                }
+                else
+                {
+                    Vector3 pivotToMuzzle = restMuzzlePos - restPivotPos;
+                    barrelLength = pivotToMuzzle.magnitude;
+                    castOrigin = restPivotPos;
+                    castDir = barrelLength > 0.001f ? pivotToMuzzle / barrelLength : aimPitchTarget.forward;
+                    retractAxis = castDir;
+                }
+            }
+
+            if (barrelLength > 0.001f)
+            {
+                float checkDistance = barrelLength + clearance;
+                int sphereHits = Physics.SphereCastNonAlloc(
+                    castOrigin,
+                    radius,
+                    castDir,
+                    _aimHits,
+                    checkDistance,
+                    wallRetractLayerMask,
+                    QueryTriggerInteraction.Ignore);
+
+                bool hitWall = TryFindClosestWallDistance(sphereHits, out float wallDistance);
+                if (!hitWall)
+                {
+                    int rayHits = Physics.RaycastNonAlloc(
+                        castOrigin,
+                        castDir,
+                        _aimHits,
+                        checkDistance,
+                        wallRetractLayerMask,
+                        QueryTriggerInteraction.Ignore);
+                    hitWall = TryFindClosestWallDistance(rayHits, out wallDistance);
+                }
+
+                if (hitWall)
+                {
+                    float clampedMax = Mathf.Min(barrelLength, maxRetract);
+                    targetRetract = Mathf.Clamp(checkDistance - wallDistance, 0f, clampedMax);
+                }
+            }
+        }
+
+        float dt = Time.deltaTime;
+        if (dt > 0f)
+        {
+            float lerpT = 1f - Mathf.Exp(-wallRetractSpeed * dt);
+            _currentWallRetract = Mathf.Lerp(_currentWallRetract, targetRetract, lerpT);
+            if (targetRetract <= 0f && _currentWallRetract < 0.0005f)
+            {
+                _currentWallRetract = 0f;
+            }
+        }
+
+        if (_currentWallRetract > 0f)
+        {
+            aimPitchTarget.position -= retractAxis * _currentWallRetract;
+        }
     }
 
     // ***************************************************************
@@ -395,6 +558,7 @@ public class PlayerController : PropControllerBase
         _moveInput = Vector2.zero;
         _jumpRequested = false;
         _isAimHeld = false;
+        _currentWallRetract = 0f;
         _weaponController?.CancelCombatActions();
         _cameraFeedback?.ResetFeedback();
         if (IsOwner)
@@ -409,6 +573,7 @@ public class PlayerController : PropControllerBase
         _moveInput = Vector2.zero;
         _jumpRequested = false;
         _isAimHeld = false;
+        _currentWallRetract = 0f;
         _weaponController?.CancelCombatActions();
         _cameraFeedback?.ResetFeedback();
 
@@ -729,7 +894,34 @@ public class PlayerController : PropControllerBase
         if (_propAnim != null && _propAnim.IsSwappingWeapon) return false;
         if (_playerAnimComponent != null && _playerAnimComponent.IsReloadAnimationActive) return false;
 
+        if (enableWallRetract)
+        {
+            float retractLimit = IsAdsActive ? adsExitWallRetractThreshold : adsEnterWallRetractThreshold;
+            if (_currentWallRetract > retractLimit) return false;
+        }
+
         return true;
+    }
+
+    /// <summary><see cref="_aimHits"/> 버퍼에서 본인을 제외한 가장 가까운 벽/지형 충돌 거리를 찾는다.</summary>
+    private bool TryFindClosestWallDistance(int hitCount, out float closestDistance)
+    {
+        bool found = false;
+        closestDistance = float.MaxValue;
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            RaycastHit hit = _aimHits[i];
+            if (hit.collider == null || hit.transform == null || hit.transform.IsChildOf(transform)) continue;
+
+            if (hit.distance < closestDistance)
+            {
+                closestDistance = hit.distance;
+                found = true;
+            }
+        }
+
+        return found;
     }
 
     /// <summary>카메라 추적 앵커의 월드 위치와 수직 회전을 갱신한다.</summary>

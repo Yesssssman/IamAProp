@@ -38,7 +38,6 @@ public class PlayerWeaponController : NetworkBehaviour
     // ***************************************************************
 
     private const float FireRateTolerance = 0.03f; // 네트워크 지터를 고려한 서버 발사 쿨다운 허용 오차 (초)
-    private const float MaxOriginOffset = 2.5f; // 서버에서 허용하는 발사 원점 최대 편차 (미터)
     private const float MeleeComboBufferWindow = 0.14f; // 근접 공격 막바지에 선입력을 허용하는 남은 쿨다운 시간 (초)
     private const float MeleeComboGraceWindow = 0.25f; // 근접 쿨다운 종료 후 콤보를 이어갈 수 있는 유예 시간 (초)
     private const int DefaultCombatLayerMask = (1 << 0) | (1 << 3) | (1 << 6) | (1 << 7); // Default, Ground, Player, Hitbox
@@ -63,6 +62,14 @@ public class PlayerWeaponController : NetworkBehaviour
 
     /// <summary>씬 뷰에 구체 캐스트 사격 궤적 기즈모를 표시할지 여부.</summary>
     [SerializeField] private bool drawShotGizmos = true;
+
+    /// <summary>서버가 클라이언트 발사 원점을 허용하는 최대 편차 반경 (미터).</summary>
+    [Header("서버 검증 및 디버그")]
+    [Min(0f)]
+    [SerializeField] private float maxOriginOffset = 2.5f;
+
+    /// <summary>서버에서 계산된 사거리, 거리 레벨(1~4+), 최종 데미지 디버그 로그 출력 여부.</summary>
+    [SerializeField] private bool logDamageFalloffDebug = true;
 
     /// <summary>총기 사격 및 재장전 사운드를 3D 공간에서 재생할 <see cref="AudioSource"/> 컴포넌트.</summary>
     [Header("사운드 설정")]
@@ -163,6 +170,15 @@ public class PlayerWeaponController : NetworkBehaviour
 
     /// <summary>다중 펠릿 사격 시 대상별 대표 적중 콜라이더 이름 버퍼.</summary>
     private readonly List<string> _pelletHitNames = new(8);
+
+    /// <summary>다중 펠릿 사격 시 대상별 거리 감소 적용 누적 데미지 버퍼.</summary>
+    private readonly List<float> _pelletHitDamages = new(8);
+
+    /// <summary>다중 펠릿 사격 시 대상별 적중 펠릿 사거리 합계 버퍼.</summary>
+    private readonly List<float> _pelletHitDistanceSums = new(8);
+
+    /// <summary>다중 펠릿 사격 시 대상별 대표 적용 거리 레벨 버퍼.</summary>
+    private readonly List<int> _pelletHitLevels = new(8);
 
     // ***************************************************************
     // Events
@@ -788,7 +804,11 @@ public class PlayerWeaponController : NetworkBehaviour
         Vector3 fireOrigin = serverMuzzleOrigin;
         Vector3 originDelta = clientOrigin - serverMuzzleOrigin;
         float originDeltaDist = originDelta.magnitude;
-        if (originDeltaDist <= MaxOriginOffset)
+        float allowedOriginOffset = Mathf.Max(0f, maxOriginOffset);
+        bool originCorrected = false;
+        string originRejectReason = null;
+
+        if (originDeltaDist <= allowedOriginOffset)
         {
             bool blockedBetweenOrigins = false;
             if (originDeltaDist > 0.001f)
@@ -807,13 +827,31 @@ public class PlayerWeaponController : NetworkBehaviour
             {
                 fireOrigin = clientOrigin;
             }
+            else
+            {
+                originCorrected = true;
+                originRejectReason = "장애물 차단";
+            }
+        }
+        else
+        {
+            originCorrected = true;
+            originRejectReason = $"허용 반경 초과({originDeltaDist:F2}m > {allowedOriginOffset:F2}m)";
+        }
+
+        if (originCorrected && logDamageFalloffDebug)
+        {
+            Debug.LogWarning($"[PlayerWeaponController] {name}({weaponData.WeaponName}) 발사 원점 서버 보정: {originRejectReason} → 서버 원점 사용");
         }
 
         Vector3 toAimFromMuzzle = aimPoint - fireOrigin;
         Vector3 toAimFromPivot = aimPoint - serverPivotOrigin;
-        Vector3 fallbackForward = toAimFromPivot.sqrMagnitude > 0.0001f
-            ? toAimFromPivot.normalized
-            : transform.forward;
+        Vector3 muzzleForward = !isMelee && _playerAnim != null && _playerAnim.CurrentMuzzlePoint != null
+            ? _playerAnim.CurrentMuzzlePoint.forward
+            : Vector3.zero;
+        Vector3 fallbackForward = muzzleForward.sqrMagnitude > 0.0001f
+            ? muzzleForward.normalized
+            : (toAimFromPivot.sqrMagnitude > 0.0001f ? toAimFromPivot.normalized : transform.forward);
         Vector3 direction = toAimFromMuzzle.sqrMagnitude > 0.0001f && Vector3.Dot(toAimFromMuzzle, fallbackForward) > 0f
             ? toAimFromMuzzle.normalized
             : fallbackForward;
@@ -825,38 +863,8 @@ public class PlayerWeaponController : NetworkBehaviour
         bool hasValidHit = false;
         Collider hitCollider = null;
         Vector3 hitPoint = fireOrigin + direction * weaponData.Range;
-        float hitDistance = 0f;
-        Vector3 traceOrigin = fireOrigin;
 
-        // 1단계: 총기 사격 시 몸체 피벗~총구 구간의 벽 관통 차단 및 총구 뒤 초근접 적 검출
-        if (!isMelee)
-        {
-            Vector3 toMuzzle = fireOrigin - serverPivotOrigin;
-            float toMuzzleDist = toMuzzle.magnitude;
-            if (toMuzzleDist > 0.001f)
-            {
-                int barrelHits = Physics.RaycastNonAlloc(
-                    serverPivotOrigin,
-                    toMuzzle / toMuzzleDist,
-                    _hitBuffer,
-                    toMuzzleDist,
-                    hitLayerMask,
-                    QueryTriggerInteraction.Ignore);
-
-                if (TryFindClosestNonSelfHit(barrelHits, out RaycastHit barrelHit))
-                {
-                    hasValidHit = true;
-                    hitCollider = barrelHit.collider;
-                    hitPoint = barrelHit.point != Vector3.zero
-                        ? barrelHit.point
-                        : GetSafeClosestPoint(barrelHit.collider, serverPivotOrigin);
-                    hitDistance = barrelHit.distance;
-                    traceOrigin = serverPivotOrigin;
-                }
-            }
-        }
-
-        // 1-B단계: 다중 펠릿 무기(샷건)는 5개 고정 탄착군 프리셋을 순환하며 12발 Raycast를 일괄 판정한다.
+        // 1단계: 다중 펠릿 무기(샷건)는 5개 고정 탄착군 프리셋을 순환하며 총구에서 다중 Raycast를 일괄 판정한다.
         if (!isMelee && weaponData.IsMultiPellet)
         {
             int pelletCount = weaponData.PelletsPerShot;
@@ -871,103 +879,94 @@ public class PlayerWeaponController : NetworkBehaviour
             }
 
             bool anyHitDamageable = false;
-            if (hasValidHit && hitCollider != null)
+            float spreadMultiplier = isAds ? weaponData.AdsSpreadMultiplier : 1f;
+            Vector3 refUp = Mathf.Abs(Vector3.Dot(direction, Vector3.up)) < 0.99f ? Vector3.up : Vector3.right;
+            Vector3 basisRight = Vector3.Cross(refUp, direction).normalized;
+            Vector3 basisUp = Vector3.Cross(direction, basisRight).normalized;
+
+            _pelletHitTargets.Clear();
+            _pelletHitCounts.Clear();
+            _pelletHitPoints.Clear();
+            _pelletHitDirections.Clear();
+            _pelletHitNames.Clear();
+            _pelletHitDamages.Clear();
+            _pelletHitDistanceSums.Clear();
+            _pelletHitLevels.Clear();
+
+            for (int p = 0; p < pelletCount; p++)
             {
-                IDamageable barrelDamageable = hitCollider.GetComponentInParent<IDamageable>();
-                if (barrelDamageable != null && !barrelDamageable.IsDead)
+                Vector2 angleDeg = preset.GetPelletAngle(p) * spreadMultiplier;
+                Vector3 pelletDir = ComputePelletDirection(direction, basisRight, basisUp, angleDeg);
+                Vector3 pelletEnd = fireOrigin + pelletDir * weaponData.Range;
+                bool pelletHitTarget = false;
+
+                int hitCount = Physics.RaycastNonAlloc(
+                    fireOrigin,
+                    pelletDir,
+                    _hitBuffer,
+                    weaponData.Range,
+                    hitLayerMask,
+                    QueryTriggerInteraction.Ignore);
+
+                if (TryFindClosestNonSelfHit(hitCount, out RaycastHit pelletHit))
                 {
-                    float totalDamage = weaponData.Damage * pelletCount;
-                    DamageHitInfo hitInfo = new DamageHitInfo
+                    pelletEnd = pelletHit.point != Vector3.zero
+                        ? pelletHit.point
+                        : GetSafeClosestPoint(pelletHit.collider, fireOrigin);
+                    IDamageable damageable = pelletHit.collider.GetComponentInParent<IDamageable>();
+                    if (damageable != null && !damageable.IsDead)
                     {
-                        HitDirection = direction,
-                        HitPoint = hitPoint,
-                        HasHitPoint = true,
-                        IsMelee = false,
-                        AttackerObject = NetworkObject
-                    };
-                    barrelDamageable.TakeDamage(totalDamage, Owner, in hitInfo);
-                    anyHitDamageable = true;
-                    Debug.Log($"[PlayerWeaponController] {name}({weaponData.WeaponName}) 초근접 적중 → {hitCollider.name} ({pelletCount}펠릿, 데미지: {totalDamage:F1})");
-                }
-                RecordShotGizmo(traceOrigin, hitPoint, 0f, anyHitDamageable);
-                Debug.DrawLine(traceOrigin, hitPoint, anyHitDamageable ? Color.red : Color.yellow, debugRayDuration);
-            }
-            else
-            {
-                float spreadMultiplier = isAds ? weaponData.AdsSpreadMultiplier : 1f;
-                Vector3 refUp = Mathf.Abs(Vector3.Dot(direction, Vector3.up)) < 0.99f ? Vector3.up : Vector3.right;
-                Vector3 basisRight = Vector3.Cross(refUp, direction).normalized;
-                Vector3 basisUp = Vector3.Cross(direction, basisRight).normalized;
-
-                _pelletHitTargets.Clear();
-                _pelletHitCounts.Clear();
-                _pelletHitPoints.Clear();
-                _pelletHitDirections.Clear();
-                _pelletHitNames.Clear();
-
-                for (int p = 0; p < pelletCount; p++)
-                {
-                    Vector2 angleDeg = preset.GetPelletAngle(p) * spreadMultiplier;
-                    Vector3 pelletDir = ComputePelletDirection(direction, basisRight, basisUp, angleDeg);
-                    Vector3 pelletEnd = fireOrigin + pelletDir * weaponData.Range;
-                    bool pelletHitTarget = false;
-
-                    int hitCount = Physics.RaycastNonAlloc(
-                        fireOrigin,
-                        pelletDir,
-                        _hitBuffer,
-                        weaponData.Range,
-                        hitLayerMask,
-                        QueryTriggerInteraction.Ignore);
-
-                    if (TryFindClosestNonSelfHit(hitCount, out RaycastHit pelletHit))
-                    {
-                        pelletEnd = pelletHit.point != Vector3.zero
-                            ? pelletHit.point
-                            : GetSafeClosestPoint(pelletHit.collider, fireOrigin);
-                        IDamageable damageable = pelletHit.collider.GetComponentInParent<IDamageable>();
-                        if (damageable != null && !damageable.IsDead)
+                        pelletHitTarget = true;
+                        float pelletDistance = Vector3.Distance(fireOrigin, pelletEnd);
+                        float pelletDamage = weaponData.EvaluateDamage(pelletDistance, out int pelletLevel);
+                        int existingIdx = _pelletHitTargets.IndexOf(damageable);
+                        if (existingIdx >= 0)
                         {
-                            pelletHitTarget = true;
-                            int existingIdx = _pelletHitTargets.IndexOf(damageable);
-                            if (existingIdx >= 0)
-                            {
-                                _pelletHitCounts[existingIdx]++;
-                            }
-                            else
-                            {
-                                _pelletHitTargets.Add(damageable);
-                                _pelletHitCounts.Add(1);
-                                _pelletHitPoints.Add(pelletEnd);
-                                _pelletHitDirections.Add(pelletDir);
-                                _pelletHitNames.Add(pelletHit.collider.name);
-                            }
+                            _pelletHitCounts[existingIdx]++;
+                            _pelletHitDamages[existingIdx] += pelletDamage;
+                            _pelletHitDistanceSums[existingIdx] += pelletDistance;
+                        }
+                        else
+                        {
+                            _pelletHitTargets.Add(damageable);
+                            _pelletHitCounts.Add(1);
+                            _pelletHitPoints.Add(pelletEnd);
+                            _pelletHitDirections.Add(pelletDir);
+                            _pelletHitNames.Add(pelletHit.collider.name);
+                            _pelletHitDamages.Add(pelletDamage);
+                            _pelletHitDistanceSums.Add(pelletDistance);
+                            _pelletHitLevels.Add(pelletLevel);
                         }
                     }
-
-                    RecordShotGizmo(fireOrigin, pelletEnd, 0f, pelletHitTarget);
-                    Debug.DrawLine(fireOrigin, pelletEnd, pelletHitTarget ? Color.red : Color.yellow, debugRayDuration);
                 }
 
-                for (int i = 0; i < _pelletHitTargets.Count; i++)
+                RecordShotGizmo(fireOrigin, pelletEnd, 0f, pelletHitTarget);
+                Debug.DrawLine(fireOrigin, pelletEnd, pelletHitTarget ? Color.red : Color.yellow, debugRayDuration);
+            }
+
+            for (int i = 0; i < _pelletHitTargets.Count; i++)
+            {
+                int pelletsHit = _pelletHitCounts[i];
+                float totalDamage = _pelletHitDamages[i];
+                DamageHitInfo hitInfo = new DamageHitInfo
                 {
-                    int pelletsHit = _pelletHitCounts[i];
-                    float totalDamage = weaponData.Damage * pelletsHit;
-                    DamageHitInfo hitInfo = new DamageHitInfo
-                    {
-                        HitDirection = _pelletHitDirections[i],
-                        HitPoint = _pelletHitPoints[i],
-                        HasHitPoint = true,
-                        IsMelee = false,
-                        AttackerObject = NetworkObject
-                    };
-                    _pelletHitTargets[i].TakeDamage(totalDamage, Owner, in hitInfo);
-                    anyHitDamageable = true;
-                    Debug.Log($"[PlayerWeaponController] {name}({weaponData.WeaponName}) 프리셋#{presetIndex} 적중 → {_pelletHitNames[i]} ({pelletsHit}/{pelletCount}펠릿, 데미지: {totalDamage:F1})");
+                    HitDirection = _pelletHitDirections[i],
+                    HitPoint = _pelletHitPoints[i],
+                    HasHitPoint = true,
+                    IsMelee = false,
+                    AttackerObject = NetworkObject
+                };
+                _pelletHitTargets[i].TakeDamage(totalDamage, Owner, in hitInfo);
+                anyHitDamageable = true;
+                if (logDamageFalloffDebug)
+                {
+                    float avgDistance = _pelletHitDistanceSums[i] / pelletsHit;
+                    string originTag = originCorrected ? " [원점 보정됨]" : string.Empty;
+                    Debug.Log($"[PlayerWeaponController] [DamageFalloff] {name}({weaponData.WeaponName}) 프리셋#{presetIndex} 적중 → {_pelletHitNames[i]} | 평균 사거리: {avgDistance:F2}m | 레벨: Lv.{FormatFalloffLevel(_pelletHitLevels[i])} | 펠릿: {pelletsHit}/{pelletCount} | 데미지: {weaponData.Damage * pelletsHit:F1} → {totalDamage:F1}{originTag}");
                 }
             }
 
-            BroadcastFireObserversRpc(traceOrigin, fireOrigin + direction * weaponData.Range, 0f, anyHitDamageable, weaponId, attackVariant, presetIndex, isAds);
+            BroadcastFireObserversRpc(fireOrigin, fireOrigin + direction * weaponData.Range, 0f, anyHitDamageable, weaponId, attackVariant, presetIndex, isAds);
             if (anyHitDamageable)
             {
                 NotifyHitConfirmedTargetRpc(Owner);
@@ -975,8 +974,8 @@ public class PlayerWeaponController : NetworkBehaviour
             return;
         }
 
-        // 2단계: 시작 구체에 이미 겹쳐 있는 초근접 적 검출 (Physics.SphereCast의 초기 겹침 무시 보완)
-        if (!hasValidHit && castRadius > 0f)
+        // 2단계: 시작 구체에 이미 겹쳐 있는 초근접 대상 및 전방 장애물 검출 (Physics.SphereCast의 초기 겹침 무시 보완)
+        if (castRadius > 0f)
         {
             int overlapCount = Physics.OverlapSphereNonAlloc(
                 fireOrigin,
@@ -992,11 +991,13 @@ public class PlayerWeaponController : NetworkBehaviour
                 if (col == null || col.transform.IsChildOf(transform)) continue;
 
                 IDamageable candidate = col.GetComponentInParent<IDamageable>();
-                if (candidate == null || candidate.IsDead) continue;
+                if (candidate != null && candidate.IsDead) continue;
+                if (isMelee && candidate == null) continue;
 
                 Vector3 closestPt = GetSafeClosestPoint(col, fireOrigin);
                 Vector3 toCandidate = closestPt - fireOrigin;
                 float distSqr = toCandidate.sqrMagnitude;
+                if (candidate == null && distSqr > 0.0001f && Vector3.Dot(toCandidate, direction) <= 0f) continue;
                 if (distSqr >= closestOverlapDistSqr) continue;
 
                 if (distSqr > 0.0001f)
@@ -1011,7 +1012,8 @@ public class PlayerWeaponController : NetworkBehaviour
                         QueryTriggerInteraction.Ignore);
 
                     if (TryFindClosestNonSelfHit(losHits, out RaycastHit losHit)
-                        && losHit.collider.GetComponentInParent<IDamageable>() != candidate)
+                        && losHit.collider != col
+                        && (candidate == null || losHit.collider.GetComponentInParent<IDamageable>() != candidate))
                     {
                         continue;
                     }
@@ -1020,12 +1022,11 @@ public class PlayerWeaponController : NetworkBehaviour
                 closestOverlapDistSqr = distSqr;
                 hitCollider = col;
                 hitPoint = closestPt;
-                hitDistance = Mathf.Sqrt(distSqr);
                 hasValidHit = true;
             }
         }
 
-        // 3단계: 총구에서 크로스헤어 조준점 방향으로 구체 캐스트 실행
+        // 3단계: 총구에서 조준 방향으로 구체 캐스트 실행
         if (!hasValidHit)
         {
             int hitCount = castRadius > 0f
@@ -1052,16 +1053,17 @@ public class PlayerWeaponController : NetworkBehaviour
                 hitPoint = closestHit.point != Vector3.zero
                     ? closestHit.point
                     : GetSafeClosestPoint(closestHit.collider, fireOrigin);
-                hitDistance = closestHit.distance;
             }
         }
 
         bool hitDamageable = false;
         if (hasValidHit && hitCollider != null)
         {
+            float hitDistance = Vector3.Distance(fireOrigin, hitPoint);
             IDamageable damageable = hitCollider.GetComponentInParent<IDamageable>();
             if (damageable != null && !damageable.IsDead)
             {
+                float finalDamage = weaponData.EvaluateDamage(hitDistance, out int falloffLevel);
                 DamageHitInfo hitInfo = new DamageHitInfo
                 {
                     HitDirection = direction,
@@ -1070,19 +1072,23 @@ public class PlayerWeaponController : NetworkBehaviour
                     IsMelee = isMelee,
                     AttackerObject = NetworkObject
                 };
-                damageable.TakeDamage(weaponData.Damage, Owner, in hitInfo);
+                damageable.TakeDamage(finalDamage, Owner, in hitInfo);
                 hitDamageable = true;
-                Debug.Log($"[PlayerWeaponController] {name}({weaponData.WeaponName}) 적중 → {hitCollider.name} (데미지: {weaponData.Damage:F1}, 거리: {hitDistance:F2}m)");
+                if (logDamageFalloffDebug)
+                {
+                    string originTag = originCorrected ? " [원점 보정됨]" : string.Empty;
+                    Debug.Log($"[PlayerWeaponController] [DamageFalloff] {name}({weaponData.WeaponName}) 적중 → {hitCollider.name} | 사거리: {hitDistance:F2}m | 레벨: Lv.{FormatFalloffLevel(falloffLevel)} | 데미지: {weaponData.Damage:F1} → {finalDamage:F1}{originTag}");
+                }
             }
-            else
+            else if (logDamageFalloffDebug)
             {
                 Debug.Log($"[PlayerWeaponController] {name}({weaponData.WeaponName}) 충돌 → {hitCollider.name} (거리: {hitDistance:F2}m)");
             }
         }
 
-        RecordShotGizmo(traceOrigin, hitPoint, castRadius, hitDamageable);
-        Debug.DrawLine(traceOrigin, hitPoint, hitDamageable ? Color.red : Color.yellow, debugRayDuration);
-        BroadcastFireObserversRpc(traceOrigin, hitPoint, castRadius, hitDamageable, weaponId, attackVariant, 0, isAds);
+        RecordShotGizmo(fireOrigin, hitPoint, castRadius, hitDamageable);
+        Debug.DrawLine(fireOrigin, hitPoint, hitDamageable ? Color.red : Color.yellow, debugRayDuration);
+        BroadcastFireObserversRpc(fireOrigin, hitPoint, castRadius, hitDamageable, weaponId, attackVariant, 0, isAds);
 
         if (hitDamageable)
         {
@@ -1320,6 +1326,12 @@ public class PlayerWeaponController : NetworkBehaviour
     private static bool IsFiniteVector(Vector3 v)
     {
         return float.IsFinite(v.x) && float.IsFinite(v.y) && float.IsFinite(v.z);
+    }
+
+    /// <summary>거리 감쇠 레벨 번호(1~4)를 디버그 로그 표시 문자열(<c>1</c>~<c>4+</c>)로 변환한다.</summary>
+    private static string FormatFalloffLevel(int level)
+    {
+        return level >= 4 ? "4+" : level.ToString();
     }
 
     /// <summary>최근 사격 구체 캐스트 궤적을 씬 뷰 기즈모 링 버퍼에 기록한다.</summary>

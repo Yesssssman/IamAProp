@@ -50,6 +50,16 @@ MonoBehaviour:
   isAutomatic: 1
   range: 2.2
   meleeCastRadius: 0.35
+  shotSphereRadiusOverride: 0
+  damageFalloff:
+    enableDamageFalloff: 0
+    useLinearFalloff: 0
+    level2Distance: 0
+    level3Distance: 0
+    level4Distance: 0
+    level2To3Damage: 50
+    level3To4Damage: 50
+    minDamage: 50
   usesAmmo: 0
   maxAmmo: 0
   maxReserveAmmo: 0
