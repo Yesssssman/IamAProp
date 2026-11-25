@@ -400,6 +400,29 @@ public class PlayerWeaponInventory : NetworkBehaviour
         return true;
     }
 
+    /// <summary>서버에서 지정 슬롯 무기의 탄약 1발을 장전하고 탄창 및 예비 탄약을 갱신한다.</summary>
+    [Server]
+    public bool TryInsertSingleShell(EWeaponSlotType slot, string expectedWeaponId, int maxAmmo, out WeaponSlotState updatedState)
+    {
+        updatedState = WeaponSlotState.Empty;
+        int index = (int)slot;
+        if (index < 0 || index >= _slots.Count) return false;
+
+        WeaponSlotState current = _slots[index];
+        if (current.IsEmpty || !string.Equals(current.WeaponId, expectedWeaponId, StringComparison.Ordinal)) return false;
+        if (current.CurrentAmmo >= maxAmmo || current.ReserveAmmo <= 0)
+        {
+            updatedState = current;
+            return false;
+        }
+
+        current.CurrentAmmo++;
+        current.ReserveAmmo--;
+        _slots[index] = current;
+        updatedState = current;
+        return true;
+    }
+
     // ***************************************************************
     // Network RPCs
     // ***************************************************************

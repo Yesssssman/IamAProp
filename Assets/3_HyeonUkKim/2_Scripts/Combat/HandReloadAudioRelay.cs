@@ -47,4 +47,15 @@ public class HandReloadAudioRelay : MonoBehaviour
 
         weaponController?.PlayDrawSound();
     }
+
+    /// <summary>샷건 루프 재장전 애니메이션 이벤트에서 호출되어 1발 장전 처리를 요청한다.</summary>
+    public void OnReloadShellInserted()
+    {
+        if (weaponController == null)
+        {
+            weaponController = GetComponentInParent<PlayerWeaponController>();
+        }
+
+        weaponController?.HandleReloadShellInserted();
+    }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using FishNet.Connection;
 using FishNet.Object;
 using FishNet.Transporting;
@@ -41,7 +42,8 @@ public class PlayerWeaponController : NetworkBehaviour
     private const float MeleeComboBufferWindow = 0.14f; // 근접 공격 막바지에 선입력을 허용하는 남은 쿨다운 시간 (초)
     private const float MeleeComboGraceWindow = 0.25f; // 근접 쿨다운 종료 후 콤보를 이어갈 수 있는 유예 시간 (초)
     private const int DefaultCombatLayerMask = (1 << 0) | (1 << 3) | (1 << 6) | (1 << 7); // Default, Ground, Player, Hitbox
-    private const int MaxShotGizmoTraces = 16; // 동시에 표시할 최근 사격 궤적 기즈모 최대 개수
+    private const int MaxShotGizmoTraces = 48; // 동시에 표시할 최근 사격 궤적 기즈모 최대 개수 (12발 산탄 4회분)
+    private const float ShellInsertTimeTolerance = 0.08f; // 1발 장전 서버 간격 검증 허용 오차 (초)
 
     // ***************************************************************
     // Fields
@@ -120,6 +122,12 @@ public class PlayerWeaponController : NetworkBehaviour
     /// <summary>소유자 측 재장전 중인 무기 식별자.</summary>
     private string _ownerReloadWeaponId;
 
+    /// <summary>소유자 측 1발씩 반복 장전(샷건) 진행 여부.</summary>
+    private bool _isOwnerShellReloading;
+
+    /// <summary>샷건 장전 중 사격 입력으로 루프 종료 후 발사가 예약되었는지 여부.</summary>
+    private bool _isPendingShellReloadFire;
+
     /// <summary>서버 측 재장전 진행 여부.</summary>
     private bool _isServerReloading;
 
@@ -131,6 +139,30 @@ public class PlayerWeaponController : NetworkBehaviour
 
     /// <summary>서버 측 재장전 중인 무기 식별자.</summary>
     private string _serverReloadWeaponId;
+
+    /// <summary>서버 측 1발씩 반복 장전(샷건) 진행 여부.</summary>
+    private bool _isServerShellReloading;
+
+    /// <summary>서버 측 다음 1발 장전 허용 최소 시각 (<see cref="Time.time"/> 기준).</summary>
+    private float _serverNextShellInsertTime;
+
+    /// <summary>서버 권위 고정 탄착군 프리셋 순환 인덱스.</summary>
+    private int _serverSpreadPresetIndex;
+
+    /// <summary>다중 펠릿 사격 시 대상별 적중 합산용 재사용 버퍼.</summary>
+    private readonly List<IDamageable> _pelletHitTargets = new(8);
+
+    /// <summary>다중 펠릿 사격 시 대상별 적중 펠릿 수 버퍼.</summary>
+    private readonly List<int> _pelletHitCounts = new(8);
+
+    /// <summary>다중 펠릿 사격 시 대상별 대표 적중 좌표 버퍼.</summary>
+    private readonly List<Vector3> _pelletHitPoints = new(8);
+
+    /// <summary>다중 펠릿 사격 시 대상별 대표 적중 방향 버퍼.</summary>
+    private readonly List<Vector3> _pelletHitDirections = new(8);
+
+    /// <summary>다중 펠릿 사격 시 대상별 대표 적중 콜라이더 이름 버퍼.</summary>
+    private readonly List<string> _pelletHitNames = new(8);
 
     // ***************************************************************
     // Events
@@ -215,8 +247,9 @@ public class PlayerWeaponController : NetworkBehaviour
                 || !string.Equals(activeWeaponId, _serverReloadWeaponId, StringComparison.Ordinal))
             {
                 _isServerReloading = false;
+                _isServerShellReloading = false;
             }
-            else if (Time.time >= _serverReloadEndTime)
+            else if (!_isServerShellReloading && Time.time >= _serverReloadEndTime)
             {
                 _isServerReloading = false;
                 WeaponDataSO reloadData = _weaponInventory.GetWeaponDataById(_serverReloadWeaponId);
@@ -238,8 +271,10 @@ public class PlayerWeaponController : NetworkBehaviour
                 || !string.Equals(activeWeaponId, _ownerReloadWeaponId, StringComparison.Ordinal))
             {
                 _isOwnerReloading = false;
+                _isOwnerShellReloading = false;
+                _isPendingShellReloadFire = false;
             }
-            else if (Time.time >= _ownerReloadEndTime)
+            else if (!_isOwnerShellReloading && Time.time >= _ownerReloadEndTime)
             {
                 _isOwnerReloading = false;
                 if (!IsServerInitialized)
@@ -265,6 +300,36 @@ public class PlayerWeaponController : NetworkBehaviour
         {
             _meleeComboStep = 0;
             _meleeComboExpireTime = 0f;
+        }
+
+        // 샷건 1발 장전 중 사격 입력이 들어오면 루프 종료(Has Exit Time) 후 예약 발사한다.
+        if (_isOwnerShellReloading)
+        {
+            int reloadSlotIdx = (int)activeSlot;
+            bool hasShellLoaded = reloadSlotIdx >= 0 && reloadSlotIdx < _ownerStates.Length && _ownerStates[reloadSlotIdx].currentAmmo > 0;
+
+            if ((_isFireHeld || _fireRequested) && !_isPendingShellReloadFire)
+            {
+                _isPendingShellReloadFire = true;
+                _fireRequested = false;
+                if (hasShellLoaded)
+                {
+                    _playerAnim.EndShellReload(interruptForFire: true);
+                    RequestCancelShellReloadServerRpc(activeSlot, activeWeaponId);
+                }
+            }
+
+            if (_isPendingShellReloadFire && hasShellLoaded && _playerAnim.CanFireAfterShellReloadCancel)
+            {
+                _isOwnerReloading = false;
+                _isOwnerShellReloading = false;
+                _isPendingShellReloadFire = false;
+                _fireRequested = true;
+            }
+            else
+            {
+                return;
+            }
         }
 
         if (!_isFireHeld && !_fireRequested) return;
@@ -356,7 +421,8 @@ public class PlayerWeaponController : NetworkBehaviour
             _playerController?.ApplyWeaponCameraFeedback(weaponData);
         }
 
-        RequestFireServerRpc(clientOrigin, aimPoint, activeSlot, activeWeaponId, attackVariant);
+        bool isAds = _playerController != null && _playerController.IsAdsActive;
+        RequestFireServerRpc(clientOrigin, aimPoint, activeSlot, activeWeaponId, attackVariant, isAds);
     }
 
     private void OnDrawGizmos()
@@ -442,6 +508,7 @@ public class PlayerWeaponController : NetworkBehaviour
         }
 
         _isServerReloading = false;
+        _isServerShellReloading = false;
         Array.Clear(_shotGizmoTraces, 0, _shotGizmoTraces.Length);
         _shotGizmoWriteIndex = 0;
     }
@@ -471,6 +538,8 @@ public class PlayerWeaponController : NetworkBehaviour
         _isFireHeld = false;
         _fireRequested = false;
         _isOwnerReloading = false;
+        _isOwnerShellReloading = false;
+        _isPendingShellReloadFire = false;
         _meleeComboStep = 0;
         _meleeComboExpireTime = 0f;
     }
@@ -504,7 +573,10 @@ public class PlayerWeaponController : NetworkBehaviour
         _isFireHeld = false;
         _fireRequested = false;
         _isOwnerReloading = false;
+        _isOwnerShellReloading = false;
+        _isPendingShellReloadFire = false;
         _isServerReloading = false;
+        _isServerShellReloading = false;
         _meleeComboStep = 0;
         _meleeComboExpireTime = 0f;
     }
@@ -527,6 +599,8 @@ public class PlayerWeaponController : NetworkBehaviour
         if (_ownerStates[slotIndex].reserveAmmo <= 0) return;
 
         _isOwnerReloading = true;
+        _isOwnerShellReloading = weaponData.IsShellReload;
+        _isPendingShellReloadFire = false;
         _ownerReloadSlot = activeSlot;
         _ownerReloadWeaponId = activeWeaponId;
         _ownerReloadEndTime = Time.time + weaponData.ReloadTime;
@@ -534,6 +608,62 @@ public class PlayerWeaponController : NetworkBehaviour
 
         _playerAnim.RequestReload();
         RequestReloadServerRpc(activeSlot, activeWeaponId);
+    }
+
+    /// <summary>샷건 <c>Reload_Loop</c> 애니메이션 이벤트에서 호출되어 1발 장전과 루프 종료 여부를 처리한다.</summary>
+    public void HandleReloadShellInserted()
+    {
+        if (!IsSpawned || _playerAnim == null || _weaponInventory == null) return;
+        if (_playerHealth != null && _playerHealth.IsDead) return;
+
+        WeaponDataSO weaponData = _weaponInventory.EquippedWeaponData;
+        if (weaponData == null || !weaponData.UsesAmmo || !weaponData.IsShellReload) return;
+
+        _playerAnim.HideLeftHandItem();
+        PlayReloadSound(2);
+
+        if (!IsOwner || !_isOwnerShellReloading) return;
+
+        EWeaponSlotType activeSlot = _weaponInventory.ActiveSlot;
+        string activeWeaponId = _weaponInventory.EquippedWeaponId;
+        if (activeSlot != _ownerReloadSlot
+            || !string.Equals(activeWeaponId, _ownerReloadWeaponId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        int slotIndex = (int)activeSlot;
+        if (slotIndex < 0 || slotIndex >= _ownerStates.Length) return;
+        if (_ownerStates[slotIndex].currentAmmo >= weaponData.MaxAmmo || _ownerStates[slotIndex].reserveAmmo <= 0)
+        {
+            _isOwnerReloading = false;
+            _isOwnerShellReloading = false;
+            _playerAnim.EndShellReload(interruptForFire: _isPendingShellReloadFire);
+            return;
+        }
+
+        int projectedAmmo = _ownerStates[slotIndex].currentAmmo + 1;
+        int projectedReserve = _ownerStates[slotIndex].reserveAmmo - 1;
+        if (!IsServerInitialized)
+        {
+            _ownerStates[slotIndex].currentAmmo = projectedAmmo;
+            _ownerStates[slotIndex].reserveAmmo = projectedReserve;
+            OnAmmoChanged?.Invoke((EWeaponType)activeSlot, projectedAmmo, projectedReserve);
+        }
+
+        RequestInsertShellServerRpc(activeSlot, activeWeaponId);
+
+        if (_isPendingShellReloadFire)
+        {
+            _playerAnim.EndShellReload(interruptForFire: true);
+            RequestCancelShellReloadServerRpc(activeSlot, activeWeaponId);
+        }
+        else if (projectedAmmo >= weaponData.MaxAmmo || projectedReserve <= 0)
+        {
+            _isOwnerReloading = false;
+            _isOwnerShellReloading = false;
+            _playerAnim.EndShellReload(interruptForFire: false);
+        }
     }
 
     /// <summary><paramref name="weaponType"/> 슬롯에 보유 중인 <see cref="WeaponDataSO"/>를 반환한다.</summary>
@@ -565,7 +695,7 @@ public class PlayerWeaponController : NetworkBehaviour
         }
     }
 
-    /// <summary>현재 장착 무기의 재장전 단계(<paramref name="step"/>: 1~3) 사운드를 재생한다.</summary>
+    /// <summary>현재 장착 무기의 재장전 단계(<paramref name="step"/>: 1부터 시작) 사운드를 재생한다.</summary>
     public void PlayReloadSound(int step)
     {
         if (!IsSpawned || weaponAudioSource == null || _playerAnim == null || _weaponInventory == null) return;
@@ -583,7 +713,7 @@ public class PlayerWeaponController : NetworkBehaviour
         weaponAudioSource.PlayOneShot(reloadClip, weaponData.ReloadVolume);
     }
 
-    /// <summary>현재 장착 무기의 드로우 노리쇠/슬라이드 사운드(재장전 3단계 클립)를 재생한다.</summary>
+    /// <summary>현재 장착 무기의 드로우 노리쇠/슬라이드 사운드(재장전 마지막 단계 클립)를 재생한다.</summary>
     public void PlayDrawSound()
     {
         if (!IsSpawned || weaponAudioSource == null || _playerAnim == null || _weaponInventory == null) return;
@@ -595,7 +725,7 @@ public class PlayerWeaponController : NetworkBehaviour
         if (weaponData == null || !weaponData.UsesAmmo) return;
         if (!_playerAnim.IsDrawAnimationActive) return;
 
-        AudioClip drawClip = weaponData.GetReloadClip(3);
+        AudioClip drawClip = weaponData.DrawSoundClip;
         if (drawClip == null) return;
 
         weaponAudioSource.PlayOneShot(drawClip, weaponData.ReloadVolume);
@@ -605,7 +735,7 @@ public class PlayerWeaponController : NetworkBehaviour
     // Network RPCs
     // ***************************************************************
 
-    /// <summary>서버에서 발사 조건과 총구 원점을 검증하고 구체 캐스트 충돌 판정 및 데미지를 적용한다.</summary>
+    /// <summary>서버에서 발사 조건과 총구 원점을 검증하고 히트스캔 충돌 판정 및 데미지를 적용한다.</summary>
     [ServerRpc]
     private void RequestFireServerRpc(
         Vector3 clientOrigin,
@@ -613,6 +743,7 @@ public class PlayerWeaponController : NetworkBehaviour
         EWeaponSlotType slot,
         string weaponId,
         byte attackVariant,
+        bool isAds,
         Channel channel = Channel.Reliable)
     {
         if (_playerHealth != null && _playerHealth.IsDead) return;
@@ -719,6 +850,125 @@ public class PlayerWeaponController : NetworkBehaviour
                     traceOrigin = serverPivotOrigin;
                 }
             }
+        }
+
+        // 1-B단계: 다중 펠릿 무기(샷건)는 5개 고정 탄착군 프리셋을 순환하며 12발 Raycast를 일괄 판정한다.
+        if (!isMelee && weaponData.IsMultiPellet)
+        {
+            int pelletCount = weaponData.PelletsPerShot;
+            int presetCount = weaponData.SpreadPresets != null ? weaponData.SpreadPresets.Length : 0;
+            byte presetIndex = 0;
+            WeaponSpreadPreset preset = default;
+            if (presetCount > 0)
+            {
+                presetIndex = (byte)(_serverSpreadPresetIndex % presetCount);
+                _serverSpreadPresetIndex = (_serverSpreadPresetIndex + 1) % presetCount;
+                preset = weaponData.GetSpreadPreset(presetIndex);
+            }
+
+            bool anyHitDamageable = false;
+            if (hasValidHit && hitCollider != null)
+            {
+                IDamageable barrelDamageable = hitCollider.GetComponentInParent<IDamageable>();
+                if (barrelDamageable != null && !barrelDamageable.IsDead)
+                {
+                    float totalDamage = weaponData.Damage * pelletCount;
+                    DamageHitInfo hitInfo = new DamageHitInfo
+                    {
+                        HitDirection = direction,
+                        HitPoint = hitPoint,
+                        HasHitPoint = true,
+                        IsMelee = false,
+                        AttackerObject = NetworkObject
+                    };
+                    barrelDamageable.TakeDamage(totalDamage, Owner, in hitInfo);
+                    anyHitDamageable = true;
+                    Debug.Log($"[PlayerWeaponController] {name}({weaponData.WeaponName}) 초근접 적중 → {hitCollider.name} ({pelletCount}펠릿, 데미지: {totalDamage:F1})");
+                }
+                RecordShotGizmo(traceOrigin, hitPoint, 0f, anyHitDamageable);
+                Debug.DrawLine(traceOrigin, hitPoint, anyHitDamageable ? Color.red : Color.yellow, debugRayDuration);
+            }
+            else
+            {
+                float spreadMultiplier = isAds ? weaponData.AdsSpreadMultiplier : 1f;
+                Vector3 refUp = Mathf.Abs(Vector3.Dot(direction, Vector3.up)) < 0.99f ? Vector3.up : Vector3.right;
+                Vector3 basisRight = Vector3.Cross(refUp, direction).normalized;
+                Vector3 basisUp = Vector3.Cross(direction, basisRight).normalized;
+
+                _pelletHitTargets.Clear();
+                _pelletHitCounts.Clear();
+                _pelletHitPoints.Clear();
+                _pelletHitDirections.Clear();
+                _pelletHitNames.Clear();
+
+                for (int p = 0; p < pelletCount; p++)
+                {
+                    Vector2 angleDeg = preset.GetPelletAngle(p) * spreadMultiplier;
+                    Vector3 pelletDir = ComputePelletDirection(direction, basisRight, basisUp, angleDeg);
+                    Vector3 pelletEnd = fireOrigin + pelletDir * weaponData.Range;
+                    bool pelletHitTarget = false;
+
+                    int hitCount = Physics.RaycastNonAlloc(
+                        fireOrigin,
+                        pelletDir,
+                        _hitBuffer,
+                        weaponData.Range,
+                        hitLayerMask,
+                        QueryTriggerInteraction.Ignore);
+
+                    if (TryFindClosestNonSelfHit(hitCount, out RaycastHit pelletHit))
+                    {
+                        pelletEnd = pelletHit.point != Vector3.zero
+                            ? pelletHit.point
+                            : GetSafeClosestPoint(pelletHit.collider, fireOrigin);
+                        IDamageable damageable = pelletHit.collider.GetComponentInParent<IDamageable>();
+                        if (damageable != null && !damageable.IsDead)
+                        {
+                            pelletHitTarget = true;
+                            int existingIdx = _pelletHitTargets.IndexOf(damageable);
+                            if (existingIdx >= 0)
+                            {
+                                _pelletHitCounts[existingIdx]++;
+                            }
+                            else
+                            {
+                                _pelletHitTargets.Add(damageable);
+                                _pelletHitCounts.Add(1);
+                                _pelletHitPoints.Add(pelletEnd);
+                                _pelletHitDirections.Add(pelletDir);
+                                _pelletHitNames.Add(pelletHit.collider.name);
+                            }
+                        }
+                    }
+
+                    RecordShotGizmo(fireOrigin, pelletEnd, 0f, pelletHitTarget);
+                    Debug.DrawLine(fireOrigin, pelletEnd, pelletHitTarget ? Color.red : Color.yellow, debugRayDuration);
+                }
+
+                for (int i = 0; i < _pelletHitTargets.Count; i++)
+                {
+                    int pelletsHit = _pelletHitCounts[i];
+                    float totalDamage = weaponData.Damage * pelletsHit;
+                    DamageHitInfo hitInfo = new DamageHitInfo
+                    {
+                        HitDirection = _pelletHitDirections[i],
+                        HitPoint = _pelletHitPoints[i],
+                        HasHitPoint = true,
+                        IsMelee = false,
+                        AttackerObject = NetworkObject
+                    };
+                    _pelletHitTargets[i].TakeDamage(totalDamage, Owner, in hitInfo);
+                    anyHitDamageable = true;
+                    Debug.Log($"[PlayerWeaponController] {name}({weaponData.WeaponName}) 프리셋#{presetIndex} 적중 → {_pelletHitNames[i]} ({pelletsHit}/{pelletCount}펠릿, 데미지: {totalDamage:F1})");
+                }
+            }
+
+            BroadcastFireObserversRpc(traceOrigin, fireOrigin + direction * weaponData.Range, 0f, anyHitDamageable, weaponId, attackVariant, presetIndex, isAds);
+            if (anyHitDamageable)
+            {
+                NotifyHitConfirmedTargetRpc(Owner);
+            }
+            return;
         }
 
         // 2단계: 시작 구체에 이미 겹쳐 있는 초근접 적 검출 (Physics.SphereCast의 초기 겹침 무시 보완)
@@ -828,7 +1078,7 @@ public class PlayerWeaponController : NetworkBehaviour
 
         RecordShotGizmo(traceOrigin, hitPoint, castRadius, hitDamageable);
         Debug.DrawLine(traceOrigin, hitPoint, hitDamageable ? Color.red : Color.yellow, debugRayDuration);
-        BroadcastFireObserversRpc(traceOrigin, hitPoint, castRadius, hitDamageable, weaponId, attackVariant);
+        BroadcastFireObserversRpc(traceOrigin, hitPoint, castRadius, hitDamageable, weaponId, attackVariant, 0, isAds);
 
         if (hitDamageable)
         {
@@ -836,7 +1086,7 @@ public class PlayerWeaponController : NetworkBehaviour
         }
     }
 
-    /// <summary>서버에서 재장전 타이머를 시작한다.</summary>
+    /// <summary>서버에서 재장전 타이머 또는 샷건 1발 장전 상태를 시작한다.</summary>
     [ServerRpc]
     private void RequestReloadServerRpc(EWeaponSlotType slot, string weaponId, Channel channel = Channel.Reliable)
     {
@@ -852,14 +1102,68 @@ public class PlayerWeaponController : NetworkBehaviour
         if (slotState.IsEmpty || slotState.CurrentAmmo >= weaponData.MaxAmmo || slotState.ReserveAmmo <= 0) return;
 
         _isServerReloading = true;
+        _isServerShellReloading = weaponData.IsShellReload;
         _serverReloadSlot = slot;
         _serverReloadWeaponId = weaponId;
         _serverReloadEndTime = Time.time + weaponData.ReloadTime;
+        _serverNextShellInsertTime = Time.time + Mathf.Max(0f, weaponData.ShellReloadStartDuration - ShellInsertTimeTolerance);
+    }
+
+    /// <summary>서버에서 샷건 <c>Reload_Loop</c> 1회당 탄약 1발을 검증 후 장전한다.</summary>
+    [ServerRpc]
+    private void RequestInsertShellServerRpc(EWeaponSlotType slot, string weaponId, Channel channel = Channel.Reliable)
+    {
+        if (_playerHealth != null && _playerHealth.IsDead) return;
+        if (!_isServerReloading || !_isServerShellReloading) return;
+        if (_weaponInventory == null || _weaponInventory.ActiveSlot != slot) return;
+        if (slot != _serverReloadSlot || !string.Equals(weaponId, _serverReloadWeaponId, StringComparison.Ordinal)) return;
+        if (!string.Equals(_weaponInventory.EquippedWeaponId, weaponId, StringComparison.Ordinal)) return;
+        if (Time.time < _serverNextShellInsertTime) return;
+
+        WeaponDataSO weaponData = _weaponInventory.EquippedWeaponData;
+        if (weaponData == null || !weaponData.UsesAmmo || !weaponData.IsShellReload) return;
+
+        if (_weaponInventory.TryInsertSingleShell(slot, weaponId, weaponData.MaxAmmo, out WeaponSlotState updated))
+        {
+            _serverNextShellInsertTime = Time.time + Mathf.Max(0.1f, weaponData.ShellInsertInterval - ShellInsertTimeTolerance);
+            Debug.Log($"[PlayerWeaponController] {name}({weaponData.WeaponName}) 1발 장전: {updated.CurrentAmmo}/{updated.ReserveAmmo}");
+            SyncAmmoTargetRpc(Owner, slot, updated.CurrentAmmo, updated.ReserveAmmo);
+
+            if (updated.CurrentAmmo >= weaponData.MaxAmmo || updated.ReserveAmmo <= 0)
+            {
+                _isServerReloading = false;
+                _isServerShellReloading = false;
+            }
+        }
+        else
+        {
+            _isServerReloading = false;
+            _isServerShellReloading = false;
+        }
+    }
+
+    /// <summary>서버에서 샷건 1발 장전 중 사격 인터럽트 요청 시 재장전 잠금을 해제한다.</summary>
+    [ServerRpc]
+    private void RequestCancelShellReloadServerRpc(EWeaponSlotType slot, string weaponId, Channel channel = Channel.Reliable)
+    {
+        if (!_isServerReloading || !_isServerShellReloading) return;
+        if (slot != _serverReloadSlot || !string.Equals(weaponId, _serverReloadWeaponId, StringComparison.Ordinal)) return;
+
+        _isServerReloading = false;
+        _isServerShellReloading = false;
     }
 
     /// <summary>클라이언트에 발사 애니메이션, 사격 사운드와 디버그 궤적을 전파한다.</summary>
     [ObserversRpc]
-    private void BroadcastFireObserversRpc(Vector3 origin, Vector3 hitPoint, float castRadius, bool hitDamageable, string weaponId, byte attackVariant)
+    private void BroadcastFireObserversRpc(
+        Vector3 origin,
+        Vector3 hitPoint,
+        float castRadius,
+        bool hitDamageable,
+        string weaponId,
+        byte attackVariant,
+        byte spreadPresetIndex,
+        bool isAds)
     {
         if (_playerHealth != null && _playerHealth.IsDead) return;
 
@@ -871,8 +1175,31 @@ public class PlayerWeaponController : NetworkBehaviour
 
         if (!IsServerInitialized)
         {
-            RecordShotGizmo(origin, hitPoint, castRadius, hitDamageable);
-            Debug.DrawLine(origin, hitPoint, hitDamageable ? Color.red : Color.yellow, debugRayDuration);
+            WeaponDataSO weaponData = _weaponInventory != null ? _weaponInventory.GetWeaponDataById(weaponId) : null;
+            if (weaponData != null && weaponData.IsMultiPellet)
+            {
+                Vector3 delta = hitPoint - origin;
+                Vector3 baseDir = delta.sqrMagnitude > 0.0001f ? delta.normalized : transform.forward;
+                float range = weaponData.Range;
+                float spreadMultiplier = isAds ? weaponData.AdsSpreadMultiplier : 1f;
+                WeaponSpreadPreset preset = weaponData.GetSpreadPreset(spreadPresetIndex);
+                Vector3 refUp = Mathf.Abs(Vector3.Dot(baseDir, Vector3.up)) < 0.99f ? Vector3.up : Vector3.right;
+                Vector3 basisRight = Vector3.Cross(refUp, baseDir).normalized;
+                Vector3 basisUp = Vector3.Cross(baseDir, basisRight).normalized;
+
+                for (int p = 0; p < weaponData.PelletsPerShot; p++)
+                {
+                    Vector3 pelletDir = ComputePelletDirection(baseDir, basisRight, basisUp, preset.GetPelletAngle(p) * spreadMultiplier);
+                    Vector3 end = origin + pelletDir * range;
+                    RecordShotGizmo(origin, end, 0f, hitDamageable);
+                    Debug.DrawLine(origin, end, hitDamageable ? Color.red : Color.yellow, debugRayDuration);
+                }
+            }
+            else
+            {
+                RecordShotGizmo(origin, hitPoint, castRadius, hitDamageable);
+                Debug.DrawLine(origin, hitPoint, hitDamageable ? Color.red : Color.yellow, debugRayDuration);
+            }
         }
     }
 
@@ -903,7 +1230,10 @@ public class PlayerWeaponController : NetworkBehaviour
     private void HandleEquippedWeaponChanged(EquippedWeaponState state)
     {
         _isOwnerReloading = false;
+        _isOwnerShellReloading = false;
+        _isPendingShellReloadFire = false;
         _isServerReloading = false;
+        _isServerShellReloading = false;
         _fireRequested = false;
 
         if (state.Slot != EWeaponSlotType.Melee)
@@ -973,6 +1303,13 @@ public class PlayerWeaponController : NetworkBehaviour
         }
 
         return collider.ClosestPoint(point);
+    }
+
+    /// <summary>기준 방향 <paramref name="baseDirection"/>에 (Yaw, Pitch) 각도 오프셋을 적용한 펠릿 방향을 반환한다.</summary>
+    private static Vector3 ComputePelletDirection(Vector3 baseDirection, Vector3 basisRight, Vector3 basisUp, Vector2 angleDeg)
+    {
+        Quaternion spreadRot = Quaternion.AngleAxis(angleDeg.x, basisUp) * Quaternion.AngleAxis(-angleDeg.y, basisRight);
+        return (spreadRot * baseDirection).normalized;
     }
 
     /// <summary><paramref name="v"/>의 모든 성분이 유한한 실수인지 검사한다.</summary>

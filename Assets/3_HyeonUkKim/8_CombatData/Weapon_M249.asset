@@ -41,7 +41,7 @@ MonoBehaviour:
   handSecondaryAttackClip: {fileID: 0}
   handReloadClip: {fileID: -7118744104800597240, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
   handShotFrames: 17
-  weaponShotFrames: 9
+  weaponShotFrames: 16
   handReloadTotalFrames: 302
   weaponReloadStartFrame: 0
   weaponReloadTotalFrames: 302
@@ -58,11 +58,13 @@ MonoBehaviour:
   maxAmmo: 100
   maxReserveAmmo: 300
   reloadTime: 5.05
-  shotClip: {fileID: 8300000, guid: d44826b5c59704bab8c38530fe916d45, type: 3}
+  shotClip: {fileID: 8300000, guid: a789f886b9bb445f4a46036ee4947865, type: 3}
   reloadClips:
-  - {fileID: 8300000, guid: 3ef3a2f0f0267446aa96afa400af2aa6, type: 3}
-  - {fileID: 8300000, guid: fa9566860d7d148339f3ce24934abd9e, type: 3}
-  - {fileID: 8300000, guid: 0898f36efc04c4b9aafb88dbc13238fa, type: 3}
+  - {fileID: 8300000, guid: 0d8bd4856959a483f8cd5545c5aa6bce, type: 3}
+  - {fileID: 8300000, guid: 638c58f5d55a84189b2b3663b7725b71, type: 3}
+  - {fileID: 8300000, guid: 6288aa6b4c1b44c4b81f17e894eeb69c, type: 3}
+  - {fileID: 8300000, guid: 278a6d6f79ef94cbd87d119510ef1ab9, type: 3}
+  - {fileID: 8300000, guid: 2b64e1f15870d407d9717da2b5884609, type: 3}
   shotVolume: 1
   reloadVolume: 1
   recoilPitch: 1.8
@@ -74,6 +76,6 @@ MonoBehaviour:
   shakeIntensity: 0.9
   shakeDuration: 0.05
   adsFovOverride: 0
-  adsAnchorLocalOffset: {x: 0, y: 0, z: 0}
+  adsAnchorLocalOffset: {x: 0, y: 0.0005, z: -0.2}
   adsAnchorLocalRotationOffset: {x: 0, y: 0, z: 0}
   adsKickbackZOverride: 0

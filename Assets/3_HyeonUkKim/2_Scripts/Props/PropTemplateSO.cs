@@ -93,6 +93,15 @@ public struct WeaponSlotBaseHandClips
 
     /// <summary>재장전 상태 기준 클립.</summary>
     public AnimationClip reloadClip;
+
+    /// <summary>1발 장전 시작 상태 기준 클립.</summary>
+    public AnimationClip reloadStartClip;
+
+    /// <summary>1발 장전 반복 상태 기준 클립.</summary>
+    public AnimationClip reloadLoopClip;
+
+    /// <summary>1발 장전 마무리 상태 기준 클립.</summary>
+    public AnimationClip reloadFinishClip;
 }
 
 /// <summary>무기 슬롯 및 하이드(맨손) 모드별 공통 평면 이동속도 설정 (초당 월드 단위).</summary>

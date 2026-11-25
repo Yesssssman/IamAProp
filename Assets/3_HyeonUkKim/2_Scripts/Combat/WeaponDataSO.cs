@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 /// <summary>무기 슬롯 분류.</summary>
@@ -6,6 +7,21 @@ public enum EWeaponCategory
     Primary,
     Secondary,
     Melee
+}
+
+/// <summary>산탄총 등 다중 펠릿 무기의 1회 발사당 고정 탄착군 각도 프리셋.</summary>
+[Serializable]
+public struct WeaponSpreadPreset
+{
+    /// <summary>조준 방향 기준 각 펠릿의 (좌우 Yaw, 상하 Pitch) 편차 각도 (도 단위).</summary>
+    public Vector2[] pelletAngles;
+
+    /// <summary><paramref name="pelletIndex"/>에 해당하는 펠릿 각도를 반환한다.</summary>
+    public Vector2 GetPelletAngle(int pelletIndex)
+    {
+        if (pelletAngles == null || pelletAngles.Length == 0) return Vector2.zero;
+        return pelletAngles[pelletIndex % pelletAngles.Length];
+    }
 }
 
 /// <summary>개별 무기의 식별자, 장착 비주얼, 애니메이션 오버라이드, 전투 수치 및 사운드 데이터를 정의한다.</summary>
@@ -76,6 +92,15 @@ public class WeaponDataSO : ScriptableObject
     /// <summary>손 애니메이터의 재장전 상태 및 왼손 탄창 샘플링에 사용할 클립.</summary>
     [SerializeField] private AnimationClip handReloadClip;
 
+    /// <summary>1발씩 장전하는 무기의 재장전 시작 상태에 오버라이드할 클립.</summary>
+    [SerializeField] private AnimationClip handReloadStartClip;
+
+    /// <summary>1발씩 장전하는 무기의 재장전 반복 상태에 오버라이드할 클립.</summary>
+    [SerializeField] private AnimationClip handReloadLoopClip;
+
+    /// <summary>1발씩 장전하는 무기의 재장전 마무리 상태에 오버라이드할 클립.</summary>
+    [SerializeField] private AnimationClip handReloadFinishClip;
+
     /// <summary>손 발사 클립의 총 프레임 수.</summary>
     [Header("총기 프레임 동기화")]
     [Min(0f)]
@@ -133,6 +158,18 @@ public class WeaponDataSO : ScriptableObject
     [Min(0f)]
     [SerializeField] private float shotSphereRadiusOverride;
 
+    /// <summary>1회 발사 시 동시 발사할 펠릿(Raycast) 개수 (1이면 단일 사격, 2 이상이면 고정 탄착군 다중 Raycast).</summary>
+    [Header("다중 펠릿 및 고정 탄착군")]
+    [Min(1)]
+    [SerializeField] private int pelletsPerShot = 1;
+
+    /// <summary>발사마다 순환 적용할 고정 탄착군 프리셋 목록.</summary>
+    [SerializeField] private WeaponSpreadPreset[] spreadPresets;
+
+    /// <summary>1인칭 정조준(ADS) 시 고정 탄착군 각도에 곱하는 집탄 배율.</summary>
+    [Range(0.1f, 1f)]
+    [SerializeField] private float adsSpreadMultiplier = 1f;
+
     /// <summary>공격 시 탄약을 소모하는지 여부 (근접 무기는 false).</summary>
     [Header("탄약 및 재장전")]
     [SerializeField] private bool usesAmmo = true;
@@ -149,11 +186,22 @@ public class WeaponDataSO : ScriptableObject
     [Min(0f)]
     [SerializeField] private float reloadTime = 2.5f;
 
+    /// <summary>Start → Loop → Finish 흐름으로 1발씩 반복 장전하는 샷건 방식 여부.</summary>
+    [SerializeField] private bool isShellReload;
+
+    /// <summary>1발 장전 시 시작 모션(<c>Reload_Start</c>)의 서버 검증용 최소 대기 시간 (초 단위).</summary>
+    [Min(0f)]
+    [SerializeField] private float shellReloadStartDuration;
+
+    /// <summary>1발 장전 루프(<c>Reload_Loop</c>) 1회당 서버 검증용 최소 장전 간격 (초 단위).</summary>
+    [Min(0f)]
+    [SerializeField] private float shellInsertInterval = 0.55f;
+
     /// <summary>발사 시 재생할 총성 오디오 클립.</summary>
     [Header("사운드")]
     [SerializeField] private AudioClip shotClip;
 
-    /// <summary>재장전 3단계 오디오 클립 (0: 탄창 빼기, 1: 탄창 결합, 2: 노리쇠 후퇴·전진).</summary>
+    /// <summary>재장전 단계별 오디오 클립 (마지막 요소는 드로우 노리쇠/슬라이드 사운드로 공용).</summary>
     [SerializeField] private AudioClip[] reloadClips;
 
     /// <summary>사격 사운드 재생 볼륨 배율.</summary>
@@ -271,6 +319,15 @@ public class WeaponDataSO : ScriptableObject
     /// <summary>손 재장전 오버라이드 클립.</summary>
     public AnimationClip HandReloadClip => handReloadClip;
 
+    /// <summary>손 1발 장전 시작 오버라이드 클립.</summary>
+    public AnimationClip HandReloadStartClip => handReloadStartClip;
+
+    /// <summary>손 1발 장전 루프 오버라이드 클립.</summary>
+    public AnimationClip HandReloadLoopClip => handReloadLoopClip;
+
+    /// <summary>손 1발 장전 마무리 오버라이드 클립.</summary>
+    public AnimationClip HandReloadFinishClip => handReloadFinishClip;
+
     /// <summary>손 발사 클립 총 프레임 수.</summary>
     public float HandShotFrames => handShotFrames;
 
@@ -316,6 +373,18 @@ public class WeaponDataSO : ScriptableObject
     /// <summary>총기 구체 캐스트 반지름 오버라이드 (0 이하면 기본값 사용, 미터).</summary>
     public float ShotSphereRadiusOverride => shotSphereRadiusOverride;
 
+    /// <summary>1회 발사 시 동시 발사할 펠릿(Raycast) 개수.</summary>
+    public int PelletsPerShot => Mathf.Max(1, pelletsPerShot);
+
+    /// <summary>다중 펠릿 산탄 발사 무기 여부.</summary>
+    public bool IsMultiPellet => pelletsPerShot > 1;
+
+    /// <summary>순환 적용할 고정 탄착군 프리셋 배열.</summary>
+    public WeaponSpreadPreset[] SpreadPresets => spreadPresets;
+
+    /// <summary>1인칭 정조준 시 탄착군 각도 배율.</summary>
+    public float AdsSpreadMultiplier => adsSpreadMultiplier;
+
     /// <summary>탄약 소모 여부.</summary>
     public bool UsesAmmo => usesAmmo;
 
@@ -328,11 +397,23 @@ public class WeaponDataSO : ScriptableObject
     /// <summary>재장전 소요 시간 (초 단위).</summary>
     public float ReloadTime => reloadTime;
 
+    /// <summary>1발씩 반복 장전하는 샷건 방식 여부.</summary>
+    public bool IsShellReload => isShellReload;
+
+    /// <summary>1발 장전 시작 모션 최소 대기 시간 (초 단위).</summary>
+    public float ShellReloadStartDuration => shellReloadStartDuration;
+
+    /// <summary>1발 장전 루프 1회당 최소 장전 간격 (초 단위).</summary>
+    public float ShellInsertInterval => shellInsertInterval;
+
     /// <summary>발사 시 재생할 총성 오디오 클립.</summary>
     public AudioClip ShotClip => shotClip;
 
     /// <summary>재장전 단계별 오디오 클립 배열.</summary>
     public AudioClip[] ReloadClips => reloadClips;
+
+    /// <summary>드로우 시 재사용하는 노리쇠/슬라이드 오디오 클립 (<see cref="reloadClips"/> 마지막 요소).</summary>
+    public AudioClip DrawSoundClip => reloadClips != null && reloadClips.Length > 0 ? reloadClips[reloadClips.Length - 1] : null;
 
     /// <summary>사격 사운드 볼륨 배율.</summary>
     public float ShotVolume => shotVolume;
@@ -380,11 +461,19 @@ public class WeaponDataSO : ScriptableObject
     // Public Control API
     // ***************************************************************
 
-    /// <summary>재장전 단계 번호(<paramref name="step"/>: 1~3)에 해당하는 오디오 클립을 반환한다.</summary>
+    /// <summary>재장전 단계 번호(<paramref name="step"/>: 1부터 시작)에 해당하는 오디오 클립을 반환한다.</summary>
     public AudioClip GetReloadClip(int step)
     {
         int index = step - 1;
         if (reloadClips == null || index < 0 || index >= reloadClips.Length) return null;
         return reloadClips[index];
+    }
+
+    /// <summary><paramref name="presetIndex"/>에 대응하는 고정 탄착군 프리셋을 반환한다.</summary>
+    public WeaponSpreadPreset GetSpreadPreset(int presetIndex)
+    {
+        if (spreadPresets == null || spreadPresets.Length == 0) return default;
+        int safeIndex = ((presetIndex % spreadPresets.Length) + spreadPresets.Length) % spreadPresets.Length;
+        return spreadPresets[safeIndex];
     }
 }

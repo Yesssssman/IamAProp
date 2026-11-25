@@ -89,6 +89,21 @@ public class PlayerAnim : PropAnimBase
     /// <summary>소총 재장전 애니메이션 상태(<c>AK_Reload</c>) 해시.</summary>
     private static readonly int AkReloadState = Animator.StringToHash("AK_Reload");
 
+    /// <summary>샷건 1발 장전 시작 애니메이션 상태(<c>Shotgun_Reload_Start</c>) 해시.</summary>
+    private static readonly int ShotgunReloadStartState = Animator.StringToHash("Shotgun_Reload_Start");
+
+    /// <summary>샷건 1발 장전 반복 애니메이션 상태(<c>Shotgun_Reload_Loop</c>) 해시.</summary>
+    private static readonly int ShotgunReloadLoopState = Animator.StringToHash("Shotgun_Reload_Loop");
+
+    /// <summary>샷건 1발 장전 마무리 애니메이션 상태(<c>Shotgun_Reload_Finish</c>) 해시.</summary>
+    private static readonly int ShotgunReloadFinishState = Animator.StringToHash("Shotgun_Reload_Finish");
+
+    /// <summary>손 애니메이터 1발 장전 모드 파라미터(<c>useShellReload</c>) 해시.</summary>
+    private static readonly int UseShellReloadParam = Animator.StringToHash("useShellReload");
+
+    /// <summary>손 애니메이터 1발 장전 루프 유지 파라미터(<c>isReloadingLoop</c>) 해시.</summary>
+    private static readonly int IsReloadingLoopParam = Animator.StringToHash("isReloadingLoop");
+
     /// <summary>총기 기본 대기 애니메이션 상태(<c>Idle</c>) 해시.</summary>
     private static readonly int WeaponIdleState = Animator.StringToHash("Idle");
 
@@ -100,6 +115,15 @@ public class PlayerAnim : PropAnimBase
 
     /// <summary>총기 드로우 애니메이션 상태(<c>Draw</c>) 해시.</summary>
     private static readonly int WeaponDrawState = Animator.StringToHash("Draw");
+
+    /// <summary>총기 1발 장전 시작 애니메이션 상태(<c>ReloadStart</c>) 해시.</summary>
+    private static readonly int WeaponReloadStartState = Animator.StringToHash("ReloadStart");
+
+    /// <summary>총기 1발 장전 반복 애니메이션 상태(<c>ReloadLoop</c>) 해시.</summary>
+    private static readonly int WeaponReloadLoopState = Animator.StringToHash("ReloadLoop");
+
+    /// <summary>총기 1발 장전 마무리 애니메이션 상태(<c>ReloadFinish</c>) 해시.</summary>
+    private static readonly int WeaponReloadFinishState = Animator.StringToHash("ReloadFinish");
 
     // ***************************************************************
     // Properties
@@ -134,20 +158,42 @@ public class PlayerAnim : PropAnimBase
                 return false;
             }
 
+            int activeHash = handAnimator.IsInTransition(0)
+                ? handAnimator.GetNextAnimatorStateInfo(0).shortNameHash
+                : handAnimator.GetCurrentAnimatorStateInfo(0).shortNameHash;
+
+            if (_appliedWeaponData.IsShellReload)
+            {
+                return activeHash == ShotgunReloadStartState
+                    || activeHash == ShotgunReloadLoopState
+                    || activeHash == ShotgunReloadFinishState;
+            }
+
             int expectedHash = _weaponInventory.ActiveSlot switch
             {
                 EWeaponSlotType.Secondary => M1911ReloadState,
                 EWeaponSlotType.Primary => AkReloadState,
                 _ => 0
             };
-            if (expectedHash == 0) return false;
+            return expectedHash != 0 && activeHash == expectedHash;
+        }
+    }
 
-            if (handAnimator.IsInTransition(0))
-            {
-                return handAnimator.GetNextAnimatorStateInfo(0).shortNameHash == expectedHash;
-            }
+    /// <summary>샷건 1발 장전 중단 요청 후 루프가 끝나 사격 가능한 상태에 도달했는지 여부.</summary>
+    public bool CanFireAfterShellReloadCancel
+    {
+        get
+        {
+            if (handAnimator == null) return true;
+            if (_pendingReloadReset) return false;
 
-            return handAnimator.GetCurrentAnimatorStateInfo(0).shortNameHash == expectedHash;
+            int currentHash = handAnimator.GetCurrentAnimatorStateInfo(0).shortNameHash;
+            int nextHash = handAnimator.IsInTransition(0) ? handAnimator.GetNextAnimatorStateInfo(0).shortNameHash : 0;
+            bool inStartOrLoop = currentHash == ShotgunReloadStartState
+                || currentHash == ShotgunReloadLoopState
+                || nextHash == ShotgunReloadStartState
+                || nextHash == ShotgunReloadLoopState;
+            return !inStartOrLoop;
         }
     }
 
@@ -219,8 +265,8 @@ public class PlayerAnim : PropAnimBase
 
         // 재장전 애니메이션 진입이 확인되면 플래그를 내려 반복 전이를 방지한다.
         if (_pendingReloadReset
-            && (currentHash == M1911ReloadState || currentHash == AkReloadState
-                || nextHash == M1911ReloadState || nextHash == AkReloadState))
+            && (currentHash == M1911ReloadState || currentHash == AkReloadState || currentHash == ShotgunReloadStartState
+                || nextHash == M1911ReloadState || nextHash == AkReloadState || nextHash == ShotgunReloadStartState))
         {
             handAnimator.SetBool(IsReload, false);
             if (IsOwner)
@@ -230,6 +276,17 @@ public class PlayerAnim : PropAnimBase
             _pendingReloadReset = false;
         }
 
+        // 샷건 1발 장전 구간을 벗어나면 왼손 산탄 오브젝트가 남아 있지 않도록 숨긴다.
+        if (_appliedWeaponData != null
+            && _appliedWeaponData.IsShellReload
+            && currentHash != ShotgunReloadStartState
+            && currentHash != ShotgunReloadLoopState
+            && nextHash != ShotgunReloadStartState
+            && nextHash != ShotgunReloadLoopState)
+        {
+            HideLeftHandItem();
+        }
+
         // 손 애니메이터의 발사, 재장전 및 드로우 프레임에 맞춰 총기 애니메이터를 동기화한다.
         if (_weaponAnimator == null || _weaponAnimator.runtimeAnimatorController == null) return;
 
@@ -237,6 +294,9 @@ public class PlayerAnim : PropAnimBase
             || nextHash == AkShotState
             || nextHash == M1911ReloadState
             || nextHash == AkReloadState
+            || nextHash == ShotgunReloadStartState
+            || nextHash == ShotgunReloadLoopState
+            || nextHash == ShotgunReloadFinishState
             || nextHash == M1911DrawState
             || nextHash == AkDrawState;
         AnimatorStateInfo activeHandState = useNextState
@@ -286,6 +346,25 @@ public class PlayerAnim : PropAnimBase
             {
                 _weaponAnimator.SetBool(IsReload, false);
                 _weaponAnimator.Play(WeaponIdleState, 0, 0f);
+            }
+            return;
+        }
+
+        if (activeHash == ShotgunReloadStartState
+            || activeHash == ShotgunReloadLoopState
+            || activeHash == ShotgunReloadFinishState)
+        {
+            int weaponState = activeHash == ShotgunReloadStartState
+                ? WeaponReloadStartState
+                : (activeHash == ShotgunReloadLoopState ? WeaponReloadLoopState : WeaponReloadFinishState);
+            float normalizedTime = activeHash == ShotgunReloadLoopState
+                ? Mathf.Repeat(activeHandState.normalizedTime, 1f)
+                : Mathf.Clamp01(activeHandState.normalizedTime);
+            _weaponAnimator.SetBool(IsAttack, false);
+            _weaponAnimator.SetBool(IsReload, true);
+            if (_weaponAnimator.HasState(0, weaponState))
+            {
+                _weaponAnimator.Play(weaponState, 0, normalizedTime);
             }
             return;
         }
@@ -448,14 +527,20 @@ public class PlayerAnim : PropAnimBase
         int currentHash = handAnimator.GetCurrentAnimatorStateInfo(0).shortNameHash;
         int nextHash = handAnimator.IsInTransition(0) ? handAnimator.GetNextAnimatorStateInfo(0).shortNameHash : 0;
         if (currentHash == M1911ReloadState || currentHash == AkReloadState
+            || currentHash == ShotgunReloadStartState || currentHash == ShotgunReloadLoopState || currentHash == ShotgunReloadFinishState
             || currentHash == M1911DrawState || currentHash == AkDrawState
             || nextHash == M1911ReloadState || nextHash == AkReloadState
+            || nextHash == ShotgunReloadStartState || nextHash == ShotgunReloadLoopState || nextHash == ShotgunReloadFinishState
             || nextHash == M1911DrawState || nextHash == AkDrawState)
         {
             return;
         }
 
+        bool isShellReload = _appliedWeaponData.IsShellReload;
         bodyAnimator.SetBool(IsReload, true);
+        handAnimator.SetBool(UseShellReloadParam, isShellReload);
+        handAnimator.SetBool(IsReloadingLoopParam, isShellReload);
+        handAnimator.SetBool(IsAttack, false);
         handAnimator.SetBool(IsReload, true);
         if (_weaponAnimator != null && _weaponAnimator.runtimeAnimatorController != null)
         {
@@ -470,6 +555,38 @@ public class PlayerAnim : PropAnimBase
         else
         {
             RequestReloadServerRpc();
+        }
+    }
+
+    /// <summary>샷건 1발 장전 루프를 종료해 마무리(<c>Finish</c>) 또는 사격 복귀로 전이한다.</summary>
+    public void EndShellReload(bool interruptForFire)
+    {
+        if (handAnimator == null || !handAnimator.enabled) return;
+
+        handAnimator.SetBool(IsReloadingLoopParam, false);
+        handAnimator.SetBool(IsAttack, interruptForFire);
+
+        if (!IsOwner) return;
+
+        if (IsServerInitialized)
+        {
+            BroadcastEndShellReloadObserversRpc(interruptForFire);
+        }
+        else
+        {
+            RequestEndShellReloadServerRpc(interruptForFire);
+        }
+    }
+
+    /// <summary>왼손에 생성된 탄창 또는 산탄 오브젝트를 숨긴다.</summary>
+    public void HideLeftHandItem()
+    {
+        if (handScript == null) return;
+
+        GameObject leftItem = handScript.GetLeftHandItem();
+        if (leftItem != null && leftItem.activeSelf)
+        {
+            leftItem.SetActive(false);
         }
     }
 
@@ -523,6 +640,7 @@ public class PlayerAnim : PropAnimBase
             handAnimator.SetBool(IsJumped, false);
             handAnimator.SetBool(IsAttack, false);
             handAnimator.SetBool(IsReload, false);
+            handAnimator.SetBool(IsReloadingLoopParam, false);
             handAnimator.SetBool(IsWeaponSwap, false);
             handAnimator.Play(HandIdleState, 0, 0f);
             handAnimator.Update(0f);
@@ -573,12 +691,35 @@ public class PlayerAnim : PropAnimBase
         if (_isDeadVisualApplied || (_playerHealth != null && _playerHealth.IsDead)) return;
         if (handAnimator == null || !handAnimator.enabled) return;
 
+        bool isShellReload = _appliedWeaponData != null && _appliedWeaponData.IsShellReload;
+        handAnimator.SetBool(UseShellReloadParam, isShellReload);
+        handAnimator.SetBool(IsReloadingLoopParam, isShellReload);
+        handAnimator.SetBool(IsAttack, false);
         handAnimator.SetBool(IsReload, true);
         if (_weaponAnimator != null && _weaponAnimator.runtimeAnimatorController != null)
         {
             _weaponAnimator.SetBool(IsReload, true);
         }
         _pendingReloadReset = true;
+    }
+
+    /// <summary>소유자 클라이언트의 샷건 루프 재장전 종료를 서버를 통해 다른 관전자에게 전달한다.</summary>
+    [ServerRpc]
+    private void RequestEndShellReloadServerRpc(bool interruptForFire)
+    {
+        if (_playerHealth != null && _playerHealth.IsDead) return;
+        BroadcastEndShellReloadObserversRpc(interruptForFire);
+    }
+
+    /// <summary>원격 프록시 클라이언트의 샷건 루프 재장전을 종료한다.</summary>
+    [ObserversRpc(ExcludeOwner = true)]
+    private void BroadcastEndShellReloadObserversRpc(bool interruptForFire)
+    {
+        if (_isDeadVisualApplied || (_playerHealth != null && _playerHealth.IsDead)) return;
+        if (handAnimator == null || !handAnimator.enabled) return;
+
+        handAnimator.SetBool(IsReloadingLoopParam, false);
+        handAnimator.SetBool(IsAttack, interruptForFire);
     }
 
     /// <summary>서버가 결정한 <paramref name="hitIndex"/>로 모든 클라이언트의 피격 애니메이션을 재생한다.</summary>
@@ -691,6 +832,18 @@ public class PlayerAnim : PropAnimBase
                     {
                         targetClip = weaponData.HandReloadClip;
                     }
+                    else if (baseClip == baseClips.reloadStartClip && weaponData.HandReloadStartClip != null)
+                    {
+                        targetClip = weaponData.HandReloadStartClip;
+                    }
+                    else if (baseClip == baseClips.reloadLoopClip && weaponData.HandReloadLoopClip != null)
+                    {
+                        targetClip = weaponData.HandReloadLoopClip;
+                    }
+                    else if (baseClip == baseClips.reloadFinishClip && weaponData.HandReloadFinishClip != null)
+                    {
+                        targetClip = weaponData.HandReloadFinishClip;
+                    }
 
                     if (targetClip != null && _handOverrideBuffer[i].Value != targetClip)
                     {
@@ -749,6 +902,30 @@ public class PlayerAnim : PropAnimBase
                         handAnimator.Update(0f);
                     }
                 }
+                else if (weaponData.IsShellReload && weaponData.HandReloadLoopClip != null)
+                {
+                    Transform shellSource = weaponObject.transform.Find("BenelliM4_Bullet");
+                    if (shellSource != null)
+                    {
+                        AnimationEvent insertEvent = Array.Find(
+                            weaponData.HandReloadLoopClip.events,
+                            evt => evt.functionName == nameof(HandReloadAudioRelay.OnReloadShellInserted));
+                        if (insertEvent != null)
+                        {
+                            weaponData.HandReloadLoopClip.SampleAnimation(handScript.gameObject, insertEvent.time);
+                        }
+
+                        GameObject shell = Instantiate(shellSource.gameObject, handScript.GetLeftHand(), true);
+                        shell.SetActive(false);
+                        handScript.SetLeftHandItem(shell);
+                        shellSource.gameObject.SetActive(false);
+
+                        if (handAnimator != null)
+                        {
+                            handAnimator.Update(0f);
+                        }
+                    }
+                }
 
                 _weaponAnimator = weaponObject.GetComponent<Animator>();
                 if (_weaponAnimator != null)
@@ -778,6 +955,8 @@ public class PlayerAnim : PropAnimBase
         handAnimator.SetBool(IsAir, wasAir);
         handAnimator.SetBool(IsJumped, wasJumped);
         handAnimator.SetInteger(WeaponMode, slotIndex);
+        handAnimator.SetBool(UseShellReloadParam, weaponData != null && weaponData.IsShellReload);
+        handAnimator.SetBool(IsReloadingLoopParam, false);
         handAnimator.SetBool(IsReload, false);
         _pendingReloadReset = false;
 
