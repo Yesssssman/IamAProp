@@ -1,5 +1,36 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!1 &839469992330482051
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7204396508322769713}
+  m_Layer: 0
+  m_Name: CasingEjectPoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7204396508322769713
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 839469992330482051}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0.2468828, y: 0.7122974, z: 0.3011486, w: 0.5839442}
+  m_LocalPosition: {x: 0.024, y: 0.04, z: 0.15}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 5815204793636265736}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2843183424380898815
 GameObject:
   m_ObjectHideFlags: 0
@@ -147,6 +178,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: c56f1aa53c3dfec4c9a30e42fe3080b7, type: 3}
       insertIndex: -1
       addedObject: {fileID: 8374873911554289860}
+    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: c56f1aa53c3dfec4c9a30e42fe3080b7, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 7204396508322769713}
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: c56f1aa53c3dfec4c9a30e42fe3080b7, type: 3}
       insertIndex: -1

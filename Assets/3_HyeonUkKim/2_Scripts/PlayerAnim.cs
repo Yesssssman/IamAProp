@@ -50,6 +50,15 @@ public class PlayerAnim : PropAnimBase
     /// <summary>현재 장착 무기 프리팹의 총구 기준 트랜스폼.</summary>
     private Transform _currentMuzzlePoint;
 
+    /// <summary>현재 장착 무기 프리팹의 탄피 배출 기준 트랜스폼.</summary>
+    private Transform _currentCasingEjectPoint;
+
+    /// <summary>현재 <see cref="_localCasingSystem"/>을 생성한 원본 탄피 파티클 프리팹.</summary>
+    private ParticleSystem _localCasingPrefabSource;
+
+    /// <summary>로컬 소유자 화면에서만 탄피를 배출하는 재사용 <see cref="ParticleSystem"/> 인스턴스.</summary>
+    private ParticleSystem _localCasingSystem;
+
     /// <summary>무기 교체 애니메이션 진입 직후 <c>isWeaponSwap</c>을 초기화하기 위한 대기 플래그.</summary>
     private bool _pendingWeaponSwapReset;
 
@@ -399,6 +408,12 @@ public class PlayerAnim : PropAnimBase
         }
     }
 
+    protected override void OnDestroy()
+    {
+        ClearLocalCasingSystem();
+        base.OnDestroy();
+    }
+
     // ***************************************************************
     // NetworkBehaviour
     // ***************************************************************
@@ -444,6 +459,11 @@ public class PlayerAnim : PropAnimBase
         _appliedEquippedState = default;
         _appliedWeaponData = null;
         _isDeadVisualApplied = false;
+    }
+
+    public override void OnStopClient()
+    {
+        ClearLocalCasingSystem();
     }
 
     // ***************************************************************
@@ -502,6 +522,32 @@ public class PlayerAnim : PropAnimBase
             _weaponAnimator.SetBool(IsReload, false);
             _weaponAnimator.Play(WeaponShotState, 0, 0f);
         }
+    }
+
+    /// <summary>로컬 소유자 클라이언트에서만 현재 장착 무기의 <c>CasingEjectPoint</c>에서 탄피 1개를 배출한다.</summary>
+    public void EmitWeaponCasing()
+    {
+        if (!IsOwner || _isDeadVisualApplied || _currentCasingEjectPoint == null || _appliedWeaponData == null) return;
+
+        ParticleSystem prefab = _appliedWeaponData.CasingParticlePrefab;
+        if (prefab == null) return;
+
+        if (_localCasingSystem == null || _localCasingPrefabSource != prefab)
+        {
+            if (_localCasingSystem != null)
+            {
+                float remainingLife = _localCasingSystem.main.startLifetime.constantMax + 0.1f;
+                Destroy(_localCasingSystem.gameObject, remainingLife);
+            }
+
+            _localCasingSystem = Instantiate(prefab);
+            _localCasingPrefabSource = prefab;
+        }
+
+        _localCasingSystem.transform.SetPositionAndRotation(
+            _currentCasingEjectPoint.position,
+            _currentCasingEjectPoint.rotation);
+        _localCasingSystem.Emit(1);
     }
 
     /// <inheritdoc/>
@@ -881,6 +927,7 @@ public class PlayerAnim : PropAnimBase
                 _currentWeaponObject = weaponObject;
                 _currentAdsCameraAnchor = weaponObject.transform.Find("AdsCameraAnchor");
                 _currentMuzzlePoint = weaponObject.transform.Find("MuzzlePoint");
+                _currentCasingEjectPoint = weaponObject.transform.Find("CasingEjectPoint");
 
                 GunScript gun = weaponObject.GetComponent<GunScript>();
                 if (gun != null && weaponData.HandReloadClip != null)
@@ -1006,6 +1053,7 @@ public class PlayerAnim : PropAnimBase
         _currentWeaponObject = null;
         _currentAdsCameraAnchor = null;
         _currentMuzzlePoint = null;
+        _currentCasingEjectPoint = null;
 
         if (handScript == null) return;
 
@@ -1022,5 +1070,16 @@ public class PlayerAnim : PropAnimBase
             prevRight.SetActive(false);
             Destroy(prevRight);
         }
+    }
+
+    /// <summary>로컬 소유자용 탄피 <see cref="ParticleSystem"/> 인스턴스를 정리한다.</summary>
+    private void ClearLocalCasingSystem()
+    {
+        if (_localCasingSystem != null)
+        {
+            Destroy(_localCasingSystem.gameObject);
+            _localCasingSystem = null;
+        }
+        _localCasingPrefabSource = null;
     }
 }

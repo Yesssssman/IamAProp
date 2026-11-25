@@ -17,12 +17,16 @@ MonoBehaviour:
   weaponType: 3
   slotType: 3
   category: 0
+  weaponIcon: {fileID: 0}
   equippedPrefab: {fileID: 6812547677223479691, guid: 2bd6948349fca4fdd9ffd0aa975dba65, type: 3}
   worldVisualPrefab: {fileID: 0}
   weaponAnimController: {fileID: 9100000, guid: 0be7352ff89904d01a028a3570cbcac9, type: 2}
   gripPosition: {x: -0.0255, y: -0.002, z: -0.0091}
   gripRotation: {x: 274.73553, y: 179.99992, z: 222.94275}
   gripScale: {x: 1, y: 1, z: 1}
+  shellGripPosition: {x: 0, y: 0, z: 0}
+  shellGripRotation: {x: 0, y: 0, z: 0}
+  shellGripScale: {x: 1, y: 1, z: 1}
   worldPickupScale: {x: 1, y: 1, z: 1}
   worldPickupColliders:
   - center: {x: 0.005, y: 0.03, z: 0.188}
@@ -40,6 +44,9 @@ MonoBehaviour:
   handAttackClip: {fileID: -36284105316328112, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
   handSecondaryAttackClip: {fileID: 0}
   handReloadClip: {fileID: -7118744104800597240, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handReloadStartClip: {fileID: 0}
+  handReloadLoopClip: {fileID: 0}
+  handReloadFinishClip: {fileID: 0}
   handShotFrames: 17
   weaponShotFrames: 16
   handReloadTotalFrames: 302
@@ -54,10 +61,16 @@ MonoBehaviour:
   range: 100
   meleeCastRadius: 0
   shotSphereRadiusOverride: 0.05
+  pelletsPerShot: 1
+  spreadPresets: []
+  adsSpreadMultiplier: 1
   usesAmmo: 1
   maxAmmo: 100
   maxReserveAmmo: 300
   reloadTime: 5.05
+  isShellReload: 0
+  shellReloadStartDuration: 0
+  shellInsertInterval: 0.55
   shotClip: {fileID: 8300000, guid: a789f886b9bb445f4a46036ee4947865, type: 3}
   reloadClips:
   - {fileID: 8300000, guid: 0d8bd4856959a483f8cd5545c5aa6bce, type: 3}
@@ -79,3 +92,4 @@ MonoBehaviour:
   adsAnchorLocalOffset: {x: 0, y: 0.0005, z: -0.2}
   adsAnchorLocalRotationOffset: {x: 0, y: 0, z: 0}
   adsKickbackZOverride: 0
+  casingParticlePrefab: {fileID: 1978923543376686067, guid: 46cc821cb69994854864f6b70fa1ddd7, type: 3}

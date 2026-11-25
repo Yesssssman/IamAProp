@@ -271,6 +271,10 @@ public class WeaponDataSO : ScriptableObject
     [Min(0f)]
     [SerializeField] private float adsKickbackZOverride;
 
+    /// <summary>로컬 소유자 발사 시 배출할 탄피 <see cref="ParticleSystem"/> 프리팹 (비워두면 미사용).</summary>
+    [Header("이펙트")]
+    [SerializeField] private ParticleSystem casingParticlePrefab;
+
     // ***************************************************************
     // Properties
     // ***************************************************************
@@ -481,6 +485,9 @@ public class WeaponDataSO : ScriptableObject
 
     /// <summary>1인칭 정조준 발사 시 이 무기 전용 Z축 후퇴 반동 거리 (0 이하면 기본값 사용, 미터).</summary>
     public float AdsKickbackZOverride => adsKickbackZOverride;
+
+    /// <summary>로컬 소유자 발사 시 배출할 탄피 <see cref="ParticleSystem"/> 프리팹.</summary>
+    public ParticleSystem CasingParticlePrefab => casingParticlePrefab;
 
     // ***************************************************************
     // Public Control API

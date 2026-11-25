@@ -419,6 +419,10 @@ public class PlayerWeaponController : NetworkBehaviour
         if (PredictionManager == null || !PredictionManager.IsReconciling)
         {
             _playerController?.ApplyWeaponCameraFeedback(weaponData);
+            if (weaponData.UsesAmmo)
+            {
+                _playerAnim.EmitWeaponCasing();
+            }
         }
 
         bool isAds = _playerController != null && _playerController.IsAdsActive;
