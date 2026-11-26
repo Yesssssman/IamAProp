@@ -40,7 +40,7 @@ public class PlayerWeaponController : NetworkBehaviour
     private const float FireRateTolerance = 0.03f; // 네트워크 지터를 고려한 서버 발사 쿨다운 허용 오차 (초)
     private const float MeleeComboBufferWindow = 0.14f; // 근접 공격 막바지에 선입력을 허용하는 남은 쿨다운 시간 (초)
     private const float MeleeComboGraceWindow = 0.25f; // 근접 쿨다운 종료 후 콤보를 이어갈 수 있는 유예 시간 (초)
-    private const int DefaultCombatLayerMask = (1 << 0) | (1 << 3) | (1 << 6) | (1 << 7); // Default, Ground, Player, Hitbox
+    private const int DefaultCombatLayerMask = (1 << 0) | (1 << 3) | (1 << 6) | (1 << 7) | (1 << 8); // Default, Ground, Player, Hitbox, Wall
     private const int MaxShotGizmoTraces = 48; // 동시에 표시할 최근 사격 궤적 기즈모 최대 개수 (12발 산탄 4회분)
     private const float ShellInsertTimeTolerance = 0.08f; // 1발 장전 서버 간격 검증 허용 오차 (초)
 
@@ -74,6 +74,19 @@ public class PlayerWeaponController : NetworkBehaviour
     /// <summary>총기 사격 및 재장전 사운드를 3D 공간에서 재생할 <see cref="AudioSource"/> 컴포넌트.</summary>
     [Header("사운드 설정")]
     [SerializeField] private AudioSource weaponAudioSource;
+
+    /// <summary>수류탄 스폰 시 벽 관통을 방지하기 위해 검사할 지형/벽 레이어 마스크.</summary>
+    [Header("투척무기 설정")]
+    [SerializeField] private LayerMask throwSpawnObstacleMask = (1 << 0) | (1 << 3) | (1 << 8); // Default, Ground, Wall
+
+    /// <summary>로컬 소유자 화면에 수류탄 포물선 궤적을 표시하는 컴포넌트.</summary>
+    private GrenadeTrajectoryPreview _trajectoryPreview;
+
+    /// <summary>소유자가 현재 수류탄 투척을 위해 좌클릭을 홀드 조준 중인지 여부.</summary>
+    private bool _isGrenadeAiming;
+
+    /// <summary>수류탄 조준 중 우클릭 등으로 취소되어 좌클릭 해제 시 투척을 막는 플래그.</summary>
+    private bool _grenadeAimCanceled;
 
     /// <summary>소유자 측 로컬 예측용 슬롯별 탄약 및 쿨다운 배열.</summary>
     private OwnerSlotRuntimeState[] _ownerStates;
@@ -225,6 +238,9 @@ public class PlayerWeaponController : NetworkBehaviour
     /// <summary>현재 재장전 진행 여부.</summary>
     public bool IsReloading => IsOwner ? _isOwnerReloading : _isServerReloading;
 
+    /// <summary>현재 로컬 소유자가 수류탄 투척을 위해 조준 홀드 중인지 여부.</summary>
+    public bool IsGrenadeAiming => _isGrenadeAiming;
+
     // ***************************************************************
     // MonoBehaviour
     // ***************************************************************
@@ -235,6 +251,7 @@ public class PlayerWeaponController : NetworkBehaviour
         _playerAnim = GetComponent<PlayerAnim>();
         _weaponInventory = GetComponent<PlayerWeaponInventory>();
         _playerHealth = GetComponent<PlayerHealth>();
+        _trajectoryPreview = GetComponent<GrenadeTrajectoryPreview>();
         if (weaponAudioSource == null)
         {
             weaponAudioSource = GetComponent<AudioSource>();
@@ -367,6 +384,24 @@ public class PlayerWeaponController : NetworkBehaviour
             return;
         }
 
+        if (weaponData.IsThrowable)
+        {
+            int throwSlotIndex = (int)activeSlot;
+            bool canAim = _isFireHeld
+                && !_grenadeAimCanceled
+                && throwSlotIndex >= 0
+                && throwSlotIndex < _ownerStates.Length
+                && _ownerStates[throwSlotIndex].currentAmmo > 0
+                && Time.time >= _ownerStates[throwSlotIndex].nextFireTime;
+            if (canAim && !_isGrenadeAiming)
+            {
+                _isGrenadeAiming = true;
+                _playerAnim.SetGrenadeAiming(true);
+            }
+            _fireRequested = false;
+            return;
+        }
+
         if (!weaponData.IsAutomatic && !_fireRequested) return;
 
         int slotIndex = (int)activeSlot;
@@ -443,6 +478,48 @@ public class PlayerWeaponController : NetworkBehaviour
 
         bool isAds = _playerController != null && _playerController.IsAdsActive;
         RequestFireServerRpc(clientOrigin, aimPoint, activeSlot, activeWeaponId, attackVariant, isAds);
+    }
+
+    private void LateUpdate()
+    {
+        if (!IsOwner || !IsSpawned) return;
+
+        if (!_isGrenadeAiming)
+        {
+            if (_trajectoryPreview != null && _trajectoryPreview.IsVisible)
+            {
+                _trajectoryPreview.HideTrajectory();
+            }
+            return;
+        }
+
+        WeaponDataSO weaponData = _weaponInventory != null ? _weaponInventory.EquippedWeaponData : null;
+        int slotIndex = (int)EWeaponSlotType.Throwable;
+        bool isInvalid = (_playerHealth != null && _playerHealth.IsDead)
+            || (_playerController != null && _playerController.IsRagdollIdle)
+            || _weaponInventory == null
+            || _weaponInventory.ActiveSlot != EWeaponSlotType.Throwable
+            || weaponData == null
+            || !weaponData.IsThrowable
+            || (_playerAnim != null && _playerAnim.IsSwappingWeapon)
+            || _ownerStates == null
+            || slotIndex >= _ownerStates.Length
+            || _ownerStates[slotIndex].currentAmmo <= 0;
+        if (isInvalid)
+        {
+            CancelGrenadeAim();
+            return;
+        }
+
+        if (_trajectoryPreview == null)
+        {
+            _trajectoryPreview = gameObject.AddComponent<GrenadeTrajectoryPreview>();
+        }
+
+        Vector3 aimDirection = Camera.main != null ? Camera.main.transform.forward : transform.forward;
+        Vector3 spawnOrigin = ComputeGrenadeSpawnOrigin(weaponData, aimDirection);
+        Vector3 throwVelocity = NetworkGrenade.ComputeThrowVelocity(aimDirection, weaponData.ThrowForce, weaponData.ThrowUpwardBias);
+        _trajectoryPreview.ShowTrajectory(spawnOrigin, throwVelocity, transform);
     }
 
     private void OnDrawGizmos()
@@ -557,6 +634,9 @@ public class PlayerWeaponController : NetworkBehaviour
     {
         _isFireHeld = false;
         _fireRequested = false;
+        _isGrenadeAiming = false;
+        _grenadeAimCanceled = false;
+        _trajectoryPreview?.HideTrajectory();
         _isOwnerReloading = false;
         _isOwnerShellReloading = false;
         _isPendingShellReloadFire = false;
@@ -577,6 +657,67 @@ public class PlayerWeaponController : NetworkBehaviour
         {
             _isFireHeld = false;
             _fireRequested = false;
+            CancelGrenadeAim();
+            return;
+        }
+
+        if (_weaponInventory != null && _weaponInventory.ActiveSlot == EWeaponSlotType.Throwable)
+        {
+            WeaponDataSO weaponData = _weaponInventory.EquippedWeaponData;
+            int slotIndex = (int)EWeaponSlotType.Throwable;
+            bool hasGrenade = weaponData != null
+                && weaponData.IsThrowable
+                && _ownerStates != null
+                && slotIndex < _ownerStates.Length
+                && _ownerStates[slotIndex].currentAmmo > 0;
+
+            if (isHeld)
+            {
+                if (!_isFireHeld)
+                {
+                    _grenadeAimCanceled = false;
+                }
+                _isFireHeld = true;
+
+                if (!_grenadeAimCanceled
+                    && !_isGrenadeAiming
+                    && hasGrenade
+                    && !(_playerAnim != null && _playerAnim.IsSwappingWeapon)
+                    && Time.time >= _ownerStates[slotIndex].nextFireTime)
+                {
+                    _isGrenadeAiming = true;
+                    _playerAnim?.SetGrenadeAiming(true);
+                }
+                return;
+            }
+
+            _isFireHeld = false;
+            _fireRequested = false;
+
+            if (_isGrenadeAiming)
+            {
+                _isGrenadeAiming = false;
+                _trajectoryPreview?.HideTrajectory();
+                _playerAnim?.SetGrenadeAiming(false);
+
+                if (hasGrenade
+                    && !(_playerAnim != null && _playerAnim.IsSwappingWeapon)
+                    && Time.time >= _ownerStates[slotIndex].nextFireTime)
+                {
+                    string weaponId = _weaponInventory.EquippedWeaponId;
+                    _ownerStates[slotIndex].nextFireTime = Time.time + weaponData.AttackCooldown;
+                    _ownerStates[slotIndex].currentAmmo--;
+                    OnAmmoChanged?.Invoke((EWeaponType)EWeaponSlotType.Throwable, _ownerStates[slotIndex].currentAmmo, 0);
+
+                    _playerAnim?.TriggerAttack(0);
+                    PlayShotSound(weaponId);
+
+                    Vector3 aimDir = Camera.main != null ? Camera.main.transform.forward : transform.forward;
+                    RequestThrowGrenadeServerRpc(aimDir, weaponId);
+                }
+            }
+
+            _grenadeAimCanceled = false;
             return;
         }
 
@@ -587,11 +728,31 @@ public class PlayerWeaponController : NetworkBehaviour
         _isFireHeld = isHeld;
     }
 
+    /// <summary>진행 중인 수류탄 조준과 포물선 궤적 미리보기를 즉시 취소한다.</summary>
+    public void CancelGrenadeAim()
+    {
+        if (_isGrenadeAiming)
+        {
+            _isGrenadeAiming = false;
+            if (_isFireHeld)
+            {
+                _grenadeAimCanceled = true;
+            }
+            _playerAnim?.SetGrenadeAiming(false);
+        }
+
+        _trajectoryPreview?.HideTrajectory();
+    }
+
     /// <summary>진행 중인 사격 입력, 재장전 타이머 및 근접 콤보 상태를 즉시 초기화한다.</summary>
     public void CancelCombatActions()
     {
         _isFireHeld = false;
         _fireRequested = false;
+        _isGrenadeAiming = false;
+        _grenadeAimCanceled = false;
+        _trajectoryPreview?.HideTrajectory();
+        _playerAnim?.SetGrenadeAiming(false);
         _isOwnerReloading = false;
         _isOwnerShellReloading = false;
         _isPendingShellReloadFire = false;
@@ -611,7 +772,7 @@ public class PlayerWeaponController : NetworkBehaviour
         EWeaponSlotType activeSlot = _weaponInventory.ActiveSlot;
         string activeWeaponId = _weaponInventory.EquippedWeaponId;
         WeaponDataSO weaponData = _weaponInventory.EquippedWeaponData;
-        if (weaponData == null || !weaponData.UsesAmmo) return;
+        if (weaponData == null || !weaponData.UsesAmmo || weaponData.IsThrowable) return;
 
         int slotIndex = (int)activeSlot;
         if (slotIndex < 0 || slotIndex >= _ownerStates.Length) return;
@@ -724,7 +885,7 @@ public class PlayerWeaponController : NetworkBehaviour
         if (_playerController != null && _playerController.IsRagdollIdle) return;
 
         WeaponDataSO weaponData = _weaponInventory.EquippedWeaponData;
-        if (weaponData == null || !weaponData.UsesAmmo) return;
+        if (weaponData == null || !weaponData.UsesAmmo || weaponData.IsThrowable) return;
         if (_playerAnim.IsSwappingWeapon || !_playerAnim.IsReloadAnimationActive) return;
 
         AudioClip reloadClip = weaponData.GetReloadClip(step);
@@ -742,7 +903,7 @@ public class PlayerWeaponController : NetworkBehaviour
         if (_playerController != null && _playerController.IsRagdollIdle) return;
 
         WeaponDataSO weaponData = _weaponInventory.EquippedWeaponData;
-        if (weaponData == null || !weaponData.UsesAmmo) return;
+        if (weaponData == null || !weaponData.UsesAmmo || weaponData.IsThrowable) return;
         if (!_playerAnim.IsDrawAnimationActive) return;
 
         AudioClip drawClip = weaponData.DrawSoundClip;
@@ -1096,6 +1257,72 @@ public class PlayerWeaponController : NetworkBehaviour
         }
     }
 
+    /// <summary>서버에서 수류탄 보유 개수와 생존/숨김 상태를 검증한 뒤 수류탄 투척체를 스폰하고 물리 투척을 실행한다.</summary>
+    [ServerRpc]
+    private void RequestThrowGrenadeServerRpc(Vector3 aimDirection, string weaponId, Channel channel = Channel.Reliable)
+    {
+        if (_playerHealth != null && _playerHealth.IsDead) return;
+        if (_playerController != null && _playerController.IsRagdollIdle) return;
+        if (_weaponInventory == null || _weaponInventory.ActiveSlot != EWeaponSlotType.Throwable) return;
+        if (!string.Equals(_weaponInventory.EquippedWeaponId, weaponId, StringComparison.Ordinal)) return;
+        if (!IsFiniteVector(aimDirection)) return;
+
+        WeaponDataSO weaponData = _weaponInventory.EquippedWeaponData;
+        if (weaponData == null || !weaponData.IsThrowable || weaponData.GrenadePrefab == null) return;
+
+        int slotIndex = (int)EWeaponSlotType.Throwable;
+        if (slotIndex < 0 || slotIndex >= _serverNextFireTimes.Length) return;
+        if (Time.time < _serverNextFireTimes[slotIndex] - FireRateTolerance) return;
+
+        if (!_weaponInventory.TryConsumeThrowable(weaponId, out WeaponSlotState updatedState, out _))
+        {
+            SyncAmmoTargetRpc(Owner, EWeaponSlotType.Throwable, updatedState.CurrentAmmo, updatedState.ReserveAmmo);
+            return;
+        }
+
+        SyncAmmoTargetRpc(Owner, EWeaponSlotType.Throwable, updatedState.CurrentAmmo, updatedState.ReserveAmmo);
+        _serverNextFireTimes[slotIndex] = Time.time + weaponData.AttackCooldown;
+
+        Vector3 safeAimDir = aimDirection.sqrMagnitude > 0.0001f ? aimDirection.normalized : transform.forward;
+        Vector3 spawnOrigin = ComputeGrenadeSpawnOrigin(weaponData, safeAimDir);
+        Vector3 throwVelocity = NetworkGrenade.ComputeThrowVelocity(safeAimDir, weaponData.ThrowForce, weaponData.ThrowUpwardBias);
+        float maxTorque = weaponData.ThrowRandomTorque;
+        Vector3 launchTorque = new Vector3(
+            UnityEngine.Random.Range(-maxTorque, maxTorque),
+            UnityEngine.Random.Range(-maxTorque, maxTorque),
+            UnityEngine.Random.Range(-maxTorque, maxTorque));
+
+        NetworkGrenade grenade = Instantiate(
+            weaponData.GrenadePrefab,
+            spawnOrigin,
+            Quaternion.LookRotation(safeAimDir, Vector3.up));
+        ServerManager.Spawn(grenade.NetworkObject);
+        grenade.Initialize(
+            NetworkObject,
+            Owner,
+            throwVelocity,
+            launchTorque,
+            weaponData.GrenadeFuseTime,
+            weaponData.Damage,
+            weaponData.ExplosionMinDamage,
+            weaponData.ExplosionRadius);
+
+        BroadcastThrowGrenadeObserversRpc(weaponId);
+    }
+
+    /// <summary>원격 클라이언트에 수류탄 투척 애니메이션과 투척 사운드를 전파한다.</summary>
+    [ObserversRpc]
+    private void BroadcastThrowGrenadeObserversRpc(string weaponId)
+    {
+        if (_playerHealth != null && _playerHealth.IsDead) return;
+
+        if (!IsOwner)
+        {
+            _playerAnim?.TriggerAttack(0);
+            PlayShotSound(weaponId);
+        }
+    }
+
     /// <summary>서버에서 재장전 타이머 또는 샷건 1발 장전 상태를 시작한다.</summary>
     [ServerRpc]
     private void RequestReloadServerRpc(EWeaponSlotType slot, string weaponId, Channel channel = Channel.Reliable)
@@ -1106,7 +1333,7 @@ public class PlayerWeaponController : NetworkBehaviour
         if (_isServerReloading) return;
 
         WeaponDataSO weaponData = _weaponInventory.EquippedWeaponData;
-        if (weaponData == null || !weaponData.UsesAmmo) return;
+        if (weaponData == null || !weaponData.UsesAmmo || weaponData.IsThrowable) return;
 
         WeaponSlotState slotState = _weaponInventory.GetSlotState(slot);
         if (slotState.IsEmpty || slotState.CurrentAmmo >= weaponData.MaxAmmo || slotState.ReserveAmmo <= 0) return;
@@ -1245,6 +1472,9 @@ public class PlayerWeaponController : NetworkBehaviour
         _isServerReloading = false;
         _isServerShellReloading = false;
         _fireRequested = false;
+        _isGrenadeAiming = false;
+        _grenadeAimCanceled = false;
+        _trajectoryPreview?.HideTrajectory();
 
         if (state.Slot != EWeaponSlotType.Melee)
         {
@@ -1326,6 +1556,40 @@ public class PlayerWeaponController : NetworkBehaviour
     private static bool IsFiniteVector(Vector3 v)
     {
         return float.IsFinite(v.x) && float.IsFinite(v.y) && float.IsFinite(v.z);
+    }
+
+    /// <summary>캐릭터 손/어깨 앞쪽에서 벽 관통이 없는 수류탄 투척 시작 월드 좌표를 계산한다.</summary>
+    private Vector3 ComputeGrenadeSpawnOrigin(WeaponDataSO weaponData, Vector3 aimDirection)
+    {
+        Vector3 baseOrigin = _playerController != null
+            ? _playerController.GetFireOrigin()
+            : transform.position + Vector3.up * 0.45f;
+        Vector3 dir = aimDirection.sqrMagnitude > 0.0001f ? aimDirection.normalized : transform.forward;
+        Vector3 right = Vector3.Cross(Vector3.up, dir);
+        right = right.sqrMagnitude > 0.0001f ? right.normalized : transform.right;
+
+        Vector3 offset = dir * weaponData.ThrowSpawnForwardOffset
+            + right * weaponData.ThrowSpawnRightOffset
+            + Vector3.up * weaponData.ThrowSpawnUpOffset;
+        float offsetLength = offset.magnitude;
+        if (offsetLength <= 0.0001f) return baseOrigin;
+
+        Vector3 offsetDir = offset / offsetLength;
+        float castRadius = weaponData.GrenadePrefab != null ? weaponData.GrenadePrefab.ColliderRadius : 0.07f;
+        if (Physics.SphereCast(
+            baseOrigin,
+            Mathf.Max(0.02f, castRadius),
+            offsetDir,
+            out RaycastHit wallHit,
+            offsetLength,
+            throwSpawnObstacleMask,
+            QueryTriggerInteraction.Ignore))
+        {
+            float safeDist = Mathf.Max(0.05f, wallHit.distance - 0.04f);
+            return baseOrigin + offsetDir * safeDist;
+        }
+
+        return baseOrigin + offset;
     }
 
     /// <summary>거리 감쇠 레벨 번호(1~4)를 디버그 로그 표시 문자열(<c>1</c>~<c>4+</c>)로 변환한다.</summary>

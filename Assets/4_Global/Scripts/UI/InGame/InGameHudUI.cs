@@ -436,6 +436,13 @@ public class InGameHudUI : MonoBehaviour
             return;
         }
 
+        if (weaponData.IsThrowable)
+        {
+            ammoCountText.text = $"x {currentAmmo}";
+            ammoCountText.color = currentAmmo <= 0 ? emptyAmmoColor : normalAmmoColor;
+            return;
+        }
+
         ammoCountText.text = $"{currentAmmo} / {reserveAmmo}";
         ammoCountText.color = currentAmmo <= 0 ? emptyAmmoColor : normalAmmoColor;
     }

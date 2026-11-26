@@ -15,7 +15,10 @@ public class PlayerController : PropControllerBase
     // ***************************************************************
 
     private const float DefaultTpsViewOffsetY = 0.45f; // TpsViewPos가 없을 때 사용할 기본 추적 높이
-    private const int DefaultWallRetractLayerMask = (1 << 0) | (1 << 3); // Default, Ground
+    private const int DefaultWallRetractLayerMask = (1 << 0) | (1 << 3) | (1 << 8); // Default, Ground, Wall
+    private const float InteractRayRadius = 0.25f; // 문/창문 크로스헤어 탐색 구체 반지름 (미터)
+    private const float InteractCameraRangeBonus = 4.5f; // 3인칭 카메라와 캐릭터 사이 거리 보정 (미터)
+    private const float InteractFallbackRadius = 3.2f; // 크로스헤어 미적중 시 주변 근접 탐색 반경 (미터)
 
     // ***************************************************************
     // Fields
@@ -71,6 +74,9 @@ public class PlayerController : PropControllerBase
 
     /// <summary>크로스헤어 레이캐스트 결과를 저장하는 재사용 버퍼.</summary>
     private readonly RaycastHit[] _aimHits = new RaycastHit[16];
+
+    /// <summary>주변 상호작용 대상 탐색 결과를 저장하는 재사용 버퍼.</summary>
+    private readonly Collider[] _interactOverlaps = new Collider[24];
 
     /// <summary>로컬 플레이어 입력 액션 에셋 인스턴스.</summary>
     private PlayerControls _inputActions;
@@ -187,6 +193,7 @@ public class PlayerController : PropControllerBase
         if (enableWallRetract
             && equippedWeapon != null
             && equippedWeapon.Category != EWeaponCategory.Melee
+            && equippedWeapon.Category != EWeaponCategory.Throwable
             && muzzlePoint != null)
         {
             Vector3 restPivotPos = aimPitchTarget.position;
@@ -323,6 +330,7 @@ public class PlayerController : PropControllerBase
         _inputActions.Player.DropWeapon.started += OnDropWeaponStarted;
         _inputActions.Player.Aim.started += OnAimStarted;
         _inputActions.Player.Aim.canceled += OnAimCanceled;
+        _inputActions.Player.Interact.started += OnInteractStarted;
 
         _cameraAnchor = new GameObject("CameraAnchor").transform;
         _cameraAnchor.SetParent(transform, false);
@@ -453,6 +461,7 @@ public class PlayerController : PropControllerBase
         _inputActions.Player.DropWeapon.started -= OnDropWeaponStarted;
         _inputActions.Player.Aim.started -= OnAimStarted;
         _inputActions.Player.Aim.canceled -= OnAimCanceled;
+        _inputActions.Player.Interact.started -= OnInteractStarted;
         _inputActions.Player.Disable();
         _inputActions.Dispose();
         _inputActions = null;
@@ -755,6 +764,7 @@ public class PlayerController : PropControllerBase
             }
 
             _fpsAdsController?.ExitAds();
+            _weaponController?.CancelGrenadeAim();
             _weaponController?.SetFireInput(false);
             _weaponInventory.TrySelectSlot(targetSlot);
             return;
@@ -798,8 +808,86 @@ public class PlayerController : PropControllerBase
         if (Keyboard.current != null && Keyboard.current.altKey.isPressed) return;
 
         _fpsAdsController?.ExitAds();
+        _weaponController?.CancelGrenadeAim();
         _weaponController?.SetFireInput(false);
         _weaponInventory.TryPickupNearbyWeapon();
+    }
+
+    /// <summary><c>E</c> 입력 시 조준 방향 또는 근접 범위의 문·창문 개폐를 요청한다.</summary>
+    private void OnInteractStarted(InputAction.CallbackContext context)
+    {
+        if (!IsOwner || IsDead) return;
+
+        Vector3 playerPos = transform.position;
+        NetworkHingedPortal bestPortal = null;
+
+        Camera mainCamera = Camera.main;
+        if (mainCamera != null)
+        {
+            Ray ray = mainCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+            int hitCount = Physics.SphereCastNonAlloc(
+                ray,
+                InteractRayRadius,
+                _aimHits,
+                InteractFallbackRadius + InteractCameraRangeBonus,
+                ~0,
+                QueryTriggerInteraction.Ignore);
+
+            float closestRayDist = float.MaxValue;
+            for (int i = 0; i < hitCount; i++)
+            {
+                Collider col = _aimHits[i].collider;
+                if (col == null) continue;
+
+                NetworkHingedPortal candidate = col.GetComponentInParent<NetworkHingedPortal>();
+                if (candidate == null && col.transform.parent != null)
+                {
+                    candidate = col.transform.parent.GetComponentInChildren<NetworkHingedPortal>();
+                }
+                if (candidate == null || !candidate.IsSpawned) continue;
+
+                float playerDist = Vector3.Distance(playerPos, candidate.transform.position);
+                if (playerDist > candidate.InteractRange) continue;
+
+                if (_aimHits[i].distance < closestRayDist)
+                {
+                    closestRayDist = _aimHits[i].distance;
+                    bestPortal = candidate;
+                }
+            }
+        }
+
+        if (bestPortal == null)
+        {
+            int count = Physics.OverlapSphereNonAlloc(
+                playerPos + Vector3.up * 0.9f,
+                InteractFallbackRadius,
+                _interactOverlaps,
+                ~0,
+                QueryTriggerInteraction.Ignore);
+
+            float closestDist = float.MaxValue;
+            for (int i = 0; i < count; i++)
+            {
+                Collider col = _interactOverlaps[i];
+                if (col == null) continue;
+
+                NetworkHingedPortal candidate = col.GetComponentInParent<NetworkHingedPortal>();
+                if (candidate == null && col.transform.parent != null)
+                {
+                    candidate = col.transform.parent.GetComponentInChildren<NetworkHingedPortal>();
+                }
+                if (candidate == null || !candidate.IsSpawned) continue;
+
+                float dist = Vector3.Distance(playerPos, candidate.transform.position);
+                if (dist > candidate.InteractRange || dist >= closestDist) continue;
+
+                closestDist = dist;
+                bestPortal = candidate;
+            }
+        }
+
+        bestPortal?.RequestToggle();
     }
 
     /// <summary><c>Alt + G</c> 입력 시 현재 장착 무기를 바닥에 버리도록 요청한다.</summary>
@@ -809,15 +897,24 @@ public class PlayerController : PropControllerBase
         if (_weaponInventory.ActiveSlot == EWeaponSlotType.Unarmed) return;
 
         _fpsAdsController?.ExitAds();
+        _weaponController?.CancelGrenadeAim();
         _weaponController?.SetFireInput(false);
         _EplayerState = _isGrounded ? EPlayerState.Idle : EPlayerState.Air;
         _weaponInventory.TryDropCurrentWeapon();
     }
 
-    /// <summary>마우스 우클릭 입력 시작 시 토글 또는 홀드 방식에 따라 1인칭 정조준을 전환한다.</summary>
+    /// <summary>마우스 우클릭 입력 시작 시 수류탄 조준 취소 또는 1인칭 정조준을 전환한다.</summary>
     private void OnAimStarted(InputAction.CallbackContext context)
     {
-        if (!IsOwner || _fpsAdsController == null) return;
+        if (!IsOwner) return;
+
+        if (_weaponController != null && _weaponController.IsGrenadeAiming)
+        {
+            _weaponController.CancelGrenadeAim();
+            return;
+        }
+
+        if (_fpsAdsController == null) return;
 
         _isAimHeld = true;
 

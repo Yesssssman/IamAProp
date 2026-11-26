@@ -15,13 +15,14 @@ public struct WeaponColliderBox
     public Vector3 rotation;
 }
 
-/// <summary>키 입력(1~4) 기준 무기 슬롯 카테고리.</summary>
+/// <summary>키 입력(1~5) 기준 무기 슬롯 카테고리.</summary>
 public enum EWeaponSlotType : byte
 {
     Unarmed = 0, // 1번: 맨손
     Melee = 1, // 2번: 근접무기
     Secondary = 2, // 3번: 보조무기
-    Primary = 3 // 4번: 주무기
+    Primary = 3, // 4번: 주무기
+    Throwable = 4 // 5번: 투척/특수무기
 }
 
 /// <summary>개별 무기 인스턴스의 식별자와 탄창/예비 탄약 상태.</summary>

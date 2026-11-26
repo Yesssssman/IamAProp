@@ -142,11 +142,11 @@ MonoBehaviour:
   isShellReload: 1
   shellReloadStartDuration: 1.2333333
   shellInsertInterval: 0.5833333
-  shotClip: {fileID: 8300000, guid: d44826b5c59704bab8c38530fe916d45, type: 3}
+  shotClip: {fileID: 8300000, guid: 9f3b44f5873644f3ebbf6d0c1172402b, type: 3}
   reloadClips:
-  - {fileID: 8300000, guid: 3ef3a2f0f0267446aa96afa400af2aa6, type: 3}
-  - {fileID: 8300000, guid: fa9566860d7d148339f3ce24934abd9e, type: 3}
-  - {fileID: 8300000, guid: 0898f36efc04c4b9aafb88dbc13238fa, type: 3}
+  - {fileID: 8300000, guid: aece61f4651184bc78afcc002981c9a4, type: 3}
+  - {fileID: 8300000, guid: 91c3f457d7fe349c7b6f9b1c66de2109, type: 3}
+  - {fileID: 8300000, guid: a7ee3098a9ccb48e692b0b5b4ec74efe, type: 3}
   shotVolume: 1
   reloadVolume: 1
   recoilPitch: 4.2

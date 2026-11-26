@@ -427,6 +427,8 @@ GameObject:
   - component: {fileID: 2730633786416741621}
   - component: {fileID: 7552550982053691732}
   - component: {fileID: 7924284824165369166}
+  - component: {fileID: 7719633408055972652}
+  - component: {fileID: 8942030715065213378}
   - component: {fileID: 8337609754389795046}
   m_Layer: 0
   m_Name: Visuals
@@ -487,6 +489,121 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerScript
   hand: {fileID: 6265542592711625890}
+  grenadeThrowPitch: 30
+--- !u!82 &7719633408055972652
+AudioSource:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4685788816961294026}
+  m_Enabled: 1
+  serializedVersion: 4
+  OutputAudioMixerGroup: {fileID: 0}
+  m_audioClip: {fileID: 0}
+  m_Resource: {fileID: 0}
+  m_PlayOnAwake: 0
+  m_Volume: 1
+  m_Pitch: 1
+  Loop: 0
+  Mute: 0
+  Spatialize: 0
+  SpatializePostEffects: 0
+  Priority: 128
+  DopplerLevel: 0
+  MinDistance: 2
+  MaxDistance: 40
+  Pan2D: 0
+  rolloffMode: 0
+  BypassEffects: 0
+  BypassListenerEffects: 0
+  BypassReverbZones: 0
+  rolloffCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  panLevelCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  spreadCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  reverbZoneMixCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+--- !u!114 &8942030715065213378
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4685788816961294026}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1c8d62229b0a443e8851beaec13a3a8e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StepSoundTest
+  stepClip: {fileID: 8300000, guid: f8016a521edcf41b29e71cfc54480368, type: 3}
+  jumpClip: {fileID: 8300000, guid: 9b5e0f6e3dbe24a99a2781cf5a97a99e, type: 3}
+  minStepInterval: 0.12
+  minStepClipWeight: 0.2
+  minJumpInterval: 0.15
 --- !u!114 &8337609754389795046
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -681,6 +798,7 @@ GameObject:
   - component: {fileID: 6246328158675017490}
   - component: {fileID: 6175173369040991702}
   - component: {fileID: 7146981076252611625}
+  - component: {fileID: 131418811975795110}
   m_Layer: 6
   m_Name: Chest
   m_TagString: Player
@@ -806,7 +924,7 @@ MonoBehaviour:
   _teleportThreshold: 1
   <PrefabId>k__BackingField: 0
   <SpawnableCollectionId>k__BackingField: 0
-  <AssetPathHash>k__BackingField: 2156358739124892356
+  <AssetPathHash>k__BackingField: 13703071311373223167
   SceneId: 0
   SerializedTransformProperties:
     Position: {x: 0, y: 0, z: 0}
@@ -872,6 +990,16 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 201
   defaultAimDistance: 100
+  enableWallRetract: 1
+  wallRetractLayerMask:
+    serializedVersion: 2
+    m_Bits: 265
+  wallRetractCheckRadius: 0.04
+  wallRetractClearance: 0.08
+  wallRetractMaxDistance: 0.65
+  wallRetractSpeed: 18
+  adsEnterWallRetractThreshold: 0.05
+  adsExitWallRetractThreshold: 0.12
 --- !u!114 &7493107775755073766
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -931,11 +1059,16 @@ MonoBehaviour:
   _networkObjectCache: {fileID: 4765010759104181973}
   hitLayerMask:
     serializedVersion: 2
-    m_Bits: 201
+    m_Bits: 457
   shotSphereRadius: 0.05
   debugRayDuration: 1.5
   drawShotGizmos: 1
+  maxOriginOffset: 2.5
+  logDamageFalloffDebug: 1
   weaponAudioSource: {fileID: 2580881569384789274}
+  throwSpawnObstacleMask:
+    serializedVersion: 2
+    m_Bits: 265
 --- !u!114 &7146981076252611625
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -961,7 +1094,32 @@ MonoBehaviour:
   dropRandomTorque: 2.5
   dropObstacleMask:
     serializedVersion: 2
-    m_Bits: 9
+    m_Bits: 265
+--- !u!114 &131418811975795110
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6702709510663897090}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10d9e6e791d1b4dbf87631a07cf683d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GrenadeTrajectoryPreview
+  sampleCount: 40
+  timeStep: 0.05
+  castRadius: 0.07
+  collisionMask:
+    serializedVersion: 2
+    m_Bits: 329
+  lineWidth: 0.03
+  lineStartColor: {r: 1, g: 0.88, b: 0.25, a: 0.95}
+  lineEndColor: {r: 1, g: 0.35, b: 0.12, a: 0.4}
+  lineMaterial: {fileID: 0}
+  showImpactMarker: 1
+  impactMarkerScale: 0.22
+  impactMarkerColor: {r: 1, g: 0.32, b: 0.12, a: 0.85}
 --- !u!1 &7452713500753112539
 GameObject:
   m_ObjectHideFlags: 0

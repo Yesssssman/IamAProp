@@ -17,7 +17,7 @@ public class WorldWeaponPickup : NetworkBehaviour
     private const float MinColliderAxis = 0.025f; // 얇은 총열/칼날이 바닥을 관통하지 않도록 보장하는 최소 콜라이더 두께 (미터)
     private const float FallbackMinColliderAxis = 0.12f; // 커스텀 콜라이더가 없을 때 자동 생성하는 최소 박스 두께 (미터)
     private const int PickupLayer = 2; // Ignore Raycast (사격 히트스캔 제외, 바닥 충돌 유지)
-    private const int DefaultTerrainCollisionMask = (1 << 0) | (1 << 3); // Default, Ground (지형/벽만 물리 충돌 허용)
+    private const int DefaultTerrainCollisionMask = (1 << 0) | (1 << 3) | (1 << 8); // Default, Ground, Wall (지형/벽만 물리 충돌 허용)
     private const float SettleSpeedSqrThreshold = 0.0025f; // 정지 상태로 판정할 선속도·각속도 제곱 임계값
     private const float SettleRequiredDuration = 0.25f; // 바닥 안착 후 키네마틱으로 고정하기까지 필요한 정지 유지 시간 (초)
 
@@ -104,8 +104,8 @@ public class WorldWeaponPickup : NetworkBehaviour
         _rb = GetComponent<Rigidbody>();
         gameObject.layer = PickupLayer;
 
-        // 지형/벽(Default, Ground)과만 물리 충돌하도록 나머지 레이어(플레이어/히트박스 등)를 제외한다.
-        int terrainMask = LayerMask.GetMask("Default", "Ground");
+        // 지형/벽(Default, Ground, Wall)과만 물리 충돌하도록 나머지 레이어(플레이어/히트박스 등)를 제외한다.
+        int terrainMask = LayerMask.GetMask("Default", "Ground", "Wall");
         if (terrainMask == 0)
         {
             terrainMask = DefaultTerrainCollisionMask;
@@ -303,6 +303,11 @@ public class WorldWeaponPickup : NetworkBehaviour
         foreach (DroppedMagazine mag in _visualInstance.GetComponentsInChildren<DroppedMagazine>(true))
         {
             mag.enabled = false;
+        }
+
+        foreach (GrenadeScript grenade in _visualInstance.GetComponentsInChildren<GrenadeScript>(true))
+        {
+            grenade.enabled = false;
         }
 
         foreach (Rigidbody childRb in _visualInstance.GetComponentsInChildren<Rigidbody>(true))

@@ -102,6 +102,9 @@ public struct WeaponSlotBaseHandClips
 
     /// <summary>1발 장전 마무리 상태 기준 클립.</summary>
     public AnimationClip reloadFinishClip;
+
+    /// <summary>투척무기 조준 홀드 상태 기준 클립.</summary>
+    public AnimationClip grenadeAimClip;
 }
 
 /// <summary>무기 슬롯 및 하이드(맨손) 모드별 공통 평면 이동속도 설정 (초당 월드 단위).</summary>
@@ -124,13 +127,18 @@ public struct PropMoveSpeedSettings
     [Min(0f)]
     public float primary;
 
+    /// <summary>5번 슬롯(투척무기 모드) 평면 이동속도 (초당 월드 단위).</summary>
+    [Min(0f)]
+    public float throwable;
+
     /// <summary>모드별 기본 평면 이동속도 프리셋.</summary>
     public static PropMoveSpeedSettings Default => new PropMoveSpeedSettings
     {
         hideUnarmed = 3.0f,
         melee = 3.0f,
         secondary = 2.4f,
-        primary = 2.1f
+        primary = 2.1f,
+        throwable = 2.8f
     };
 
     /// <summary><paramref name="slot"/>에 해당하는 평면 이동속도를 반환한다.</summary>
@@ -142,6 +150,7 @@ public struct PropMoveSpeedSettings
             EWeaponSlotType.Melee => melee,
             EWeaponSlotType.Secondary => secondary,
             EWeaponSlotType.Primary => primary,
+            EWeaponSlotType.Throwable => throwable > 0f ? throwable : melee,
             _ => hideUnarmed
         };
     }

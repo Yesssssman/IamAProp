@@ -7,7 +7,8 @@ public enum EWeaponType
     Hide = 0,
     KnifeMode = 1,
     Pistol = 2,
-    Ak = 3
+    Ak = 3,
+    Grenade = 4
 }
 
 /// <summary>무기 종류별 장착 프리팹, 애니메이터 컨트롤러, 그립 오프셋 및 재장전 클립 설정.</summary>

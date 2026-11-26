@@ -6,7 +6,8 @@ public enum EWeaponCategory
 {
     Primary,
     Secondary,
-    Melee
+    Melee,
+    Throwable
 }
 
 /// <summary>산탄총 등 다중 펠릿 무기의 1회 발사당 고정 탄착군 각도 프리셋.</summary>
@@ -161,6 +162,9 @@ public class WeaponDataSO : ScriptableObject
 
     /// <summary>1발씩 장전하는 무기의 재장전 마무리 상태에 오버라이드할 클립.</summary>
     [SerializeField] private AnimationClip handReloadFinishClip;
+
+    /// <summary>투척무기 조준 홀드 상태에 오버라이드할 클립.</summary>
+    [SerializeField] private AnimationClip handGrenadeAimClip;
 
     /// <summary>손 발사 클립의 총 프레임 수.</summary>
     [Header("총기 프레임 동기화")]
@@ -327,6 +331,43 @@ public class WeaponDataSO : ScriptableObject
     [Header("이펙트")]
     [SerializeField] private ParticleSystem casingParticlePrefab;
 
+    /// <summary>투척 시 서버에서 스폰할 네트워크 수류탄 프리팹.</summary>
+    [Header("투척무기 설정")]
+    [SerializeField] private NetworkGrenade grenadePrefab;
+
+    /// <summary>투척 초기 속력 (m/s).</summary>
+    [Min(0.1f)]
+    [SerializeField] private float throwForce = 14f;
+
+    /// <summary>조준 방향에 더할 상방 각도 보정 비율.</summary>
+    [SerializeField] private float throwUpwardBias = 0.25f;
+
+    /// <summary>투척 시 수류탄 각 축에 적용할 랜덤 회전 각속도 최대 크기 (rad/s).</summary>
+    [Min(0f)]
+    [SerializeField] private float throwRandomTorque = 8f;
+
+    /// <summary>투척 후 폭발까지 대기하는 신관 시간 (초 단위).</summary>
+    [Min(0.1f)]
+    [SerializeField] private float grenadeFuseTime = 3f;
+
+    /// <summary>폭발 피해 반경 (미터).</summary>
+    [Min(0.1f)]
+    [SerializeField] private float explosionRadius = 5f;
+
+    /// <summary>폭발 반경 끝자락에 적용할 최소 데미지 (중심 최대 데미지는 <see cref="damage"/> 사용).</summary>
+    [Min(0f)]
+    [SerializeField] private float explosionMinDamage = 25f;
+
+    /// <summary>투척 원점 기준 전방 스폰 오프셋 (미터).</summary>
+    [Min(0f)]
+    [SerializeField] private float throwSpawnForwardOffset = 0.45f;
+
+    /// <summary>투척 원점 기준 우측(오른손/어깨) 스폰 오프셋 (미터).</summary>
+    [SerializeField] private float throwSpawnRightOffset = 0.15f;
+
+    /// <summary>투척 원점 기준 상방 스폰 오프셋 (미터).</summary>
+    [SerializeField] private float throwSpawnUpOffset = 0.1f;
+
     // ***************************************************************
     // Properties
     // ***************************************************************
@@ -408,6 +449,9 @@ public class WeaponDataSO : ScriptableObject
 
     /// <summary>손 1발 장전 마무리 오버라이드 클립.</summary>
     public AnimationClip HandReloadFinishClip => handReloadFinishClip;
+
+    /// <summary>투척무기 조준 홀드 오버라이드 클립.</summary>
+    public AnimationClip HandGrenadeAimClip => handGrenadeAimClip;
 
     /// <summary>손 발사 클립 총 프레임 수.</summary>
     public float HandShotFrames => handShotFrames;
@@ -543,6 +587,39 @@ public class WeaponDataSO : ScriptableObject
 
     /// <summary>로컬 소유자 발사 시 배출할 탄피 <see cref="ParticleSystem"/> 프리팹.</summary>
     public ParticleSystem CasingParticlePrefab => casingParticlePrefab;
+
+    /// <summary>투척무기 카테고리 여부.</summary>
+    public bool IsThrowable => category == EWeaponCategory.Throwable;
+
+    /// <summary>투척 시 서버에서 스폰할 네트워크 수류탄 프리팹.</summary>
+    public NetworkGrenade GrenadePrefab => grenadePrefab;
+
+    /// <summary>투척 초기 속력 (m/s).</summary>
+    public float ThrowForce => throwForce;
+
+    /// <summary>조준 방향에 더할 상방 각도 보정 비율.</summary>
+    public float ThrowUpwardBias => throwUpwardBias;
+
+    /// <summary>투척 시 적용할 랜덤 회전 각속도 최대 크기 (rad/s).</summary>
+    public float ThrowRandomTorque => throwRandomTorque;
+
+    /// <summary>투척 후 폭발까지 대기하는 신관 시간 (초 단위).</summary>
+    public float GrenadeFuseTime => grenadeFuseTime;
+
+    /// <summary>폭발 피해 반경 (미터).</summary>
+    public float ExplosionRadius => explosionRadius;
+
+    /// <summary>폭발 반경 끝자락 최소 데미지.</summary>
+    public float ExplosionMinDamage => explosionMinDamage;
+
+    /// <summary>투척 원점 기준 전방 스폰 오프셋 (미터).</summary>
+    public float ThrowSpawnForwardOffset => throwSpawnForwardOffset;
+
+    /// <summary>투척 원점 기준 우측 스폰 오프셋 (미터).</summary>
+    public float ThrowSpawnRightOffset => throwSpawnRightOffset;
+
+    /// <summary>투척 원점 기준 상방 스폰 오프셋 (미터).</summary>
+    public float ThrowSpawnUpOffset => throwSpawnUpOffset;
 
     // ***************************************************************
     // ScriptableObject

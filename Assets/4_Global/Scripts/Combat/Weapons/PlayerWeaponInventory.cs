@@ -6,7 +6,7 @@ using FishNet.Object.Synchronizing;
 using FishNet.Transporting;
 using UnityEngine;
 
-/// <summary>플레이어의 4슬롯 무기 보유 현황, 장착 전환 및 서버 권위 줍기/버리기를 관리한다.</summary>
+/// <summary>플레이어의 5슬롯 무기 보유 현황, 장착 전환 및 서버 권위 줍기/버리기를 관리한다.</summary>
 [RequireComponent(typeof(PlayerController))]
 public class PlayerWeaponInventory : NetworkBehaviour
 {
@@ -14,8 +14,8 @@ public class PlayerWeaponInventory : NetworkBehaviour
     // Constants
     // ***************************************************************
 
-    /// <summary>1~4번 키 입력에 대응하는 총 무기 슬롯 수.</summary>
-    public const int SlotCount = 4;
+    /// <summary>1~5번 키 입력에 대응하는 총 무기 슬롯 수.</summary>
+    public const int SlotCount = 5;
 
     private const float ServerPickupRangeTolerance = 0.25f; // 네트워크 지연을 감안한 서버 줍기 거리 허용 오차 (미터)
     private const float CrosshairCameraRangeBonus = 6.0f; // TPS 카메라 후방 거리를 보정하기 위한 크로스헤어 탐색 여유 거리 (미터)
@@ -59,7 +59,7 @@ public class PlayerWeaponInventory : NetworkBehaviour
     [SerializeField] private float dropRandomTorque = 2.5f;
 
     /// <summary>무기 드롭 시 벽 관통 여부를 검사할 지형 레이어 마스크.</summary>
-    [SerializeField] private LayerMask dropObstacleMask = (1 << 0) | (1 << 3); // Default, Ground
+    [SerializeField] private LayerMask dropObstacleMask = (1 << 0) | (1 << 3) | (1 << 8); // Default, Ground, Wall
 
     /// <summary>서버와 소유자 간 동기화되는 4슬롯 무기 및 개별 탄약 목록.</summary>
     private readonly SyncList<WeaponSlotState> _slots = new(
@@ -165,6 +165,23 @@ public class PlayerWeaponInventory : NetworkBehaviour
                 ChangeSequence = 1
             };
         }
+        // 스폰 시 5번 투척 슬롯에 설정된 기본 투척무기와 초기 보유 개수를 지급한다.
+        WeaponDataSO defaultThrowable = weaponDatabase != null ? weaponDatabase.DefaultThrowableWeapon : null;
+        int initialThrowableCount = weaponDatabase != null ? weaponDatabase.InitialThrowableCount : 0;
+        if (defaultThrowable != null
+            && !string.IsNullOrEmpty(defaultThrowable.WeaponId)
+            && initialThrowableCount > 0)
+        {
+            int maxStack = defaultThrowable.MaxAmmo > 0 ? defaultThrowable.MaxAmmo : initialThrowableCount;
+            int throwableIndex = (int)EWeaponSlotType.Throwable;
+            _slots[throwableIndex] = new WeaponSlotState
+            {
+                WeaponId = defaultThrowable.WeaponId,
+                CurrentAmmo = Mathf.Clamp(initialThrowableCount, 1, maxStack),
+                ReserveAmmo = 0
+            };
+        }
+
         if (_playerHealth != null)
         {
             _playerHealth.OnDied += HandleServerDied;
@@ -202,7 +219,10 @@ public class PlayerWeaponInventory : NetworkBehaviour
         if (slot == EWeaponSlotType.Unarmed) return true;
 
         int index = (int)slot;
-        return index >= 0 && index < _slots.Count && !_slots[index].IsEmpty;
+        if (index < 0 || index >= _slots.Count || _slots[index].IsEmpty) return false;
+        if (slot == EWeaponSlotType.Throwable && _slots[index].CurrentAmmo <= 0) return false;
+
+        return true;
     }
 
     /// <summary><paramref name="slot"/>의 현재 보유 무기 및 탄약 상태를 반환한다.</summary>
@@ -423,6 +443,45 @@ public class PlayerWeaponInventory : NetworkBehaviour
         return true;
     }
 
+    /// <summary>서버에서 5번 투척 슬롯의 수류탄 보유 개수를 1개 차감하고, 0개가 되면 슬롯을 비운 뒤 맨손으로 전환한다.</summary>
+    [Server]
+    public bool TryConsumeThrowable(string expectedWeaponId, out WeaponSlotState updatedState, out bool becameEmpty)
+    {
+        updatedState = WeaponSlotState.Empty;
+        becameEmpty = false;
+
+        int index = (int)EWeaponSlotType.Throwable;
+        if (index < 0 || index >= _slots.Count) return false;
+
+        WeaponSlotState current = _slots[index];
+        if (current.IsEmpty || !string.Equals(current.WeaponId, expectedWeaponId, StringComparison.Ordinal)) return false;
+        if (current.CurrentAmmo <= 0)
+        {
+            updatedState = current;
+            return false;
+        }
+
+        current.CurrentAmmo--;
+        if (current.CurrentAmmo <= 0)
+        {
+            _slots[index] = WeaponSlotState.Empty;
+            updatedState = WeaponSlotState.Empty;
+            becameEmpty = true;
+
+            if (_equippedState.Value.Slot == EWeaponSlotType.Throwable)
+            {
+                ForceSelectUnarmed();
+            }
+        }
+        else
+        {
+            _slots[index] = current;
+            updatedState = current;
+        }
+
+        return true;
+    }
+
     // ***************************************************************
     // Network RPCs
     // ***************************************************************
@@ -466,9 +525,54 @@ public class PlayerWeaponInventory : NetworkBehaviour
         int slotIndex = (int)newData.SlotType;
         if (slotIndex < 0 || slotIndex >= _slots.Count) return;
 
+        WeaponSlotState previousSlotState = _slots[slotIndex];
+
+        // 동일 투척무기를 이미 소지 중이면 최대 소지 개수까지 합산하고 초과분만 바닥에 남긴다.
+        if (newData.IsThrowable
+            && !previousSlotState.IsEmpty
+            && string.Equals(previousSlotState.WeaponId, newData.WeaponId, StringComparison.Ordinal))
+        {
+            int maxStack = Mathf.Max(1, newData.MaxAmmo);
+            if (previousSlotState.CurrentAmmo >= maxStack) return;
+
+            if (!pickup.TryConsume(out WeaponSlotState pickedThrowable)) return;
+
+            int addCount = Mathf.Max(1, pickedThrowable.CurrentAmmo);
+            int total = previousSlotState.CurrentAmmo + addCount;
+            int kept = Mathf.Min(total, maxStack);
+            int excess = total - kept;
+
+            previousSlotState.CurrentAmmo = kept;
+            previousSlotState.ReserveAmmo = 0;
+            _slots[slotIndex] = previousSlotState;
+            _equippedState.Value = new EquippedWeaponState
+            {
+                Slot = newData.SlotType,
+                WeaponId = previousSlotState.WeaponId,
+                ChangeSequence = (ushort)(_equippedState.Value.ChangeSequence + 1)
+            };
+
+            if (excess > 0)
+            {
+                SpawnDroppedWeapon(new WeaponSlotState
+                {
+                    WeaponId = previousSlotState.WeaponId,
+                    CurrentAmmo = excess,
+                    ReserveAmmo = 0
+                });
+            }
+            return;
+        }
+
         if (!pickup.TryConsume(out WeaponSlotState pickedState)) return;
 
-        WeaponSlotState previousSlotState = _slots[slotIndex];
+        if (newData.IsThrowable)
+        {
+            int maxStack = Mathf.Max(1, newData.MaxAmmo);
+            pickedState.CurrentAmmo = Mathf.Clamp(Mathf.Max(1, pickedState.CurrentAmmo), 1, maxStack);
+            pickedState.ReserveAmmo = 0;
+        }
+
         _slots[slotIndex] = pickedState;
         _equippedState.Value = new EquippedWeaponState
         {

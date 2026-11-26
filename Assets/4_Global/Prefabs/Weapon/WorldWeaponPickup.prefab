@@ -94,22 +94,24 @@ MonoBehaviour:
   _spectatorInterpolation: 2
   _enableTeleport: 0
   _teleportThreshold: 1
-  <PrefabId>k__BackingField: 65535
+  <PrefabId>k__BackingField: 4
   <SpawnableCollectionId>k__BackingField: 0
-  <AssetPathHash>k__BackingField: 6319538385640860617
+  <AssetPathHash>k__BackingField: 2511462474273535514
   SceneId: 0
   SerializedTransformProperties:
     Position: {x: 0, y: 0, z: 0}
-    Rotation: {x: 0, y: 0, z: 0, w: 0}
-    Scale: {x: 0, y: 0, z: 0}
-    IsValid: 0
+    Rotation: {x: 0, y: 0, z: 0, w: 1}
+    Scale: {x: 1, y: 1, z: 1}
+    IsValid: 1
   <IsNested>k__BackingField: 0
   WasActiveDuringEdit: 0
   WasActiveDuringEdit_Set1: 1
   <ComponentIndex>k__BackingField: 0
   <PredictedSpawn>k__BackingField: {fileID: 0}
   <PredictedOwner>k__BackingField: {fileID: 0}
-  NetworkBehaviours: []
+  NetworkBehaviours:
+  - {fileID: 8592773808928048079}
+  - {fileID: 8298750971163431968}
   InitializedParentNetworkBehaviour: {fileID: 0}
   InitializedNestedNetworkObjects: []
   RuntimeParentNetworkBehaviour: {fileID: 0}
@@ -120,7 +122,7 @@ MonoBehaviour:
   _initializeOrder: 0
   _preventDespawnOnDisconnect: 0
   _defaultDespawnType: 0
-  _initializedTimestamp: 0
+  _initializedTimestamp: -8584059364693831938
 --- !u!114 &8592773808928048079
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -133,9 +135,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a2836e36774ca1c4bbbee976e17b649c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: FishNet.Runtime::FishNet.Component.Transforming.NetworkTransform
-  _componentIndexCache: 255
+  _componentIndexCache: 0
   _addedNetworkObject: {fileID: 8865195716467949815}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 8865195716467949815}
   _componentConfiguration: 0
   _synchronizeParent: 0
   _packing:
@@ -180,9 +182,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4063fa7e9878945bc89bbc01d259efeb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WorldWeaponPickup
-  _componentIndexCache: 255
+  _componentIndexCache: 1
   _addedNetworkObject: {fileID: 8865195716467949815}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 8865195716467949815}
   weaponDatabase: {fileID: 11400000, guid: 740399c9523ba4601a63a381b6dd3121, type: 2}
   initialWeaponData: {fileID: 0}
   visualRoot: {fileID: 5256573597338626620}

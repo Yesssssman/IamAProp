@@ -234,6 +234,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerScript
   hand: {fileID: 2804264384151656367}
+  grenadeThrowPitch: 30
 --- !u!82 &7719633408055972651
 AudioSource:
   m_ObjectHideFlags: 0
@@ -254,9 +255,9 @@ AudioSource:
   Spatialize: 0
   SpatializePostEffects: 0
   Priority: 128
-  DopplerLevel: 1
-  MinDistance: 1
-  MaxDistance: 500
+  DopplerLevel: 0
+  MinDistance: 2
+  MaxDistance: 40
   Pan2D: 0
   rolloffMode: 0
   BypassEffects: 0
@@ -291,7 +292,7 @@ AudioSource:
     m_Curve:
     - serializedVersion: 3
       time: 0
-      value: 0
+      value: 1
       inSlope: 0
       outSlope: 0
       tangentMode: 0
@@ -344,6 +345,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StepSoundTest
   stepClip: {fileID: 8300000, guid: f8016a521edcf41b29e71cfc54480368, type: 3}
+  jumpClip: {fileID: 8300000, guid: 9b5e0f6e3dbe24a99a2781cf5a97a99e, type: 3}
+  minStepInterval: 0.12
+  minStepClipWeight: 0.2
+  minJumpInterval: 0.15
 --- !u!114 &1221300615577752590
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -396,6 +401,7 @@ GameObject:
   - component: {fileID: 1050192809316243485}
   - component: {fileID: 3091578901884997298}
   - component: {fileID: 9140214828632691384}
+  - component: {fileID: 8800457171431850954}
   m_Layer: 6
   m_Name: Banana
   m_TagString: Player
@@ -482,6 +488,16 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 201
   defaultAimDistance: 100
+  enableWallRetract: 1
+  wallRetractLayerMask:
+    serializedVersion: 2
+    m_Bits: 265
+  wallRetractCheckRadius: 0.04
+  wallRetractClearance: 0.08
+  wallRetractMaxDistance: 0.65
+  wallRetractSpeed: 18
+  adsEnterWallRetractThreshold: 0.05
+  adsExitWallRetractThreshold: 0.12
 --- !u!114 &4588156390618512503
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -534,7 +550,7 @@ MonoBehaviour:
   _teleportThreshold: 1
   <PrefabId>k__BackingField: 11
   <SpawnableCollectionId>k__BackingField: 0
-  <AssetPathHash>k__BackingField: 16342885132488585998
+  <AssetPathHash>k__BackingField: 18138701680050982057
   SceneId: 0
   SerializedTransformProperties:
     Position: {x: 0, y: 0, z: 0}
@@ -648,11 +664,16 @@ MonoBehaviour:
   _networkObjectCache: {fileID: 8263648830346335679}
   hitLayerMask:
     serializedVersion: 2
-    m_Bits: 201
+    m_Bits: 457
   shotSphereRadius: 0.05
   debugRayDuration: 1.5
   drawShotGizmos: 1
+  maxOriginOffset: 2.5
+  logDamageFalloffDebug: 1
   weaponAudioSource: {fileID: 3476453936752349195}
+  throwSpawnObstacleMask:
+    serializedVersion: 2
+    m_Bits: 265
 --- !u!114 &9140214828632691384
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -678,7 +699,32 @@ MonoBehaviour:
   dropRandomTorque: 2.5
   dropObstacleMask:
     serializedVersion: 2
-    m_Bits: 9
+    m_Bits: 265
+--- !u!114 &8800457171431850954
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3957024930634641414}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10d9e6e791d1b4dbf87631a07cf683d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GrenadeTrajectoryPreview
+  sampleCount: 40
+  timeStep: 0.05
+  castRadius: 0.07
+  collisionMask:
+    serializedVersion: 2
+    m_Bits: 329
+  lineWidth: 0.03
+  lineStartColor: {r: 1, g: 0.88, b: 0.25, a: 0.95}
+  lineEndColor: {r: 1, g: 0.35, b: 0.12, a: 0.4}
+  lineMaterial: {fileID: 0}
+  showImpactMarker: 1
+  impactMarkerScale: 0.22
+  impactMarkerColor: {r: 1, g: 0.32, b: 0.12, a: 0.85}
 --- !u!1 &4948721705217444674
 GameObject:
   m_ObjectHideFlags: 0

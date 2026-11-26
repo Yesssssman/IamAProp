@@ -18,6 +18,13 @@ public class WeaponDatabaseSO : ScriptableObject
     [Header("기본 설정")]
     [SerializeField] private WeaponDataSO defaultMeleeWeapon;
 
+    /// <summary>스폰 시 5번 투척 슬롯에 기본 지급할 투척무기 데이터 (비워두면 미지급).</summary>
+    [SerializeField] private WeaponDataSO defaultThrowableWeapon;
+
+    /// <summary>스폰 시 5번 투척 슬롯에 지급할 초기 보유 개수 (0이면 미지급).</summary>
+    [Min(0)]
+    [SerializeField] private int initialThrowableCount = 3;
+
     /// <summary>바닥에 무기를 드롭할 때 서버에서 스폰할 공용 월드 픽업 프리팹.</summary>
     [SerializeField] private WorldWeaponPickup worldPickupPrefab;
 
@@ -33,6 +40,12 @@ public class WeaponDatabaseSO : ScriptableObject
 
     /// <summary>스폰 시 기본 지급되는 근접 무기 데이터.</summary>
     public WeaponDataSO DefaultMeleeWeapon => defaultMeleeWeapon;
+
+    /// <summary>스폰 시 5번 슬롯에 기본 지급되는 투척무기 데이터.</summary>
+    public WeaponDataSO DefaultThrowableWeapon => defaultThrowableWeapon;
+
+    /// <summary>스폰 시 5번 슬롯에 지급할 초기 투척무기 보유 개수.</summary>
+    public int InitialThrowableCount => initialThrowableCount;
 
     /// <summary>드롭 시 서버가 스폰할 월드 픽업 프리팹.</summary>
     public WorldWeaponPickup WorldPickupPrefab => worldPickupPrefab;

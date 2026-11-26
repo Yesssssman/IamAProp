@@ -26,6 +26,9 @@ public class PlayerAnim : PropAnimBase
     /// <summary>서버 피격 이벤트와 사망 상태를 조회하는 체력 컴포넌트.</summary>
     private PlayerHealth _playerHealth;
 
+    /// <summary>몸통 애니메이션 이벤트의 이동/점프 사운드를 제어하는 컴포넌트.</summary>
+    private StepSoundTest _stepSound;
+
     /// <summary>이 오브젝트에 마지막으로 적용된 장착 무기 스냅샷.</summary>
     private EquippedWeaponState _appliedEquippedState;
 
@@ -85,6 +88,15 @@ public class PlayerAnim : PropAnimBase
 
     /// <summary>소총 드로우 애니메이션 상태(<c>AK_Draw</c>) 해시.</summary>
     private static readonly int AkDrawState = Animator.StringToHash("AK_Draw");
+
+    /// <summary>수류탄 드로우 애니메이션 상태(<c>Grenade_Draw</c>) 해시.</summary>
+    private static readonly int GrenadeDrawState = Animator.StringToHash("Grenade_Draw");
+
+    /// <summary>수류탄 투척 애니메이션 상태(<c>Grenade_Throw</c>) 해시.</summary>
+    private static readonly int GrenadeThrowState = Animator.StringToHash("Grenade_Throw");
+
+    /// <summary>손 애니메이터 수류탄 조준 홀드 파라미터(<c>isGrenadeAiming</c>) 해시.</summary>
+    private static readonly int IsGrenadeAimingParam = Animator.StringToHash("isGrenadeAiming");
 
     /// <summary>단검 1타 공격 애니메이션 상태(<c>Knife_Swing</c>) 해시.</summary>
     private static readonly int KnifeSwingState = Animator.StringToHash("Knife_Swing");
@@ -158,8 +170,8 @@ public class PlayerAnim : PropAnimBase
 
             int currentHash = handAnimator.GetCurrentAnimatorStateInfo(0).shortNameHash;
             int nextHash = handAnimator.IsInTransition(0) ? handAnimator.GetNextAnimatorStateInfo(0).shortNameHash : 0;
-            return currentHash == KnifeDrawState || currentHash == M1911DrawState || currentHash == AkDrawState
-                || nextHash == KnifeDrawState || nextHash == M1911DrawState || nextHash == AkDrawState;
+            return currentHash == KnifeDrawState || currentHash == M1911DrawState || currentHash == AkDrawState || currentHash == GrenadeDrawState
+                || nextHash == KnifeDrawState || nextHash == M1911DrawState || nextHash == AkDrawState || nextHash == GrenadeDrawState;
         }
     }
 
@@ -254,6 +266,9 @@ public class PlayerAnim : PropAnimBase
         _weaponInventory = GetComponent<PlayerWeaponInventory>();
         _weaponController = GetComponent<PlayerWeaponController>();
         _playerHealth = GetComponent<PlayerHealth>();
+        _stepSound = bodyAnimator != null
+            ? bodyAnimator.GetComponent<StepSoundTest>()
+            : GetComponentInChildren<StepSoundTest>(true);
     }
 
     protected override void Update()
@@ -268,8 +283,8 @@ public class PlayerAnim : PropAnimBase
 
         // 드로우 애니메이션 진입이 확인되면 플래그를 내려 반복 전이를 방지한다.
         if (_pendingWeaponSwapReset
-            && (currentHash == KnifeDrawState || currentHash == M1911DrawState || currentHash == AkDrawState
-                || nextHash == KnifeDrawState || nextHash == M1911DrawState || nextHash == AkDrawState))
+            && (currentHash == KnifeDrawState || currentHash == M1911DrawState || currentHash == AkDrawState || currentHash == GrenadeDrawState
+                || nextHash == KnifeDrawState || nextHash == M1911DrawState || nextHash == AkDrawState || nextHash == GrenadeDrawState))
         {
             handAnimator.SetBool(IsWeaponSwap, false);
             if (IsOwner)
@@ -509,16 +524,21 @@ public class PlayerAnim : PropAnimBase
             EWeaponSlotType.Melee => attackVariant == 1 ? KnifeSwing2State : KnifeSwingState,
             EWeaponSlotType.Secondary => M1911ShotState,
             EWeaponSlotType.Primary => AkShotState,
+            EWeaponSlotType.Throwable => GrenadeThrowState,
             _ => 0
         };
         if (shotState == 0) return;
 
         handAnimator.SetBool(IsAttack, false);
+        if (activeSlot == EWeaponSlotType.Throwable)
+        {
+            handAnimator.SetBool(IsGrenadeAimingParam, false);
+        }
         if (activeSlot == EWeaponSlotType.Melee)
         {
             handAnimator.CrossFadeInFixedTime(shotState, 0.05f, 0, 0f);
         }
-        else
+        else if (handAnimator.HasState(0, shotState))
         {
             handAnimator.Play(shotState, 0, 0f);
         }
@@ -637,6 +657,29 @@ public class PlayerAnim : PropAnimBase
         }
     }
 
+    /// <summary>수류탄 조준 홀드 애니메이션 상태를 설정하고 원격 클라이언트에 동기화한다.</summary>
+    public void SetGrenadeAiming(bool isAiming)
+    {
+        if (handAnimator == null || !handAnimator.enabled) return;
+
+        bool active = isAiming
+            && !(_playerHealth != null && _playerHealth.IsDead)
+            && _weaponInventory != null
+            && _weaponInventory.ActiveSlot == EWeaponSlotType.Throwable;
+        handAnimator.SetBool(IsGrenadeAimingParam, active);
+
+        if (!IsOwner || !IsSpawned) return;
+
+        if (IsServerInitialized)
+        {
+            BroadcastGrenadeAimingObserversRpc(active);
+        }
+        else
+        {
+            RequestGrenadeAimingServerRpc(active);
+        }
+    }
+
     /// <summary>왼손에 생성된 탄창 또는 산탄 오브젝트를 숨긴다.</summary>
     public void HideLeftHandItem()
     {
@@ -700,6 +743,7 @@ public class PlayerAnim : PropAnimBase
             handAnimator.SetBool(IsAttack, false);
             handAnimator.SetBool(IsReload, false);
             handAnimator.SetBool(IsReloadingLoopParam, false);
+            handAnimator.SetBool(IsGrenadeAimingParam, false);
             handAnimator.SetBool(IsWeaponSwap, false);
             handAnimator.Play(HandIdleState, 0, 0f);
             handAnimator.Update(0f);
@@ -781,6 +825,24 @@ public class PlayerAnim : PropAnimBase
         handAnimator.SetBool(IsAttack, interruptForFire);
     }
 
+    /// <summary>소유자 클라이언트의 수류탄 조준 홀드 상태를 서버를 통해 원격 관전자에게 전달한다.</summary>
+    [ServerRpc]
+    private void RequestGrenadeAimingServerRpc(bool isAiming)
+    {
+        if (_playerHealth != null && _playerHealth.IsDead) return;
+        BroadcastGrenadeAimingObserversRpc(isAiming);
+    }
+
+    /// <summary>원격 프록시 클라이언트의 수류탄 조준 홀드 파라미터를 갱신한다.</summary>
+    [ObserversRpc(ExcludeOwner = true)]
+    private void BroadcastGrenadeAimingObserversRpc(bool isAiming)
+    {
+        if (_isDeadVisualApplied || (_playerHealth != null && _playerHealth.IsDead)) return;
+        if (handAnimator == null || !handAnimator.enabled) return;
+
+        handAnimator.SetBool(IsGrenadeAimingParam, isAiming);
+    }
+
     /// <summary>서버가 결정한 <paramref name="hitIndex"/>로 모든 클라이언트의 피격 애니메이션을 재생한다.</summary>
     [ObserversRpc]
     private void PlayHitObserversRpc(int hitIndex)
@@ -842,8 +904,14 @@ public class PlayerAnim : PropAnimBase
             if (_bodyWeaponControllers != null
                 && bodyControllerIndex >= 0
                 && bodyControllerIndex < _bodyWeaponControllers.Length
-                && _bodyWeaponControllers[bodyControllerIndex] != null)
+                && _bodyWeaponControllers[bodyControllerIndex] != null
+                && bodyAnimator.runtimeAnimatorController != _bodyWeaponControllers[bodyControllerIndex])
             {
+                if (wasAir && wasJumped)
+                {
+                    _stepSound?.SuppressJumpSound(0.25f);
+                }
+
                 bodyAnimator.runtimeAnimatorController = _bodyWeaponControllers[bodyControllerIndex];
             }
 
@@ -902,6 +970,10 @@ public class PlayerAnim : PropAnimBase
                     else if (baseClip == baseClips.reloadFinishClip && weaponData.HandReloadFinishClip != null)
                     {
                         targetClip = weaponData.HandReloadFinishClip;
+                    }
+                    else if (baseClip == baseClips.grenadeAimClip && weaponData.HandGrenadeAimClip != null)
+                    {
+                        targetClip = weaponData.HandGrenadeAimClip;
                     }
 
                     if (targetClip != null && _handOverrideBuffer[i].Value != targetClip)
@@ -1014,6 +1086,7 @@ public class PlayerAnim : PropAnimBase
         handAnimator.SetInteger(WeaponMode, slotIndex);
         handAnimator.SetBool(UseShellReloadParam, weaponData != null && weaponData.IsShellReload);
         handAnimator.SetBool(IsReloadingLoopParam, false);
+        handAnimator.SetBool(IsGrenadeAimingParam, false);
         handAnimator.SetBool(IsReload, false);
         _pendingReloadReset = false;
 
@@ -1045,9 +1118,10 @@ public class PlayerAnim : PropAnimBase
                     EWeaponSlotType.Melee => KnifeDrawState,
                     EWeaponSlotType.Secondary => M1911DrawState,
                     EWeaponSlotType.Primary => AkDrawState,
+                    EWeaponSlotType.Throwable => GrenadeDrawState,
                     _ => 0
                 };
-                if (drawStateHash != 0)
+                if (drawStateHash != 0 && handAnimator.HasState(0, drawStateHash))
                 {
                     handAnimator.Play(drawStateHash, 0, 0f);
                 }

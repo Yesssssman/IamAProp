@@ -32,7 +32,7 @@ MonoBehaviour:
     m_Bits: 8
   bodyClips:
     hideClip: {fileID: -3246335567985755239, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
-    runClip: {fileID: 7400000, guid: c77f37bda7f054bc2be268faf028567e, type: 2}
+    runClip: {fileID: -428411149401142958, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
     jumpClip: {fileID: -6311939953767310088, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
     fallClip: {fileID: 7390238872845599331, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
     aimIdleClip: {fileID: -257425540449213744, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
