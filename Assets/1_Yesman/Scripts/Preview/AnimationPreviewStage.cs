@@ -38,6 +38,19 @@ public class AnimationPreviewStage : MonoBehaviour
 
         /// <summary>한 클립이 격자의 한 행이 됨.</summary>
         public PropClip[] clips;
+
+        /// <summary>이 프롭에서 무기의 손 클립 대신 재생하는 손 클립들.</summary>
+        public HandClipOverride[] handClipOverrides;
+    }
+
+    [Serializable]
+    private class HandClipOverride
+    {
+        /// <summary>무기에 등록된 손 클립.</summary>
+        public AnimationClip original;
+
+        /// <summary><see cref="original"/> 대신 재생하는 손 클립.</summary>
+        public AnimationClip replacement;
     }
 
     [Serializable]
@@ -108,7 +121,10 @@ public class AnimationPreviewStage : MonoBehaviour
 
                     foreach (HandClip handClip in weapon.handClips)
                     {
-                        AnimationPreview preview = SpawnPreview(prop, propClip.clip, handClip.clip,
+                        HandClipOverride clipOverride = Array.Find(prop.handClipOverrides,
+                            handClipOverride => handClipOverride.original == handClip.clip);
+                        AnimationPreview preview = SpawnPreview(prop, propClip.clip,
+                            clipOverride != null ? clipOverride.replacement : handClip.clip,
                             new Vector3(-column * prop.cellSize.x, 0f, rowPosition));
                         column++;
 

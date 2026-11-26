@@ -106,6 +106,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerScript
   hand: {fileID: 1274878866091273602}
+  grenadeThrowPitch: 30
 --- !u!4 &6736116643253907475 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 5475307485275303008, guid: d81713e13f6b3b348a8d4a3e282d9933, type: 3}

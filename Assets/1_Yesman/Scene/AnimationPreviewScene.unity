@@ -605,6 +605,7 @@ MonoBehaviour:
     - clip: {fileID: -3246335567985755239, guid: 6b0f64b824bba50469875d8d08835531, type: 3}
       stance: 3
       pairedHandClip: {fileID: 0}
+    handClipOverrides: []
   - prefab: {fileID: 1893240902259630370, guid: fc98abce84eced54592c6e9a5dccc59a, type: 3}
     cellSize: {x: 2.5, y: 3.5}
     labelOffset: {x: 0, y: 0.01, z: 1.5}
@@ -627,6 +628,13 @@ MonoBehaviour:
     - clip: {fileID: 2789470803197123464, guid: d81713e13f6b3b348a8d4a3e282d9933, type: 3}
       stance: 3
       pairedHandClip: {fileID: 0}
+    handClipOverrides:
+    - original: {fileID: -7088975448824349287, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+      replacement: {fileID: -94165115001518504, guid: 0e3cacf20f6c4b549b8a1eafdd3b330e, type: 3}
+    - original: {fileID: -2614476901633215024, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+      replacement: {fileID: -2285540936860637908, guid: 0e3cacf20f6c4b549b8a1eafdd3b330e, type: 3}
+    - original: {fileID: -2084266681268712168, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+      replacement: {fileID: -4944318009823587170, guid: 0e3cacf20f6c4b549b8a1eafdd3b330e, type: 3}
   weapons:
   - prefab: {fileID: 2112723291613362656, guid: 4fc18dcd97b9c2f4c88a7e5bda71352d, type: 3}
     aims: 1
