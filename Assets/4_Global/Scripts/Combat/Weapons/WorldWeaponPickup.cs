@@ -181,8 +181,16 @@ public class WorldWeaponPickup : NetworkBehaviour
         if (string.IsNullOrEmpty(_weaponId.Value) && initialWeaponData != null)
         {
             _weaponId.Value = initialWeaponData.WeaponId;
-            _currentAmmo.Value = initialWeaponData.UsesAmmo ? initialWeaponData.MaxAmmo : 0;
-            _reserveAmmo.Value = initialWeaponData.UsesAmmo ? initialWeaponData.MaxReserveAmmo : 0;
+            if (initialWeaponData.IsThrowable)
+            {
+                _currentAmmo.Value = 1;
+                _reserveAmmo.Value = 0;
+            }
+            else
+            {
+                _currentAmmo.Value = initialWeaponData.UsesAmmo ? initialWeaponData.MaxAmmo : 0;
+                _reserveAmmo.Value = initialWeaponData.UsesAmmo ? initialWeaponData.MaxReserveAmmo : 0;
+            }
         }
     }
 

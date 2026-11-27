@@ -18,7 +18,7 @@ public class NetworkGrenade : NetworkBehaviour
     private const int GrenadeLayer = 2; // Ignore Raycast (사격 히트스캔 제외, 지형·플레이어 물리 충돌 유지)
     private const int DefaultDamageLayerMask = (1 << 6) | (1 << 7); // Player, Hitbox
     private const int DefaultCoverObstacleMask = (1 << 0) | (1 << 3) | (1 << 8); // Default, Ground, Wall
-    private const float CoverRayHeightOffset = 0.08f; // 바닥 안착 시 지면 자체에 엄폐 레이가 걸리지 않도록 하는 높이 오프셋 (미터)
+    protected const float CoverRayHeightOffset = 0.08f; // 바닥 안착 시 지면 자체에 엄폐 레이가 걸리지 않도록 하는 높이 오프셋 (미터)
     private const float BounceSfxCooldown = 0.12f; // 연속 충돌 시 바운스 사운드 중복 방지 간격 (초)
     private const float DespawnDelayAfterExplode = 0.05f; // 폭발 RPC 전파 보장을 위한 짧은 디스폰 지연 (초)
 
@@ -181,6 +181,33 @@ public class NetworkGrenade : NetworkBehaviour
     /// <summary>투척 사운드 볼륨.</summary>
     public float ThrowSfxVolume => throwSfxVolume;
 
+    /// <summary>피격 대상 탐색에 사용하는 물리 레이어 마스크.</summary>
+    protected LayerMask DamageLayerMask => damageLayerMask;
+
+    /// <summary>엄폐물(벽/지형) 차단을 검사하는 물리 레이어 마스크.</summary>
+    protected LayerMask CoverObstacleMask => coverObstacleMask;
+
+    /// <summary>폭발 반경 탐색에 재사용하는 콜라이더 버퍼.</summary>
+    protected Collider[] OverlapBuffer => _overlapBuffer;
+
+    /// <summary>폭발 시 생성할 VFX 프리팹.</summary>
+    protected GameObject ExplosionVfxPrefab => explosionVfxPrefab;
+
+    /// <summary>생성된 폭발 VFX 자동 파괴 시간 (초 단위).</summary>
+    protected float VfxAutoDestroyTime => vfxAutoDestroyTime;
+
+    /// <summary>디버그 시각화 활성화 여부.</summary>
+    protected bool EnableDebugVisualization => enableDebugVisualization;
+
+    /// <summary>임시 디버그 폭발 구체 유지 시간 (초 단위).</summary>
+    protected float DebugSphereDuration => debugSphereDuration;
+
+    /// <summary>임시 디버그 폭발 구체 색상.</summary>
+    protected Color DebugSphereColor => debugSphereColor;
+
+    /// <summary>씬 뷰 기즈모로 표시할 폭발 반경 (미터).</summary>
+    protected virtual float GizmoRadius => explosionRadius;
+
     // ***************************************************************
     // Static Physics Formula
     // ***************************************************************
@@ -248,7 +275,7 @@ public class NetworkGrenade : NetworkBehaviour
         _fuseRemaining -= Time.deltaTime;
         if (_fuseRemaining > 0f) return;
 
-        // 신관 만료: 서버에서 폭발 범위·엄폐물·거리 비례 데미지 판정을 1회 실행한다.
+        // 신관 만료: 서버에서 폭발 판정을 1회 실행하고 디스폰을 예약한다.
         _hasExploded = true;
         _isFuseArmed = false;
         RestoreThrowerCollisions();
@@ -266,6 +293,15 @@ public class NetworkGrenade : NetworkBehaviour
         }
         HideVisuals();
 
+        DetonateOnServer(explosionPos);
+        _pendingDespawn = true;
+        _despawnRemaining = DespawnDelayAfterExplode;
+    }
+
+    /// <summary>신관 만료 시 서버에서 폭발 판정과 클라이언트 연출 전파를 수행한다.</summary>
+    [Server]
+    protected virtual void DetonateOnServer(Vector3 explosionPos)
+    {
         float safeRadius = Mathf.Max(0.1f, explosionRadius);
         int overlapCount = Physics.OverlapSphereNonAlloc(
             explosionPos,
@@ -352,8 +388,6 @@ public class NetworkGrenade : NetworkBehaviour
         }
 
         OnExplodeClientRpc(explosionPos);
-        _pendingDespawn = true;
-        _despawnRemaining = DespawnDelayAfterExplode;
     }
 
     private void OnCollisionEnter(Collision collision)
@@ -374,7 +408,7 @@ public class NetworkGrenade : NetworkBehaviour
         if (!enableDebugVisualization) return;
 
         Gizmos.color = new Color(debugSphereColor.r, debugSphereColor.g, debugSphereColor.b, 0.8f);
-        Gizmos.DrawWireSphere(transform.position, explosionRadius);
+        Gizmos.DrawWireSphere(transform.position, GizmoRadius);
     }
 
     // ***************************************************************
@@ -491,61 +525,72 @@ public class NetworkGrenade : NetworkBehaviour
             AudioSource.PlayClipAtPoint(explosionSfx, position, explosionSfxVolume);
         }
 
-        OnExploded?.Invoke(position);
-        OnAnyGrenadeExploded?.Invoke(position);
+        InvokeExplodedEvents(position);
 
         if (enableDebugVisualization)
         {
             Debug.Log($"[NetworkGrenade] 폭발 발생! 위치: {position}, 반경: {explosionRadius:F1}m");
-
-            GameObject debugSphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            debugSphere.name = "GrenadeExplosionDebugSphere";
-            debugSphere.transform.position = position;
-            debugSphere.transform.localScale = Vector3.one * (explosionRadius * 2f);
-
-            Collider sphereCol = debugSphere.GetComponent<Collider>();
-            if (sphereCol != null)
-            {
-                Destroy(sphereCol);
-            }
-
-            Renderer renderer = debugSphere.GetComponent<Renderer>();
-            if (renderer != null)
-            {
-                Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
-                if (shader == null)
-                {
-                    shader = Shader.Find("Sprites/Default");
-                }
-
-                if (shader != null)
-                {
-                    Material mat = new Material(shader);
-                    mat.color = debugSphereColor;
-                    if (mat.HasProperty("_BaseColor"))
-                    {
-                        mat.SetColor("_BaseColor", debugSphereColor);
-                    }
-                    if (mat.HasProperty("_Surface"))
-                    {
-                        mat.SetFloat("_Surface", 1f); // Transparent
-                        mat.SetFloat("_Blend", 0f); // Alpha
-                        mat.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
-                        mat.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
-                        mat.SetFloat("_ZWrite", 0f);
-                        mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-                        mat.renderQueue = (int)RenderQueue.Transparent;
-                    }
-                    renderer.sharedMaterial = mat;
-                    Destroy(mat, Mathf.Max(0.05f, debugSphereDuration) + 0.05f);
-                }
-
-                renderer.shadowCastingMode = ShadowCastingMode.Off;
-                renderer.receiveShadows = false;
-            }
-
-            Destroy(debugSphere, Mathf.Max(0.05f, debugSphereDuration));
+            SpawnDebugExplosionSphere(position, explosionRadius);
         }
+    }
+
+    /// <summary>폭발 이벤트 훅(<see cref="OnExploded"/>, <see cref="OnAnyGrenadeExploded"/>)을 호출한다.</summary>
+    protected void InvokeExplodedEvents(Vector3 position)
+    {
+        OnExploded?.Invoke(position);
+        OnAnyGrenadeExploded?.Invoke(position);
+    }
+
+    /// <summary>디버그 시각화가 켜져 있을 때 <paramref name="radius"/> 크기의 임시 반투명 구체를 생성한다.</summary>
+    protected void SpawnDebugExplosionSphere(Vector3 position, float radius)
+    {
+        GameObject debugSphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        debugSphere.name = "GrenadeExplosionDebugSphere";
+        debugSphere.transform.position = position;
+        debugSphere.transform.localScale = Vector3.one * (radius * 2f);
+
+        Collider sphereCol = debugSphere.GetComponent<Collider>();
+        if (sphereCol != null)
+        {
+            Destroy(sphereCol);
+        }
+
+        Renderer renderer = debugSphere.GetComponent<Renderer>();
+        if (renderer != null)
+        {
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+            if (shader == null)
+            {
+                shader = Shader.Find("Sprites/Default");
+            }
+
+            if (shader != null)
+            {
+                Material mat = new Material(shader);
+                mat.color = debugSphereColor;
+                if (mat.HasProperty("_BaseColor"))
+                {
+                    mat.SetColor("_BaseColor", debugSphereColor);
+                }
+                if (mat.HasProperty("_Surface"))
+                {
+                    mat.SetFloat("_Surface", 1f); // Transparent
+                    mat.SetFloat("_Blend", 0f); // Alpha
+                    mat.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+                    mat.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+                    mat.SetFloat("_ZWrite", 0f);
+                    mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                    mat.renderQueue = (int)RenderQueue.Transparent;
+                }
+                renderer.sharedMaterial = mat;
+                Destroy(mat, Mathf.Max(0.05f, debugSphereDuration) + 0.05f);
+            }
+
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+        }
+
+        Destroy(debugSphere, Mathf.Max(0.05f, debugSphereDuration));
     }
 
     /// <summary>모든 클라이언트에서 투척 사운드를 재생한다.</summary>
@@ -591,7 +636,7 @@ public class NetworkGrenade : NetworkBehaviour
     }
 
     /// <summary>폭발 직후 디스폰 전까지 수류탄 모델 비주얼을 즉시 숨긴다.</summary>
-    private void HideVisuals()
+    protected void HideVisuals()
     {
         if (visualRoot != null)
         {

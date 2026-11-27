@@ -1487,7 +1487,13 @@ public class PlayerWeaponController : NetworkBehaviour
         int slotIndex = (int)state.Slot;
         if (slotIndex < 0 || slotIndex >= _ownerStates.Length) return;
 
-        WeaponSlotState slotState = _weaponInventory.GetSlotState(state.Slot);
+        WeaponSlotState slotState = state.Slot == EWeaponSlotType.Throwable
+            ? _weaponInventory.GetThrowableState(state.WeaponId)
+            : _weaponInventory.GetSlotState(state.Slot);
+        if (slotState.IsEmpty)
+        {
+            slotState = _weaponInventory.GetSlotState(state.Slot);
+        }
         _ownerStates[slotIndex].currentAmmo = slotState.CurrentAmmo;
         _ownerStates[slotIndex].reserveAmmo = slotState.ReserveAmmo;
         _ownerStates[slotIndex].nextFireTime = 0f;

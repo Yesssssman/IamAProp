@@ -755,6 +755,13 @@ public class PlayerController : PropControllerBase
             }
             if (_weaponInventory.ActiveSlot == targetSlot)
             {
+                if (targetSlot == EWeaponSlotType.Throwable && _weaponInventory.CanCycleThrowable)
+                {
+                    _fpsAdsController?.ExitAds();
+                    _weaponController?.CancelGrenadeAim();
+                    _weaponController?.SetFireInput(false);
+                    _weaponInventory.TrySelectSlot(targetSlot);
+                }
                 return;
             }
 

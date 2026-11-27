@@ -600,10 +600,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StepSoundTest
   stepClip: {fileID: 8300000, guid: f8016a521edcf41b29e71cfc54480368, type: 3}
-  jumpClip: {fileID: 8300000, guid: 9b5e0f6e3dbe24a99a2781cf5a97a99e, type: 3}
+  jumpClip: {fileID: 8300000, guid: 4f9c5a00d7e8d4dc6b1f6e6d7d649258, type: 3}
+  landingClip: {fileID: 8300000, guid: 5134d8091ea2643c4a009bad616dc5e9, type: 3}
+  stepVolume: 1
+  jumpVolume: 1
+  landingVolume: 0.25
   minStepInterval: 0.12
   minStepClipWeight: 0.2
   minJumpInterval: 0.15
+  minLandingInterval: 0.2
 --- !u!114 &8337609754389795046
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -922,7 +927,7 @@ MonoBehaviour:
   _spectatorInterpolation: 2
   _enableTeleport: 0
   _teleportThreshold: 1
-  <PrefabId>k__BackingField: 0
+  <PrefabId>k__BackingField: 17
   <SpawnableCollectionId>k__BackingField: 0
   <AssetPathHash>k__BackingField: 13703071311373223167
   SceneId: 0
@@ -955,7 +960,7 @@ MonoBehaviour:
   _initializeOrder: 0
   _preventDespawnOnDisconnect: 0
   _defaultDespawnType: 0
-  _initializedTimestamp: -8584060264533404678
+  _initializedTimestamp: -8584058483047660508
 --- !u!114 &4159930911269044539
 MonoBehaviour:
   m_ObjectHideFlags: 0

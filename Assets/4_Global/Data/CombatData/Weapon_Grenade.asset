@@ -95,7 +95,7 @@ MonoBehaviour:
   grenadePrefab: {fileID: 6029842219414395184, guid: d465de454fe424e099118612210e4496, type: 3}
   throwForce: 14
   throwUpwardBias: 0.25
-  throwRandomTorque: 8
+  throwRandomTorque: 3
   grenadeFuseTime: 3
   explosionRadius: 5
   explosionMinDamage: 25

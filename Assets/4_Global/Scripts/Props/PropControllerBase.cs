@@ -77,6 +77,9 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     /// <summary>체력 및 사망 상태를 제공하는 컴포넌트.</summary>
     protected PlayerHealth _playerHealth;
 
+    /// <summary>이동, 점프 및 착지 사운드를 재생하는 하위 오디오 컴포넌트.</summary>
+    protected StepSoundTest _stepSound;
+
     /// <summary>현재 프롭 동작 상태.</summary>
     protected EPlayerState _EplayerState;
 
@@ -131,6 +134,12 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     /// <summary>직전 시뮬레이션 틱 시작 시점의 <see cref="Rigidbody"/> 월드 위치.</summary>
     private Vector3 _lastTickPosition;
 
+    /// <summary>스폰 또는 리스폰 이후 바닥에 최소 1회 접지되었는지 여부.</summary>
+    private bool _hasGroundedOnce;
+
+    /// <summary>공중 체류 중 기록된 최대 하강 속력 (m/s).</summary>
+    private float _peakFallSpeed;
+
     private const float DefaultRotationSmoothTime = 0.1f;
     private const float DefaultJumpForce = 12f;
     private const float DefaultDirectionalJumpForce = 6f;
@@ -143,6 +152,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     private const float DefaultCheckRadius = 0.2f;
     private const int DefaultGroundLayerMask = 1 << 3;
     private const float GroundedMaxRiseSpeed = 0.1f; // 바닥으로 판정하는 최대 상승 속도 (m/s)
+    private const float MinLandingFallSpeed = 1.5f; // 착지 사운드를 재생할 최소 공중 하강 속력 (m/s)
     private const float RagdollMomentumThresholdSqr = 0.01f; // 쓰러짐 시 이동 관성으로 인정할 최소 수평 속력 제곱
     private const float MinMomentumPushScale = 0.5f; // 관성 쓰러짐 시 최소 힘 배율
     private const float MaxMomentumPushScale = 1.5f; // 관성 쓰러짐 시 최대 힘 배율
@@ -250,6 +260,7 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
         _bodyCollider = GetComponentInChildren<Collider>();
         _propAnim = GetComponent<IPropAnimController>();
         _playerHealth = GetComponent<PlayerHealth>();
+        _stepSound = GetComponentInChildren<StepSoundTest>(true);
         _EplayerState = EPlayerState.Idle;
 
         if (_groundCheck == null)
@@ -336,6 +347,9 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
 
     public override void OnStartNetwork()
     {
+        _hasGroundedOnce = false;
+        _peakFallSpeed = 0f;
+
         if (_rb != null)
         {
             _lastTickPosition = _rb.position;
@@ -367,6 +381,8 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
         _hasReceivedDeadReconcile = false;
         _appliedMoveSpeed = 0f;
         _hasAppliedMoveSpeed = false;
+        _hasGroundedOnce = false;
+        _peakFallSpeed = 0f;
 
         if (_playerHealth != null)
         {
@@ -435,6 +451,8 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
         _turnSmoothVelocity = 0f;
         _currentAimPitch = 0f;
         _lastSentAimPitch = 0f;
+        _hasGroundedOnce = false;
+        _peakFallSpeed = 0f;
 
         if (aimPitchTarget != null)
         {
@@ -511,6 +529,8 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
         _turnSmoothVelocity = 0f;
         _currentAimPitch = 0f;
         _lastSentAimPitch = 0f;
+        _hasGroundedOnce = false;
+        _peakFallSpeed = 0f;
 
         if (_rb != null)
         {
@@ -667,11 +687,40 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
             _isGrounded &= _rb.linearVelocity.y <= GroundedMaxRiseSpeed;
         }
 
+        if (!_isGrounded)
+        {
+            float fallSpeed = -_rb.linearVelocity.y;
+            if (fallSpeed > _peakFallSpeed)
+            {
+                _peakFallSpeed = fallSpeed;
+            }
+        }
+
         if (!_wasGrounded && _isGrounded)
         {
+            bool shouldPlayLandingSound = _hasGroundedOnce && _peakFallSpeed >= MinLandingFallSpeed;
             _EplayerState = EPlayerState.Idle;
             _propAnim?.SetJumpState(false, false);
             OnLanded();
+
+            if (shouldPlayLandingSound && !state.ContainsReplayed())
+            {
+                if (IsOwner && (PredictionManager == null || !PredictionManager.IsReconciling))
+                {
+                    _stepSound?.PlayLandingSound();
+                }
+
+                if (IsServerInitialized)
+                {
+                    PlayLandingSoundObserversRpc();
+                }
+            }
+        }
+
+        if (_isGrounded)
+        {
+            _hasGroundedOnce = true;
+            _peakFallSpeed = 0f;
         }
 
         _wasGrounded = _isGrounded;
@@ -844,6 +893,14 @@ public abstract class PropControllerBase : NetworkBehaviour, IPropEntity
     {
         if (IsDead) return;
         _syncedAimPitch.Value = Mathf.Clamp(pitch, minAimPitch, maxAimPitch);
+    }
+
+    /// <summary>원격 관전자 클라이언트에서 이 프롭의 3D 착지 사운드를 재생한다.</summary>
+    [ObserversRpc(ExcludeOwner = true)]
+    private void PlayLandingSoundObserversRpc()
+    {
+        if (IsDead) return;
+        _stepSound?.PlayLandingSound();
     }
 
     // ***************************************************************
