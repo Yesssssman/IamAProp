@@ -40,6 +40,11 @@ public class AnimationPreview : MonoBehaviour
                 hand.gameObject.AddComponent<HandReloadAudioRelay>();
             }
 
+            if (!hand.GetComponent<HandGripSwitcher>())
+            {
+                hand.gameObject.AddComponent<HandGripSwitcher>();
+            }
+
             handPlayable = AnimationClipPlayable.Create(graph, handClip);
             AnimationPlayableOutput.Create(graph, "Hand", hand.GetComponent<Animator>()).SetSourcePlayable(handPlayable);
         }

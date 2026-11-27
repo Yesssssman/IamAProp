@@ -66,6 +66,9 @@ public class AnimationPreviewStage : MonoBehaviour
 
         /// <summary>이 손 클립을 핀을 뽑은 수류탄으로 시작하는지 여부. 수류탄이 아니면 무시함.</summary>
         public bool pinRemoved;
+
+        /// <summary>이 손 클립이 처음으로 돌아갈 때마다 무기의 탄피를 배출하는지 여부.</summary>
+        public bool ejectsCasing;
     }
 
     [Serializable]
@@ -92,6 +95,9 @@ public class AnimationPreviewStage : MonoBehaviour
         /// 탄창을 교체하는 손 클립. <see cref="HandScript.EquipMagazineToGun"/> 이벤트를 가져야 함. 없으면 null.
         /// </summary>
         public AnimationClip reloadClip;
+
+        /// <summary>무기의 <c>CasingEjectPoint</c>에서 배출하는 탄피 파티클 프리팹. 없으면 null.</summary>
+        public ParticleSystem casingParticle;
     }
 
     [SerializeField] private Prop[] props;
@@ -149,6 +155,17 @@ public class AnimationPreviewStage : MonoBehaviour
                             bool pinned = !handClip.pinRemoved;
                             grenade.ResetGrenade(pinned);
                             preview.HandClipLooped += () => grenade.ResetGrenade(pinned);
+                        }
+
+                        if (handClip.ejectsCasing && weapon.casingParticle)
+                        {
+                            Transform ejectPoint = weaponObject.transform.Find("CasingEjectPoint");
+                            ParticleSystem casing = Instantiate(weapon.casingParticle, preview.transform);
+                            preview.HandClipLooped += () =>
+                            {
+                                casing.transform.SetPositionAndRotation(ejectPoint.position, ejectPoint.rotation);
+                                casing.Emit(1);
+                            };
                         }
 
                         GunScript gun = weaponObject.GetComponent<GunScript>();
