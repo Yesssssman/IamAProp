@@ -96,6 +96,9 @@ public class PlayerWeaponInventory : NetworkBehaviour
     // Events
     // ***************************************************************
 
+    /// <summary>서버에서 바닥 드롭용 <see cref="WorldWeaponPickup"/>이 스폰될 때 발생하는 전역 이벤트.</summary>
+    public static event Action<WorldWeaponPickup> OnServerPickupSpawned;
+
     /// <summary>현재 장착 중인 무기 상태가 변경될 때 발생하는 이벤트.</summary>
     public event Action<EquippedWeaponState> OnEquippedWeaponChanged;
 
@@ -395,6 +398,100 @@ public class PlayerWeaponInventory : NetworkBehaviour
             WeaponId = string.Empty,
             ChangeSequence = (ushort)(_equippedState.Value.ChangeSequence + 1)
         };
+    }
+
+    /// <summary>서버에서 선택된 <paramref name="loadout"/>대로 5슬롯 인벤토리를 일괄 초기화하고 우선 무기를 장착한다.</summary>
+    [Server]
+    public void ApplyLoadout(in PlayerLoadoutSelection loadout)
+    {
+        if (!IsServerInitialized || weaponDatabase == null) return;
+
+        while (_slots.Count < SlotCount)
+        {
+            _slots.Add(WeaponSlotState.Empty);
+        }
+
+        _slots[(int)EWeaponSlotType.Unarmed] = WeaponSlotState.Empty;
+
+        WeaponDataSO meleeData = weaponDatabase.GetById(loadout.MeleeWeaponId) ?? weaponDatabase.DefaultMeleeWeapon;
+        _slots[(int)EWeaponSlotType.Melee] = BuildFullAmmoSlotState(meleeData, EWeaponSlotType.Melee);
+
+        WeaponDataSO secondaryData = weaponDatabase.GetById(loadout.SecondaryWeaponId);
+        _slots[(int)EWeaponSlotType.Secondary] = BuildFullAmmoSlotState(secondaryData, EWeaponSlotType.Secondary);
+
+        WeaponDataSO primaryData = weaponDatabase.GetById(loadout.PrimaryWeaponId);
+        _slots[(int)EWeaponSlotType.Primary] = BuildFullAmmoSlotState(primaryData, EWeaponSlotType.Primary);
+
+        _throwableItems.Clear();
+        _activeThrowableIndex = 0;
+
+        WeaponDataSO throwableData = weaponDatabase.GetById(loadout.ThrowableWeaponId) ?? weaponDatabase.DefaultThrowableWeapon;
+        int initialCount = weaponDatabase.InitialThrowableCount > 0 ? weaponDatabase.InitialThrowableCount : 1;
+        if (throwableData != null && throwableData.IsThrowable && !string.IsNullOrEmpty(throwableData.WeaponId))
+        {
+            int maxStack = throwableData.MaxAmmo > 0 ? throwableData.MaxAmmo : initialCount;
+            _throwableItems.Add(new WeaponSlotState
+            {
+                WeaponId = throwableData.WeaponId,
+                CurrentAmmo = Mathf.Clamp(initialCount, 1, maxStack),
+                ReserveAmmo = 0
+            });
+            ApplyActiveThrowableSelection(0, equipThrowableSlot: false, forceSequenceBump: false);
+        }
+        else
+        {
+            _slots[(int)EWeaponSlotType.Throwable] = WeaponSlotState.Empty;
+        }
+
+        // 주무기 → 보조무기 → 근접무기 → 맨손 순으로 초기 장착 슬롯을 결정한다.
+        EWeaponSlotType equipSlot = EWeaponSlotType.Unarmed;
+        string equipWeaponId = string.Empty;
+
+        if (!_slots[(int)EWeaponSlotType.Primary].IsEmpty)
+        {
+            equipSlot = EWeaponSlotType.Primary;
+            equipWeaponId = _slots[(int)EWeaponSlotType.Primary].WeaponId;
+        }
+        else if (!_slots[(int)EWeaponSlotType.Secondary].IsEmpty)
+        {
+            equipSlot = EWeaponSlotType.Secondary;
+            equipWeaponId = _slots[(int)EWeaponSlotType.Secondary].WeaponId;
+        }
+        else if (!_slots[(int)EWeaponSlotType.Melee].IsEmpty)
+        {
+            equipSlot = EWeaponSlotType.Melee;
+            equipWeaponId = _slots[(int)EWeaponSlotType.Melee].WeaponId;
+        }
+
+        _equippedState.Value = new EquippedWeaponState
+        {
+            Slot = equipSlot,
+            WeaponId = equipWeaponId,
+            ChangeSequence = (ushort)(_equippedState.Value.ChangeSequence + 1)
+        };
+    }
+
+    /// <summary>서버에서 사망 시 소지 중인 총기류(주무기·보조무기)만 시체 주변에 드롭하고 근접·투척무기는 유지한다.</summary>
+    [Server]
+    public void DropFirearmsOnDeath()
+    {
+        if (!IsServerInitialized) return;
+
+        int primaryIndex = (int)EWeaponSlotType.Primary;
+        if (primaryIndex < _slots.Count && !_slots[primaryIndex].IsEmpty)
+        {
+            WeaponSlotState primaryState = _slots[primaryIndex];
+            _slots[primaryIndex] = WeaponSlotState.Empty;
+            SpawnDroppedWeapon(primaryState, yawOffsetDegrees: -25f);
+        }
+
+        int secondaryIndex = (int)EWeaponSlotType.Secondary;
+        if (secondaryIndex < _slots.Count && !_slots[secondaryIndex].IsEmpty)
+        {
+            WeaponSlotState secondaryState = _slots[secondaryIndex];
+            _slots[secondaryIndex] = WeaponSlotState.Empty;
+            SpawnDroppedWeapon(secondaryState, yawOffsetDegrees: 25f);
+        }
     }
 
     /// <summary>서버에서 지정 슬롯 무기의 탄창 탄약을 1발 차감하고 슬롯 상태를 갱신한다.</summary>
@@ -808,9 +905,25 @@ public class PlayerWeaponInventory : NetworkBehaviour
         return closestDistance;
     }
 
+    /// <summary>지정 슬롯에 맞는 최대 탄약 상태의 <see cref="WeaponSlotState"/>를 생성한다.</summary>
+    private static WeaponSlotState BuildFullAmmoSlotState(WeaponDataSO data, EWeaponSlotType expectedSlot)
+    {
+        if (data == null || string.IsNullOrEmpty(data.WeaponId) || data.SlotType != expectedSlot)
+        {
+            return WeaponSlotState.Empty;
+        }
+
+        return new WeaponSlotState
+        {
+            WeaponId = data.WeaponId,
+            CurrentAmmo = data.UsesAmmo ? data.MaxAmmo : 0,
+            ReserveAmmo = data.UsesAmmo ? data.MaxReserveAmmo : 0
+        };
+    }
+
     /// <summary>서버에서 플레이어 전방 안전 위치에 <paramref name="slotState"/>를 담은 월드 픽업을 스폰한다.</summary>
     [Server]
-    private void SpawnDroppedWeapon(WeaponSlotState slotState)
+    private void SpawnDroppedWeapon(WeaponSlotState slotState, float yawOffsetDegrees = 0f)
     {
         if (slotState.IsEmpty || weaponDatabase == null || weaponDatabase.WorldPickupPrefab == null) return;
 
@@ -820,6 +933,10 @@ public class PlayerWeaponInventory : NetworkBehaviour
         Vector3 forward = transform.forward;
         forward.y = 0f;
         forward = forward.sqrMagnitude > 0.0001f ? forward.normalized : Vector3.forward;
+        if (!Mathf.Approximately(yawOffsetDegrees, 0f))
+        {
+            forward = (Quaternion.Euler(0f, yawOffsetDegrees, 0f) * forward).normalized;
+        }
 
         float spawnDistance = dropForwardOffset;
         if (Physics.Raycast(origin, forward, out RaycastHit wallHit, dropForwardOffset + DropWallMargin, dropObstacleMask, QueryTriggerInteraction.Ignore))
@@ -840,5 +957,6 @@ public class PlayerWeaponInventory : NetworkBehaviour
             UnityEngine.Random.Range(-dropRandomTorque, dropRandomTorque));
 
         pickup.Initialize(slotState.WeaponId, slotState.CurrentAmmo, slotState.ReserveAmmo, launchImpulse, launchTorque);
+        OnServerPickupSpawned?.Invoke(pickup);
     }
 }

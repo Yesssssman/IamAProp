@@ -121,6 +121,9 @@ public class DeathCamController : MonoBehaviour
     /// <summary>사망 포커스 종료까지 남은 시간 (초 단위).</summary>
     private float _focusRemainingTime;
 
+    /// <summary>포커스 종료 후 <c>관전하기</c> 버튼 UI 표시를 허용할지 여부 (데스매치 등 리스폰 모드는 비활성).</summary>
+    private bool _allowSpectateButton = true;
+
     // ***************************************************************
     // Properties
     // ***************************************************************
@@ -185,6 +188,16 @@ public class DeathCamController : MonoBehaviour
 
         _state = EDeathCamState.WaitingForSpectateClick;
 
+        if (_playerInputAxisController != null)
+        {
+            _playerInputAxisController.enabled = false;
+        }
+
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        if (!_allowSpectateButton) return;
+
         if (EventSystem.current == null)
         {
             GameObject eventSystemObj = new GameObject("EventSystem");
@@ -198,13 +211,6 @@ public class DeathCamController : MonoBehaviour
             _deathCamUIInstance.OnSpectateClicked += HandleSpectateClicked;
         }
 
-        if (_playerInputAxisController != null)
-        {
-            _playerInputAxisController.enabled = false;
-        }
-
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
         _deathCamUIInstance?.Show();
     }
 
@@ -294,6 +300,16 @@ public class DeathCamController : MonoBehaviour
         playerCamera = cam;
         _playerInputAxisController = playerCamera.GetComponent<CinemachineInputAxisController>();
         _playerRotationComposer = playerCamera.GetComponent<CinemachineRotationComposer>();
+    }
+
+    /// <summary>현재 게임 모드 정책에 따라 사망 후 <c>관전하기</c> 버튼 표시 여부를 설정한다.</summary>
+    public void SetAllowSpectateButton(bool allow)
+    {
+        _allowSpectateButton = allow;
+        if (!allow)
+        {
+            _deathCamUIInstance?.Hide();
+        }
     }
 
     /// <summary>로컬 플레이어 사망 시 크로스헤어를 숨기고 현재 카메라 위치에서 킬러 방향을 바라보는 포커스 단계를 시작한다.</summary>
@@ -390,9 +406,18 @@ public class DeathCamController : MonoBehaviour
             }
         }
 
+        bool unlockCursorForLoadout = !_allowSpectateButton
+            && (MatchManager.Instance == null || MatchManager.Instance.AllowLoadoutSelection);
+
         if (_playerInputAxisController != null)
         {
-            _playerInputAxisController.enabled = !hasValidKiller;
+            _playerInputAxisController.enabled = !hasValidKiller && !unlockCursorForLoadout;
+        }
+
+        if (unlockCursorForLoadout)
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
         }
 
         _focusRemainingTime = Mathf.Max(0f, deathFocusDuration);
@@ -439,6 +464,8 @@ public class DeathCamController : MonoBehaviour
             _spectateInputAxisController.enabled = false;
         }
 
+        bool allowGameplayInput = MatchManager.Instance == null || MatchManager.Instance.IsGameplayInputAllowed;
+
         if (playerCamera != null)
         {
             if (previousLocalPlayer != null && previousLocalPlayer.CameraAnchor != null)
@@ -449,7 +476,7 @@ public class DeathCamController : MonoBehaviour
 
             if (_playerInputAxisController != null)
             {
-                _playerInputAxisController.enabled = true;
+                _playerInputAxisController.enabled = allowGameplayInput;
             }
 
             CinemachineWeaponFeedback feedback = playerCamera.GetComponent<CinemachineWeaponFeedback>();
@@ -459,7 +486,7 @@ public class DeathCamController : MonoBehaviour
             }
         }
 
-        if (previousLocalPlayer != null && previousLocalPlayer.IsSpawned && previousLocalPlayer.IsOwner)
+        if (allowGameplayInput && previousLocalPlayer != null && previousLocalPlayer.IsSpawned && previousLocalPlayer.IsOwner)
         {
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;

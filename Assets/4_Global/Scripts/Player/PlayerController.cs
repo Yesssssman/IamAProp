@@ -117,6 +117,12 @@ public class PlayerController : PropControllerBase
     /// <summary>벽 근접 감지로 현재 적용 중인 총기 후퇴 거리 (미터).</summary>
     private float _currentWallRetract;
 
+    /// <summary>카운트다운·종료 등 매치 상태에 의해 이동·전투 입력이 잠겨 있는지 여부.</summary>
+    private bool _isInputLocked;
+
+    /// <summary>로컬 소유자에 바인딩된 기본 3인칭 시네머신 카메라 참조.</summary>
+    private CinemachineCamera _boundTpsCamera;
+
     // ***************************************************************
     // Events
     // ***************************************************************
@@ -149,6 +155,9 @@ public class PlayerController : PropControllerBase
     /// <summary>벽 근접 감지로 현재 적용 중인 총기 후퇴 거리 (미터).</summary>
     public float CurrentWallRetractDistance => _currentWallRetract;
 
+    /// <summary>매치 상태에 의해 로컬 입력이 잠겨 있는지 여부.</summary>
+    public bool IsInputLocked => _isInputLocked;
+
     // ***************************************************************
     // MonoBehaviour
     // ***************************************************************
@@ -159,12 +168,12 @@ public class PlayerController : PropControllerBase
 
         if (_fpsAdsController.IsAdsActive)
         {
-            if (!CanUseAds())
+            if (_isInputLocked || !CanUseAds())
             {
                 _fpsAdsController.ExitAds();
             }
         }
-        else if (_fpsAdsController.InputMode == EAdsInputMode.Hold && _isAimHeld && CanUseAds())
+        else if (!_isInputLocked && _fpsAdsController.InputMode == EAdsInputMode.Hold && _isAimHeld && CanUseAds())
         {
             _fpsAdsController.EnterAds(CurrentEquippedWeaponData);
         }
@@ -314,8 +323,10 @@ public class PlayerController : PropControllerBase
     {
         if (!IsOwner) return;
 
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
+        bool allowGameplayInput = MatchManager.Instance == null || MatchManager.Instance.IsGameplayInputAllowed;
+        _isInputLocked = !allowGameplayInput;
+        Cursor.lockState = allowGameplayInput ? CursorLockMode.Locked : CursorLockMode.None;
+        Cursor.visible = !allowGameplayInput;
 
         _inputActions = new PlayerControls();
         _inputActions.Enable();
@@ -339,6 +350,11 @@ public class PlayerController : PropControllerBase
         _deathCamController = FindAnyObjectByType<DeathCamController>(FindObjectsInactive.Include);
         _fpsAdsController = FindAnyObjectByType<FpsAdsController>(FindObjectsInactive.Include);
 
+        if (_deathCamController != null && MatchManager.Instance != null)
+        {
+            _deathCamController.SetAllowSpectateButton(MatchManager.Instance.AllowSpectateButton);
+        }
+
         CinemachineCamera cam = _deathCamController != null ? _deathCamController.PlayerCamera : null;
         if (cam == null && _fpsAdsController != null)
         {
@@ -359,6 +375,8 @@ public class PlayerController : PropControllerBase
             }
         }
 
+        _boundTpsCamera = cam;
+
         if (cam != null)
         {
             _deathCamController?.BindPlayerCamera(cam);
@@ -371,6 +389,13 @@ public class PlayerController : PropControllerBase
             if (orbitalFollow != null)
             {
                 orbitalFollow.HorizontalAxis.Value = transform.eulerAngles.y;
+            }
+            cam.PreviousStateIsValid = false;
+
+            CinemachineInputAxisController axisController = cam.GetComponent<CinemachineInputAxisController>();
+            if (axisController != null)
+            {
+                axisController.enabled = allowGameplayInput;
             }
 
             _cameraFeedback = cam.GetComponent<CinemachineWeaponFeedback>();
@@ -413,6 +438,8 @@ public class PlayerController : PropControllerBase
         _moveInput = Vector2.zero;
         _jumpRequested = false;
         _isAimHeld = false;
+        _isInputLocked = false;
+        _boundTpsCamera = null;
 
         if (_playerHealth != null)
         {
@@ -506,7 +533,7 @@ public class PlayerController : PropControllerBase
     /// <inheritdoc/>
     protected override PlayerInputData CollectTickInput()
     {
-        if (IsDead)
+        if (IsDead || _isInputLocked)
         {
             _moveInput = Vector2.zero;
             _jumpRequested = false;
@@ -597,6 +624,34 @@ public class PlayerController : PropControllerBase
     // Public Control API
     // ***************************************************************
 
+    /// <summary>카운트다운·종료 등 매치 상태에 따라 이동·공격·상호작용 입력을 잠그거나 해제한다.</summary>
+    public void SetInputLocked(bool locked)
+    {
+        _isInputLocked = locked;
+        if (!locked) return;
+
+        _moveInput = Vector2.zero;
+        _jumpRequested = false;
+        _isAimHeld = false;
+        _weaponController?.CancelCombatActions();
+        if (IsOwner)
+        {
+            _fpsAdsController?.ForceExitAds();
+        }
+    }
+
+    /// <summary>로컬 소유자의 3인칭 시점 마우스 회전 입력을 켜거나 끈다.</summary>
+    public void SetCameraInputEnabled(bool enabled)
+    {
+        if (!IsOwner || _boundTpsCamera == null) return;
+
+        CinemachineInputAxisController axisController = _boundTpsCamera.GetComponent<CinemachineInputAxisController>();
+        if (axisController != null)
+        {
+            axisController.enabled = enabled;
+        }
+    }
+
     /// <summary>보간된 시각 루트 기준 카메라 추적 월드 좌표를 반환한다.</summary>
     public Vector3 GetCameraTargetPosition()
     {
@@ -678,7 +733,7 @@ public class PlayerController : PropControllerBase
     /// <summary>이동 입력 벡터를 갱신한다.</summary>
     private void OnMovePerformed(InputAction.CallbackContext context)
     {
-        if (IsDead)
+        if (IsDead || _isInputLocked)
         {
             _moveInput = Vector2.zero;
             return;
@@ -696,7 +751,7 @@ public class PlayerController : PropControllerBase
     /// <summary>바닥에 닿아 있을 때 점프 요청 플래그를 설정한다.</summary>
     private void OnJump(InputAction.CallbackContext context)
     {
-        if (!IsOwner || IsDead || !_isGrounded) return;
+        if (!IsOwner || IsDead || _isInputLocked || !_isGrounded) return;
 
         _jumpRequested = true;
     }
@@ -704,7 +759,7 @@ public class PlayerController : PropControllerBase
     /// <summary>공격 입력 시작 시 무기 공격 또는 상태를 갱신한다.</summary>
     private void OnAttackStarted(InputAction.CallbackContext context)
     {
-        if (!IsOwner || IsDead) return;
+        if (!IsOwner || IsDead || _isInputLocked) return;
 
         _EplayerState = EPlayerState.Attack;
         if (_weaponController != null)
@@ -722,7 +777,7 @@ public class PlayerController : PropControllerBase
     {
         if (!IsOwner) return;
 
-        if (IsDead)
+        if (IsDead || _isInputLocked)
         {
             _weaponController?.SetFireInput(false);
             return;
@@ -742,7 +797,7 @@ public class PlayerController : PropControllerBase
     /// <summary>무기 전환 입력에 따라 보유 중인 슬롯으로 무기 모드를 변경한다.</summary>
     private void ChangeWeaponMode(InputAction.CallbackContext context)
     {
-        if (!IsOwner || IsDead) return;
+        if (!IsOwner || IsDead || _isInputLocked) return;
 
         int slotIndex = Mathf.Clamp(Mathf.RoundToInt(context.ReadValue<float>()) - 1, 0, PlayerWeaponInventory.SlotCount - 1);
         EWeaponSlotType targetSlot = (EWeaponSlotType)slotIndex;
@@ -791,7 +846,7 @@ public class PlayerController : PropControllerBase
     /// <summary>재장전 입력 시 무기 재장전 시퀀스를 요청한다.</summary>
     private void OnReloadStarted(InputAction.CallbackContext context)
     {
-        if (!IsOwner || IsDead) return;
+        if (!IsOwner || IsDead || _isInputLocked) return;
 
         if (_weaponController != null)
         {
@@ -811,7 +866,7 @@ public class PlayerController : PropControllerBase
     /// <summary><c>G</c> 입력 시 <c>Alt</c> 조합이 아닐 때만 주변 무기 획득을 요청한다.</summary>
     private void OnPickupStarted(InputAction.CallbackContext context)
     {
-        if (!IsOwner || IsDead || _weaponInventory == null) return;
+        if (!IsOwner || IsDead || _isInputLocked || _weaponInventory == null) return;
         if (Keyboard.current != null && Keyboard.current.altKey.isPressed) return;
 
         _fpsAdsController?.ExitAds();
@@ -823,7 +878,7 @@ public class PlayerController : PropControllerBase
     /// <summary><c>E</c> 입력 시 조준 방향 또는 근접 범위의 문·창문 개폐를 요청한다.</summary>
     private void OnInteractStarted(InputAction.CallbackContext context)
     {
-        if (!IsOwner || IsDead) return;
+        if (!IsOwner || IsDead || _isInputLocked) return;
 
         Vector3 playerPos = transform.position;
         NetworkHingedPortal bestPortal = null;
@@ -900,7 +955,7 @@ public class PlayerController : PropControllerBase
     /// <summary><c>Alt + G</c> 입력 시 현재 장착 무기를 바닥에 버리도록 요청한다.</summary>
     private void OnDropWeaponStarted(InputAction.CallbackContext context)
     {
-        if (!IsOwner || IsDead || _weaponInventory == null) return;
+        if (!IsOwner || IsDead || _isInputLocked || _weaponInventory == null) return;
         if (_weaponInventory.ActiveSlot == EWeaponSlotType.Unarmed) return;
 
         _fpsAdsController?.ExitAds();
@@ -913,7 +968,7 @@ public class PlayerController : PropControllerBase
     /// <summary>마우스 우클릭 입력 시작 시 수류탄 조준 취소 또는 1인칭 정조준을 전환한다.</summary>
     private void OnAimStarted(InputAction.CallbackContext context)
     {
-        if (!IsOwner) return;
+        if (!IsOwner || _isInputLocked) return;
 
         if (_weaponController != null && _weaponController.IsGrenadeAiming)
         {

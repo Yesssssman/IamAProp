@@ -4,15 +4,18 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using FishNet;
+using FishNet.Managing;
+using FishNet.Managing.Scened;
+using FishNet.Transporting;
+using FishNet.Transporting.UTP;
 using Networking.Dto;
-using Unity.Netcode;
-using Unity.Netcode.Transports.UTP;
+using Unity.Networking.Transport.Relay;
 using Unity.Services.Authentication;
 using Unity.Services.Core;
 using Unity.Services.Relay;
 using Unity.Services.Relay.Models;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 namespace Networking
 {
@@ -33,8 +36,7 @@ namespace Networking
         private const string LOBBY_SOCKET = "ws://127.0.0.1:5050/ws/iamaprop/lobby";
 #endif
 
-        // PLACEHOLDER: 인게임 씬이 구현되기 전까지 쓰는 임시 씬
-        private const string INGAME_SCENE = "YesmanTestScene";
+        private const string DEFAULT_INGAME_SCENE = "InGameScene";
 
         public const int MIN_PLAYERS = 2;  // 방장 포함, 서버 LobbyOptions.MinPlayers와 같음
         public const int MAX_PLAYERS = 16; // 방장 포함, 서버 LobbyOptions.MaxPlayers와 같음
@@ -54,6 +56,9 @@ namespace Networking
         /// <summary>방장이 게임 시작을 요청할 때 만든 Relay 할당.</summary>
         private static Allocation sHostAllocation;
 
+        /// <summary>클라이언트 접속 결과를 기다리며 콜백을 구독 중인 FishNet <see cref="NetworkManager"/>.</summary>
+        private static NetworkManager sPendingClientNetwork;
+
         /// <summary>현재 대기실 상태. 대기실에 없으면 null.</summary>
         public static RoomStateDTO CurrentRoom { get; private set; }
 
@@ -71,6 +76,11 @@ namespace Networking
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()
         {
+            if (sPendingClientNetwork != null)
+            {
+                sPendingClientNetwork.ClientManager.OnClientConnectionState -= HandleClientConnectionState;
+                sPendingClientNetwork = null;
+            }
             CloseSocket();
             sHostAllocation = null;
             CurrentRoom = null;
@@ -436,29 +446,56 @@ namespace Networking
                         {
                             // 게임 중에도 대기실 wss 연결은 유지됨 (서버의 방 세션 유지)
                             string joinCode = Payload<RoomGameStartPayload>(json).relayJoinCode;
-                            NetworkManager network = NetworkManager.Singleton;
-                            UnityTransport transport = network.GetComponent<UnityTransport>();
+                            NetworkManager network = InstanceFinder.NetworkManager;
+                            UnityTransport transport = network != null && network.TransportManager != null
+                                ? network.TransportManager.GetTransport<UnityTransport>()
+                                : null;
+
+                            if (network == null || transport == null)
+                            {
+                                Debug.LogError("FishNet NetworkManager 또는 FishyUnityTransport를 찾을 수 없습니다.");
+                                if (IsHost)
+                                {
+                                    sHostAllocation = null;
+                                    GameStartFailed?.Invoke(LobbyMessages.HOST_START_FAILED);
+                                    await Send(RoomProtocol.GameEnd, new RoomGameEndPayload { reason = LobbyMessages.HOST_START_FAILED });
+                                }
+                                else
+                                {
+                                    GameStartFailed?.Invoke(CommonMessages.RELAY_CONNECTION_FAILED);
+                                }
+                                break;
+                            }
 
                             if (IsHost)
                             {
                                 transport.SetRelayServerData(sHostAllocation.ToRelayServerData(RELAY_CONNECTION_TYPE));
                                 sHostAllocation = null;
 
-                                if (!network.StartHost())
+                                bool started = network.ServerManager.StartConnection()
+                                    && network.ClientManager.StartConnection();
+                                if (!started)
                                 {
+                                    if (network.ClientManager.Started) network.ClientManager.StopConnection();
+                                    if (network.ServerManager.Started) network.ServerManager.StopConnection(true);
+
                                     // 방은 유지하고 대기실 상태로 되돌림 — 다른 멤버는 GameEnded로 실패를 알게 됨
                                     GameStartFailed?.Invoke(LobbyMessages.HOST_START_FAILED);
                                     await Send(RoomProtocol.GameEnd, new RoomGameEndPayload { reason = LobbyMessages.HOST_START_FAILED });
                                     break;
                                 }
 
-                                // 클라이언트는 접속 시 Netcode가 현재 씬으로 동기화해 줌
-                                SceneEventProgressStatus status = network.SceneManager.LoadScene(INGAME_SCENE, LoadSceneMode.Single);
+                                GameModeDatabaseSO modeDb = GameModeDatabaseSO.LoadDefault();
+                                string targetScene = modeDb != null
+                                    ? modeDb.GetSceneNameByName(CurrentRoom?.map)
+                                    : DEFAULT_INGAME_SCENE;
 
-                                if (status != SceneEventProgressStatus.Started)
+                                // 클라이언트는 접속 시 FishNet 글로벌 씬 동기화로 자동 진입함
+                                SceneLoadData sceneLoadData = new SceneLoadData(targetScene)
                                 {
-                                    Debug.LogError($"인게임 씬 로드 실패: {status}");
-                                }
+                                    ReplaceScenes = ReplaceOption.All
+                                };
+                                network.SceneManager.LoadGlobalScenes(sceneLoadData);
 
                                 GameStarted?.Invoke();
                                 break;
@@ -477,12 +514,18 @@ namespace Networking
                                 break;
                             }
 
-                            // 접속 결과는 HandleClientConnectionEvent가 알림 (실패는 Unity Transport 접속 시도 횟수 × 간격 후)
-                            network.OnConnectionEvent += HandleClientConnectionEvent;
-
-                            if (!network.StartClient())
+                            if (sPendingClientNetwork != null)
                             {
-                                network.OnConnectionEvent -= HandleClientConnectionEvent;
+                                sPendingClientNetwork.ClientManager.OnClientConnectionState -= HandleClientConnectionState;
+                            }
+
+                            sPendingClientNetwork = network;
+                            network.ClientManager.OnClientConnectionState += HandleClientConnectionState;
+
+                            if (!network.ClientManager.StartConnection())
+                            {
+                                network.ClientManager.OnClientConnectionState -= HandleClientConnectionState;
+                                sPendingClientNetwork = null;
                                 GameStartFailed?.Invoke(CommonMessages.RELAY_CONNECTION_FAILED);
                             }
 
@@ -491,14 +534,26 @@ namespace Networking
                         case RoomProtocol.GameEnded:
                         {
                             string reason = Payload<RoomGameEndPayload>(json).reason;
-                            NetworkManager network = NetworkManager.Singleton;
+                            NetworkManager network = InstanceFinder.NetworkManager;
 
                             // 아직 호스트에 접속 중인 클라이언트의 접속 시도도 여기서 중단됨
-                            network.OnConnectionEvent -= HandleClientConnectionEvent;
-
-                            if (network.IsListening)
+                            if (sPendingClientNetwork != null)
                             {
-                                network.Shutdown();
+                                sPendingClientNetwork.ClientManager.OnClientConnectionState -= HandleClientConnectionState;
+                                sPendingClientNetwork = null;
+                            }
+
+                            if (network != null)
+                            {
+                                if (network.ClientManager.Started)
+                                {
+                                    network.ClientManager.StopConnection();
+                                }
+
+                                if (network.ServerManager.Started)
+                                {
+                                    network.ServerManager.StopConnection(true);
+                                }
                             }
 
                             foreach (RoomMemberDTO member in CurrentRoom.members)
@@ -534,22 +589,26 @@ namespace Networking
         }
 
         /// <summary>클라이언트의 Relay 호스트 접속 성공·실패를 <see cref="GameStarted"/>, <see cref="GameStartFailed"/>로 알림.</summary>
-        private static void HandleClientConnectionEvent(NetworkManager network, ConnectionEventData data)
+        private static void HandleClientConnectionState(ClientConnectionStateArgs args)
         {
-            if (data.EventType is not (ConnectionEvent.ClientConnected or ConnectionEvent.ClientDisconnected))
+            if (args.ConnectionState is not (LocalConnectionState.Started or LocalConnectionState.Stopped))
             {
                 return;
             }
 
-            network.OnConnectionEvent -= HandleClientConnectionEvent;
+            if (sPendingClientNetwork != null)
+            {
+                sPendingClientNetwork.ClientManager.OnClientConnectionState -= HandleClientConnectionState;
+                sPendingClientNetwork = null;
+            }
 
-            if (data.EventType == ConnectionEvent.ClientConnected)
+            if (args.ConnectionState == LocalConnectionState.Started)
             {
                 GameStarted?.Invoke();
             }
             else
             {
-                Debug.LogError("호스트 접속 실패: " + network.DisconnectReason);
+                Debug.LogError("FishNet 호스트 접속 실패");
                 GameStartFailed?.Invoke(CommonMessages.RELAY_CONNECTION_FAILED);
             }
         }

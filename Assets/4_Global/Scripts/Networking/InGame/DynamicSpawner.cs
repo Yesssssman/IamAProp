@@ -26,6 +26,9 @@ public class DynamicSpawner : MonoBehaviour
     /// <summary>씬 로드 콜백을 구독한 <see cref="NetworkManager"/> 참조.</summary>
     private NetworkManager _networkManager;
 
+    /// <summary><see cref="MatchManager"/>가 풀을 찾지 못했을 때 폴백으로 참조할 플레이어 프리팹.</summary>
+    public GameObject FallbackPlayerPrefab => playerPrefab;
+
     // ***************************************************************
     // MonoBehaviour
     // ***************************************************************
@@ -55,6 +58,8 @@ public class DynamicSpawner : MonoBehaviour
     private void HandleClientLoadedStartScenes(NetworkConnection conn, bool asServer)
     {
         if (!asServer || playerPrefab == null) return;
+        // 씬에 MatchManager가 배치된 경우 스폰과 프롭 배정을 MatchManager에 위임한다.
+        if (MatchManager.Instance != null) return;
 
         Vector3 spawnPosition = spawnPoint != null
             ? spawnPoint.position + Vector3.up * spawnHeightOffset

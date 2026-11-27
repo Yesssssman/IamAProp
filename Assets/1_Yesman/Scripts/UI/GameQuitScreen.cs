@@ -1,5 +1,7 @@
+using FishNet;
+using FishNet.Managing;
+using FishNet.Transporting;
 using Networking;
-using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -13,10 +15,11 @@ namespace UI
     public class GameQuitScreen : MonoBehaviour
     {
         private const string LOBBY_SCENE = "LobbyScene";
+        private const float STOP_TIMEOUT_SECONDS = 1.5f;
 
         [SerializeField] private Button gameQuitButton;
 
-        /// <summary>이벤트를 구독한 NetworkManager. 이 씬에 들어올 때의 <see cref="NetworkManager.Singleton"/>.</summary>
+        /// <summary>이벤트를 구독한 FishNet <see cref="NetworkManager"/>.</summary>
         private NetworkManager network;
 
         /// <summary>로비 씬으로 돌아가는 중이면 true.</summary>
@@ -33,11 +36,11 @@ namespace UI
             LobbyManager.RoomClosed += HandleRoomClosed;
             LobbyManager.Disconnected += HandleRoomDisconnected;
 
-            network = NetworkManager.Singleton;
+            network = InstanceFinder.NetworkManager;
 
             if (network != null)
             {
-                network.OnConnectionEvent += HandleConnectionEvent;
+                network.ClientManager.OnClientConnectionState += HandleClientConnectionState;
             }
         }
 
@@ -49,7 +52,7 @@ namespace UI
 
             if (network != null)
             {
-                network.OnConnectionEvent -= HandleConnectionEvent;
+                network.ClientManager.OnClientConnectionState -= HandleClientConnectionState;
             }
         }
 
@@ -92,10 +95,14 @@ namespace UI
         }
 
         /// <summary>클라이언트가 호스트와의 연결을 잃으면 로비 씬으로 돌아감.</summary>
-        private async void HandleConnectionEvent(NetworkManager manager, ConnectionEventData data)
+        private async void HandleClientConnectionState(ClientConnectionStateArgs args)
         {
-            // 호스트에서는 다른 클라이언트가 나갈 때도 ClientDisconnected가 오므로 무시
-            if (manager.IsServer || data.EventType != ConnectionEvent.ClientDisconnected || data.ClientId != manager.LocalClientId)
+            if (args.ConnectionState != LocalConnectionState.Stopped)
+            {
+                return;
+            }
+
+            if (network != null && network.ServerManager.Started)
             {
                 return;
             }
@@ -103,13 +110,7 @@ namespace UI
             await ReturnToLobbyScene();
         }
 
-        /// <summary>
-        /// Netcode를 끄고 로비 씬을 불러옴.
-        ///
-        /// 로비 씬에도 NetworkManager가 있어서 DontDestroyOnLoad로 남은 기존 것을 먼저 지움. NetworkManager는
-        /// OnEnable에서 Singleton이 비어 있을 때만 자신을 Singleton으로 등록하므로, 기존 것이 실제로 파괴되기
-        /// 전에 새 것이 켜지면 Singleton이 null로 남음. 그래서 한 프레임 기다린 뒤 씬을 불러옴.
-        /// </summary>
+        /// <summary>FishNet 연결을 종료하고 <see cref="NetworkManager"/>를 정리한 뒤 로비 씬을 불러옴.</summary>
         private async Awaitable ReturnToLobbyScene()
         {
             // 방장의 게임 종료 시 클라이언트는 호스트 연결 끊김과 GameEnded를 둘 다 받을 수 있음
@@ -122,15 +123,33 @@ namespace UI
 
             if (network != null)
             {
-                network.OnConnectionEvent -= HandleConnectionEvent;
+                network.ClientManager.OnClientConnectionState -= HandleClientConnectionState;
 
-                if (network.IsListening)
+                if (network.ClientManager.Started)
                 {
-                    network.Shutdown();
+                    network.ClientManager.StopConnection();
                 }
 
-                Destroy(network.gameObject);
-                await Awaitable.NextFrameAsync();
+                if (network.ServerManager.Started)
+                {
+                    network.ServerManager.StopConnection(true);
+                }
+
+                float elapsed = 0f;
+                while (network != null
+                    && (network.ClientManager.Started || network.ServerManager.Started)
+                    && elapsed < STOP_TIMEOUT_SECONDS)
+                {
+                    elapsed += Time.unscaledDeltaTime;
+                    await Awaitable.NextFrameAsync();
+                    if (this == null) return;
+                }
+
+                if (network != null)
+                {
+                    Destroy(network.gameObject);
+                    await Awaitable.NextFrameAsync();
+                }
             }
 
             SceneManager.LoadScene(LOBBY_SCENE);

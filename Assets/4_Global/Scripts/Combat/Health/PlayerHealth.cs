@@ -31,9 +31,15 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     /// <summary>서버에서 마지막 치명타를 입힌 킬러의 <see cref="NetworkObject"/>.</summary>
     private NetworkObject _lastKiller;
 
+    /// <summary>스폰 무적이 유지되는 서버 만료 시각 (<see cref="Time.time"/> 기준).</summary>
+    private float _invulnerableUntilServerTime;
+
     // ***************************************************************
     // Events
     // ***************************************************************
+
+    /// <summary>서버에서 임의의 플레이어가 사망했을 때 (피해자, 공격자 연결, 킬러 오브젝트)를 알리는 전역 이벤트.</summary>
+    public static event Action<PlayerHealth, NetworkConnection, NetworkObject> OnAnyPlayerDied;
 
     /// <summary>체력이 변경될 때 (현재 체력, 최대 체력)을 알리는 이벤트.</summary>
     public event Action<float, float> OnHealthChanged;
@@ -72,6 +78,9 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     /// <summary>서버에 기록된 마지막 치명타 킬러 <see cref="NetworkObject"/>.</summary>
     public NetworkObject LastKiller => _lastKiller;
 
+    /// <summary>현재 서버 기준 스폰 무적 상태인지 여부.</summary>
+    public bool IsInvulnerable => IsServerInitialized && Time.time < _invulnerableUntilServerTime;
+
     // ***************************************************************
     // NetworkBehaviour
     // ***************************************************************
@@ -81,6 +90,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         _currentHealth.Value = MaxHealth;
         _isDead.Value = false;
         _lastKiller = null;
+        _invulnerableUntilServerTime = 0f;
     }
 
     public override void OnStartNetwork()
@@ -114,6 +124,8 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     public void TakeDamage(float damage, NetworkConnection attacker, in DamageHitInfo hitInfo)
     {
         if (damage <= 0f || IsDead) return;
+        if (Time.time < _invulnerableUntilServerTime) return;
+        if (MatchManager.Instance != null && !MatchManager.Instance.CanPlayerTakeDamage(attacker, this)) return;
 
         float reduction = playerStats != null ? Mathf.Clamp01(playerStats.DamageReduction) : 0f;
         float finalDamage = damage * (1f - reduction);
@@ -161,6 +173,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
             Debug.Log($"[PlayerHealth] {name}(Owner:{OwnerId}) 사망 (공격자 ClientId:{attackerId})");
             OnDied?.Invoke(attacker);
+            OnAnyPlayerDied?.Invoke(this, attacker, killerObject);
             OnDeathEffectsTriggered?.Invoke(hitInfo);
             BroadcastDeathObserversRpc(hitInfo.HitDirection, hitInfo.HitPoint, hitInfo.HasHitPoint, hitInfo.IsMelee);
 
@@ -171,6 +184,13 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         }
     }
 
+    /// <summary>서버에서 <paramref name="durationSeconds"/>초 동안 피해 무시(스폰 무적)를 적용한다.</summary>
+    [Server]
+    public void SetInvulnerable(float durationSeconds)
+    {
+        _invulnerableUntilServerTime = durationSeconds > 0f ? Time.time + durationSeconds : 0f;
+    }
+
     /// <summary>서버에서 체력을 최대 체력으로 복원하고 사망 상태를 해제한다.</summary>
     [Server]
     public void ResetHealth()
@@ -178,6 +198,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         _currentHealth.Value = MaxHealth;
         _isDead.Value = false;
         _lastKiller = null;
+        _invulnerableUntilServerTime = 0f;
     }
 
     // ***************************************************************

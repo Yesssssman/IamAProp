@@ -73,6 +73,8 @@ public class NetworkController : MonoBehaviour
     private void Update()
     {
         if (_keyboard == null) return;
+        // 웹 로비 방 세션으로 진입한 실제 매치에서는 테스트 단축키를 비활성화한다.
+        if (Networking.LobbyManager.CurrentRoom != null) return;
 
         // P 키: 호스트 시작
         if (_keyboard.pKey.wasPressedThisFrame)

@@ -928,6 +928,7 @@ public class PlayerWeaponController : NetworkBehaviour
         Channel channel = Channel.Reliable)
     {
         if (_playerHealth != null && _playerHealth.IsDead) return;
+        if (MatchManager.Instance != null && !MatchManager.Instance.IsCombatAllowed) return;
         if (_weaponInventory == null || _weaponInventory.ActiveSlot != slot) return;
         if (!string.Equals(_weaponInventory.EquippedWeaponId, weaponId, StringComparison.Ordinal)) return;
         if (_isServerReloading) return;
@@ -1262,6 +1263,7 @@ public class PlayerWeaponController : NetworkBehaviour
     private void RequestThrowGrenadeServerRpc(Vector3 aimDirection, string weaponId, Channel channel = Channel.Reliable)
     {
         if (_playerHealth != null && _playerHealth.IsDead) return;
+        if (MatchManager.Instance != null && !MatchManager.Instance.IsCombatAllowed) return;
         if (_playerController != null && _playerController.IsRagdollIdle) return;
         if (_weaponInventory == null || _weaponInventory.ActiveSlot != EWeaponSlotType.Throwable) return;
         if (!string.Equals(_weaponInventory.EquippedWeaponId, weaponId, StringComparison.Ordinal)) return;
@@ -1328,6 +1330,7 @@ public class PlayerWeaponController : NetworkBehaviour
     private void RequestReloadServerRpc(EWeaponSlotType slot, string weaponId, Channel channel = Channel.Reliable)
     {
         if (_playerHealth != null && _playerHealth.IsDead) return;
+        if (MatchManager.Instance != null && !MatchManager.Instance.IsCombatAllowed) return;
         if (_weaponInventory == null || _weaponInventory.ActiveSlot != slot) return;
         if (!string.Equals(_weaponInventory.EquippedWeaponId, weaponId, StringComparison.Ordinal)) return;
         if (_isServerReloading) return;
