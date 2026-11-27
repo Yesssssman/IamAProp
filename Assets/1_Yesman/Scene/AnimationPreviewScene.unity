@@ -174,7 +174,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2309304906393934103, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
       propertyPath: m_Controller
-      value:
+      value: 
       objectReference: {fileID: 9100000, guid: fd450c1201a6fe848adc89d6f6122fb1, type: 2}
     - target: {fileID: 3246701833364760483, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -422,9 +422,6 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 4080719765758927072, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
       insertIndex: -1
       addedObject: {fileID: 99577356}
-    - targetCorrespondingSourceObject: {fileID: 4080719765758927072, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 99577357}
   m_SourcePrefab: {fileID: 100100000, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
 --- !u!1 &99577354 stripped
 GameObject:
@@ -446,21 +443,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0c5c449765f9949cdb9d2abd05c3b72b, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HandReloadAudioRelay
   weaponController: {fileID: 0}
---- !u!114 &99577357
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 99577354}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6f60083c8c6f0fd4883ba5e3aa59cd18, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::HandGripSwitcher
 --- !u!1 &160169885 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 4080719765758927072, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
@@ -476,7 +461,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0c5c449765f9949cdb9d2abd05c3b72b, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HandReloadAudioRelay
   weaponController: {fileID: 0}
 --- !u!1 &318683646
@@ -607,7 +592,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0c5c449765f9949cdb9d2abd05c3b72b, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HandReloadAudioRelay
   weaponController: {fileID: 0}
 --- !u!1 &497709165
@@ -638,7 +623,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -917,7 +902,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8bcb8e55e0fa2374a82b2e727053250a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AnimationPreviewStage
   props:
   - prefab: {fileID: 2370954493861089683, guid: b727114fa09c54947a4c0a0a040b80fa, type: 3}
@@ -1332,7 +1317,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0c5c449765f9949cdb9d2abd05c3b72b, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HandReloadAudioRelay
   weaponController: {fileID: 0}
 --- !u!1001 &914060328
@@ -1385,7 +1370,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2309304906393934103, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
       propertyPath: m_Controller
-      value:
+      value: 
       objectReference: {fileID: 9100000, guid: 92fc03d1d7738fc4390c32955e29ab4c, type: 2}
     - target: {fileID: 3246701833364760483, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -1660,7 +1645,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0c5c449765f9949cdb9d2abd05c3b72b, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HandReloadAudioRelay
   weaponController: {fileID: 0}
 --- !u!1001 &918153166
@@ -1713,7 +1698,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2309304906393934103, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
       propertyPath: m_Controller
-      value:
+      value: 
       objectReference: {fileID: 9100000, guid: ea293330d1f255d4491327a1b943888a, type: 2}
     - target: {fileID: 3246701833364760483, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -2017,7 +2002,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2309304906393934103, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
       propertyPath: m_Controller
-      value:
+      value: 
       objectReference: {fileID: 9100000, guid: 0bf1c02916f0c004bbe5d377fbf1c018, type: 2}
     - target: {fileID: 3246701833364760483, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -2321,7 +2306,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2309304906393934103, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
       propertyPath: m_Controller
-      value:
+      value: 
       objectReference: {fileID: 9100000, guid: cd8f773de3330024ebed6b0bec8be8f7, type: 2}
     - target: {fileID: 3246701833364760483, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -2920,7 +2905,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0c5c449765f9949cdb9d2abd05c3b72b, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HandReloadAudioRelay
   weaponController: {fileID: 0}
 --- !u!1001 &1877945593
@@ -3055,7 +3040,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2309304906393934103, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
       propertyPath: m_Controller
-      value:
+      value: 
       objectReference: {fileID: 9100000, guid: 3593ab89ed642744da7416addde09e5c, type: 2}
     - target: {fileID: 3246701833364760483, guid: 289bba027a6ceb8409c4016bcb4d9b21, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x

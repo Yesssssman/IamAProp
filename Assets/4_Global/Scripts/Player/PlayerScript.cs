@@ -37,6 +37,24 @@ public class PlayerScript : MonoBehaviour
         }
     }
 
+    /// <summary>오른손에 들고 있는 총의 탄창을 왼손으로 옮겨 쥠.</summary>
+    public void HoldMagazineInLeftHand()
+    {
+        GameObject rightHandItem = hand.GetRightHandItem();
+
+        if (!rightHandItem)
+        {
+            return;
+        }
+
+        GunScript gunScript = rightHandItem.GetComponent<GunScript>();
+
+        if (gunScript)
+        {
+            gunScript.HoldMagazine(hand.GetLeftHand());
+        }
+    }
+
     // 왼손의 탄창을 보여주기 시작함
     public void ShowLeftHandMagazine()
     {

@@ -16,6 +16,15 @@ public class GunScript : MonoBehaviour
     [SerializeField]
     private float magazineLaunchAngle = 45f;
 
+    /// <summary>다른 부모로 옮기기 전 탄창의 부모. 옮기지 않았으면 null.</summary>
+    private Transform _magazineRestParent;
+
+    /// <summary>다른 부모로 옮기기 전 탄창의 로컬 위치.</summary>
+    private Vector3 _magazineRestLocalPosition;
+
+    /// <summary>다른 부모로 옮기기 전 탄창의 로컬 회전.</summary>
+    private Quaternion _magazineRestLocalRotation;
+
     /// <summary>총이 발사된 직후 호출. 인자는 발사 후 남은 탄약 수이며, 모르면 null.</summary>
     public event Action<int?> Fired;
 
@@ -49,7 +58,34 @@ public class GunScript : MonoBehaviour
         droppedMagazine.GetComponent<DroppedMagazine>().enabled = true;
 
         Magazine.SetActive(false);
+        ReturnMagazine();
         MagazineDetached?.Invoke(droppedMagazine);
+    }
+
+    /// <summary>탄창을 월드 포즈를 유지한 채 <paramref name="holder"/>의 자식으로 옮김.</summary>
+    public void HoldMagazine(Transform holder)
+    {
+        if (!_magazineRestParent)
+        {
+            _magazineRestParent = Magazine.transform.parent;
+            Magazine.transform.GetLocalPositionAndRotation(out _magazineRestLocalPosition,
+                out _magazineRestLocalRotation);
+        }
+
+        Magazine.transform.SetParent(holder, true);
+    }
+
+    /// <summary><see cref="HoldMagazine"/>으로 옮긴 탄창을 총기의 원래 자리로 되돌림.</summary>
+    public void ReturnMagazine()
+    {
+        if (!_magazineRestParent)
+        {
+            return;
+        }
+
+        Magazine.transform.SetParent(_magazineRestParent, false);
+        Magazine.transform.SetLocalPositionAndRotation(_magazineRestLocalPosition, _magazineRestLocalRotation);
+        _magazineRestParent = null;
     }
 
     /// <summary>숨겨둔 총기의 탄창을 다시 보여줌.</summary>

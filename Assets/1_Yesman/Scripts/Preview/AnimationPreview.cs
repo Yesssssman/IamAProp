@@ -26,6 +26,12 @@ public class AnimationPreview : MonoBehaviour
     /// <param name="handClip">손 클립. null이면 손은 재생하지 않음.</param>
     public void Play(AnimationClip propClip, AnimationClip handClip)
     {
+        // 프롭 클립의 발소리·점프 사운드 이벤트 수신자. 오디오 클립이 없어 소리는 재생하지 않음
+        if (!GetComponent<StepSoundTest>())
+        {
+            gameObject.AddComponent<StepSoundTest>();
+        }
+
         graph = PlayableGraph.Create(name);
         propPlayable = AnimationClipPlayable.Create(graph, propClip);
         AnimationPlayableOutput.Create(graph, "Prop", GetComponent<Animator>()).SetSourcePlayable(propPlayable);
@@ -38,11 +44,6 @@ public class AnimationPreview : MonoBehaviour
             if (!hand.GetComponent<HandReloadAudioRelay>())
             {
                 hand.gameObject.AddComponent<HandReloadAudioRelay>();
-            }
-
-            if (!hand.GetComponent<HandGripSwitcher>())
-            {
-                hand.gameObject.AddComponent<HandGripSwitcher>();
             }
 
             handPlayable = AnimationClipPlayable.Create(graph, handClip);
