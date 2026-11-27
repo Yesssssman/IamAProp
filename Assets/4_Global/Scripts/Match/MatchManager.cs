@@ -315,6 +315,7 @@ public class MatchManager : NetworkBehaviour
 
     public override void OnStartClient()
     {
+        PlayerController.OnLocalPlayerStarted += HandleLocalPlayerStarted;
         EnsureLocalDefaultLoadout();
 
         string accountHash = LobbyManager.LocalAccountHashcode ?? string.Empty;
@@ -322,6 +323,11 @@ public class MatchManager : NetworkBehaviour
         RegisterPlayerServerRpc(accountHash, nickName, _localSelectedLoadout);
 
         ApplyLocalStateSideEffects(_state.Value);
+    }
+
+    public override void OnStopClient()
+    {
+        PlayerController.OnLocalPlayerStarted -= HandleLocalPlayerStarted;
     }
 
     // ***************************************************************
@@ -859,6 +865,12 @@ public class MatchManager : NetworkBehaviour
         _activeMode?.OnPlayerKilled(victim, attacker, killerObject);
     }
 
+    /// <summary>로컬 소유자 플레이어가 새로 스폰되면 현재 매치 상태의 입력·커서 정책을 즉시 동기화한다.</summary>
+    private void HandleLocalPlayerStarted(PlayerController player)
+    {
+        ApplyLocalStateSideEffects(_state.Value);
+    }
+
     /// <summary><see cref="_state"/> 동기화 변경 시 로컬 입력·카메라·섬광 상태를 갱신하고 구독자에게 알린다.</summary>
     private void HandleStateChanged(MatchState previousValue, MatchState nextValue, bool asServer)
     {
@@ -920,8 +932,12 @@ public class MatchManager : NetworkBehaviour
         }
 
         bool isLocalAlive = localPlayer != null && localPlayer.IsSpawned && !localPlayer.IsDead;
-        if (allowInput && isLocalAlive)
+        if (allowInput && isLocalAlive && !MatchResultUI.IsPauseMenuOpen)
         {
+            if (UnityEngine.EventSystems.EventSystem.current != null)
+            {
+                UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);
+            }
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
             localPlayer.SetCameraInputEnabled(true);

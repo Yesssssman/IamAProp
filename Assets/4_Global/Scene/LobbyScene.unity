@@ -2164,9 +2164,9 @@ MonoBehaviour:
   _timingType: 0
   _allowTickDropping: 1
   _maximumFrameTicks: 3
-  _tickRate: 30
+  _tickRate: 60
   _pingInterval: 1
-  _physicsMode: 0
+  _physicsMode: 1
 --- !u!114 &1580237712
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2179,7 +2179,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 34e4a322dca349547989b14021da4e23, type: 3}
   m_Name: 
   m_EditorClassIdentifier: FishNet.Runtime::FishNet.Managing.Transporting.TransportManager
-  Transport: {fileID: 0}
+  Transport: {fileID: 1580237709}
   _maximumClientPacketSize: 20480
   _intermediateLayer: {fileID: 0}
   _latencySimulator:

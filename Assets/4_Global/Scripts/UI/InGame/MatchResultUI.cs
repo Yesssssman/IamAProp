@@ -59,6 +59,9 @@ public class MatchResultUI : MonoBehaviour
     /// <summary>일시정지 메뉴가 열려 있는지 여부.</summary>
     private bool _isPauseMenuOpen;
 
+    /// <summary>현재 <c>Esc</c> 일시정지 메뉴가 열려 있는지 여부.</summary>
+    public static bool IsPauseMenuOpen { get; private set; }
+
     // ***************************************************************
     // MonoBehaviour
     // ***************************************************************
@@ -96,6 +99,8 @@ public class MatchResultUI : MonoBehaviour
 
     private void OnDisable()
     {
+        IsPauseMenuOpen = false;
+        _isPauseMenuOpen = false;
         UnbindMatchManager();
     }
 
@@ -278,6 +283,7 @@ public class MatchResultUI : MonoBehaviour
     private void SetPauseMenuOpen(bool open)
     {
         _isPauseMenuOpen = open;
+        IsPauseMenuOpen = open;
         if (pauseMenuRoot != null)
         {
             pauseMenuRoot.SetActive(open);

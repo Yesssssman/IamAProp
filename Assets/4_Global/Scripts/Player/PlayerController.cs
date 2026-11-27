@@ -628,15 +628,23 @@ public class PlayerController : PropControllerBase
     public void SetInputLocked(bool locked)
     {
         _isInputLocked = locked;
-        if (!locked) return;
-
-        _moveInput = Vector2.zero;
-        _jumpRequested = false;
-        _isAimHeld = false;
-        _weaponController?.CancelCombatActions();
-        if (IsOwner)
+        if (locked)
         {
-            _fpsAdsController?.ForceExitAds();
+            _moveInput = Vector2.zero;
+            _jumpRequested = false;
+            _isAimHeld = false;
+            _weaponController?.CancelCombatActions();
+            if (IsOwner)
+            {
+                _fpsAdsController?.ForceExitAds();
+            }
+            return;
+        }
+
+        // 카운트다운 종료 시점에 이미 WASD를 누르고 있던 입력을 즉시 반영한다.
+        if (IsOwner && _inputActions != null)
+        {
+            _moveInput = _inputActions.Player.Move.ReadValue<Vector2>();
         }
     }
 
