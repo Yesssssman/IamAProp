@@ -31,6 +31,14 @@ public class CinemachineWeaponFeedback : CinemachineExtension
     [Min(0f)]
     [SerializeField] private float recoveryDelayMultiplier = 1.25f;
 
+    /// <summary>연사 무기의 원점 복귀 감쇠 보류 최대 시간 (초 단위).</summary>
+    [Min(0f)]
+    [SerializeField] private float maxAutoRecoveryDelay = 0.15f;
+
+    /// <summary>단발·반자동 무기의 원점 복귀 감쇠 보류 최대 시간 (초 단위).</summary>
+    [Min(0f)]
+    [SerializeField] private float maxSemiAutoRecoveryDelay = 0.08f;
+
     /// <summary>모든 무기 공통으로 제한할 좌우 반동 최대 절대 각도 (도 단위).</summary>
     [Min(0f)]
     [SerializeField] private float maxRecoilYawLimit = 8f;
@@ -163,7 +171,8 @@ public class CinemachineWeaponFeedback : CinemachineExtension
         {
             _activeSnappiness = weaponData.RecoilSnappiness > 0f ? weaponData.RecoilSnappiness : defaultSnappiness;
             _activeReturnSpeed = weaponData.RecoilReturnSpeed > 0f ? weaponData.RecoilReturnSpeed : defaultReturnSpeed;
-            _recoveryDelayRemaining = weaponData.AttackCooldown * recoveryDelayMultiplier;
+            float maxDelay = weaponData.IsAutomatic ? maxAutoRecoveryDelay : maxSemiAutoRecoveryDelay;
+            _recoveryDelayRemaining = Mathf.Min(weaponData.AttackCooldown * recoveryDelayMultiplier, maxDelay);
 
             float yawMin = Mathf.Min(scaledYawMin, scaledYawMax);
             float yawMax = Mathf.Max(scaledYawMin, scaledYawMax);

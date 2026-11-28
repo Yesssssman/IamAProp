@@ -22,6 +22,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: e186b37642d8b4a70bd48303a133b637, type: 2}
   - {fileID: 11400000, guid: bb057cead97f545c4947a0701281e266, type: 2}
   - {fileID: 11400000, guid: 84f41c644e6e64c63af06849be2c0081, type: 2}
+  - {fileID: 11400000, guid: 36f39f39ad90742f8a6dea3f160e2931, type: 2}
   defaultMeleeWeapon: {fileID: 11400000, guid: 0e5ab66a214064daf80a7ef147f5cf41, type: 2}
   defaultThrowableWeapon: {fileID: 11400000, guid: e186b37642d8b4a70bd48303a133b637, type: 2}
   initialThrowableCount: 0

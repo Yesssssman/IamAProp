@@ -4,6 +4,8 @@ using Random = UnityEngine.Random;
 
 public class GunScript : MonoBehaviour
 {
+    private const int IgnoreRaycastLayer = 2; // 낙하 탄창이 조준/벽 후퇴 레이캐스트에 걸리지 않도록 사용하는 레이어
+
     // 탄창 GameObject
     [SerializeField]
     private GameObject Magazine;
@@ -48,6 +50,10 @@ public class GunScript : MonoBehaviour
 
         GameObject droppedMagazine = Instantiate(Magazine, Magazine.transform.parent);
         droppedMagazine.transform.SetParent(null, true);
+        foreach (Transform t in droppedMagazine.GetComponentsInChildren<Transform>(true))
+        {
+            t.gameObject.layer = IgnoreRaycastLayer;
+        }
 
         Rigidbody droppedRigidbody = droppedMagazine.GetComponent<Rigidbody>();
         droppedRigidbody.isKinematic = false;

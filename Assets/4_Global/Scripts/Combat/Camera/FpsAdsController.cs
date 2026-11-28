@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.UI;
 
 /// <summary>1인칭 정조준(ADS) 입력 전환 방식.</summary>
 public enum EAdsInputMode
@@ -54,6 +55,16 @@ public class FpsAdsController : MonoBehaviour
 
     /// <summary>1인칭 정조준 중 <see cref="crosshairObject"/>를 숨길지 여부.</summary>
     [SerializeField] private bool hideCrosshairInAds = true;
+
+    /// <summary>스코프 정조준 시 표시할 전체 화면 스코프 오버레이 루트 오브젝트.</summary>
+    [SerializeField] private GameObject scopeOverlayObject;
+
+    /// <summary>무기별 스코프 레티클 스프라이트를 교체 적용할 메인 스코프 이미지.</summary>
+    [SerializeField] private Image scopeOverlayImage;
+
+    /// <summary>1인칭 블렌드 중 스코프 오버레이와 손 숨김을 활성화할 블렌드 임계값 (0.5~1).</summary>
+    [Range(0.5f, 1f)]
+    [SerializeField] private float scopeOverlayBlendThreshold = 0.9f;
 
     /// <summary>마우스 우클릭 1인칭 정조준 전환 방식 (토글 또는 홀드).</summary>
     [Header("전환 및 시야각 설정")]
@@ -130,11 +141,26 @@ public class FpsAdsController : MonoBehaviour
     /// <summary>로컬 1인칭 숨김 대상으로 수집된 몸체 렌더러 목록.</summary>
     private readonly List<BodyRendererRecord> _bodyRenderers = new(4);
 
+    /// <summary>스코프 정조준 중 숨겨진 1인칭 손·무기 렌더러 목록.</summary>
+    private readonly List<BodyRendererRecord> _handsRenderers = new(16);
+
+    /// <summary><see cref="_fpsInputAxisController"/>의 원본 축별 감도 배열.</summary>
+    private float[] _baseFpsAxisGains;
+
+    /// <summary><see cref="scopeOverlayImage"/>의 기본 스코프 레티클 스프라이트.</summary>
+    private Sprite _defaultScopeSprite;
+
     /// <summary>현재 1인칭 정조준 모드가 활성화되어 있는지 여부.</summary>
     private bool _isAdsActive;
 
     /// <summary>로컬 몸체 렌더러가 현재 <see cref="ShadowCastingMode.ShadowsOnly"/>로 숨겨져 있는지 여부.</summary>
     private bool _isBodyHidden;
+
+    /// <summary>스코프 정조준 중 손·무기 렌더러가 숨겨져 있는지 여부.</summary>
+    private bool _isHandsHidden;
+
+    /// <summary>현재 스코프 UI 오버레이가 표시 중인지 여부.</summary>
+    private bool _isScopeOverlayActive;
 
     /// <summary>3인칭 <see cref="CinemachineRotationComposer"/> 화면 오프셋으로 인한 실제 피치와 오빗 수직 축의 차이 (도 단위).</summary>
     private float _tpsComposerPitchDelta;
@@ -157,6 +183,9 @@ public class FpsAdsController : MonoBehaviour
 
     /// <summary>1인칭 정조준 모드가 활성화되어 있는지 여부.</summary>
     public bool IsAdsActive => _isAdsActive;
+
+    /// <summary>스코프 UI 오버레이가 현재 활성화되어 있는지 여부.</summary>
+    public bool IsScopeOverlayActive => _isScopeOverlayActive;
 
     /// <summary>일반 3인칭 플레이용 <see cref="CinemachineCamera"/> 참조.</summary>
     public CinemachineCamera TpsCamera => tpsCamera;
@@ -207,8 +236,20 @@ public class FpsAdsController : MonoBehaviour
 
         if (_fpsInputAxisController != null)
         {
+            var controllers = _fpsInputAxisController.Controllers;
+            _baseFpsAxisGains = new float[controllers.Count];
+            for (int i = 0; i < controllers.Count; i++)
+            {
+                _baseFpsAxisGains[i] = controllers[i].Input.Gain;
+            }
             _fpsInputAxisController.enabled = false;
         }
+
+        if (scopeOverlayImage != null)
+        {
+            _defaultScopeSprite = scopeOverlayImage.sprite;
+        }
+        SetScopeOverlayVisible(false);
 
         if (tpsCamera != null)
         {
@@ -228,6 +269,9 @@ public class FpsAdsController : MonoBehaviour
         CinemachineCore.CameraUpdatedEvent.RemoveListener(HandleCameraUpdated);
         _targetWeaponKickZ = 0f;
         _currentWeaponKickZ = 0f;
+        ApplyFpsSensitivityMultiplier(1f);
+        SetScopeOverlayVisible(false);
+        SetHandsHidden(false);
         SetBodyHidden(false);
     }
 
@@ -281,8 +325,12 @@ public class FpsAdsController : MonoBehaviour
     private void OnDestroy()
     {
         CinemachineCore.CameraUpdatedEvent.RemoveListener(HandleCameraUpdated);
+        ApplyFpsSensitivityMultiplier(1f);
+        SetScopeOverlayVisible(false);
+        SetHandsHidden(false);
         SetBodyHidden(false);
         _bodyRenderers.Clear();
+        _handsRenderers.Clear();
 
         if (_fpsEyeAnchor != null)
         {
@@ -426,7 +474,18 @@ public class FpsAdsController : MonoBehaviour
 
         if (_fpsInputAxisController != null)
         {
+            float sensitivityScale = weaponData != null && weaponData.UsesScopeOverlay
+                ? weaponData.ScopeSensitivityMultiplier
+                : 1f;
+            ApplyFpsSensitivityMultiplier(sensitivityScale);
             _fpsInputAxisController.enabled = true;
+        }
+
+        if (scopeOverlayImage != null && weaponData != null && weaponData.UsesScopeOverlay)
+        {
+            scopeOverlayImage.sprite = weaponData.ScopeOverlaySprite != null
+                ? weaponData.ScopeOverlaySprite
+                : _defaultScopeSprite;
         }
 
         if (hideCrosshairInAds && crosshairObject != null)
@@ -457,6 +516,9 @@ public class FpsAdsController : MonoBehaviour
         }
 
         _isAdsActive = false;
+        SetScopeOverlayVisible(false);
+        SetHandsHidden(false);
+        ApplyFpsSensitivityMultiplier(1f);
 
         if (_fpsInputAxisController != null)
         {
@@ -515,6 +577,9 @@ public class FpsAdsController : MonoBehaviour
 
         _targetWeaponKickZ = 0f;
         _currentWeaponKickZ = 0f;
+        ApplyFpsSensitivityMultiplier(1f);
+        SetScopeOverlayVisible(false);
+        SetHandsHidden(false);
         SetBodyHidden(false);
     }
 
@@ -545,6 +610,8 @@ public class FpsAdsController : MonoBehaviour
 
         if (_localPlayer.IsDead || (deathCamController != null && deathCamController.IsDeathCamActive))
         {
+            SetScopeOverlayVisible(false);
+            SetHandsHidden(false);
             SetBodyHidden(false);
             return;
         }
@@ -554,13 +621,16 @@ public class FpsAdsController : MonoBehaviour
         bool isBlendingFromAds = brain != null && brain.IsBlending && brain.ActiveBlend != null
             && brain.ActiveBlend.CamA == (ICinemachineCamera)fpsAdsCamera;
 
+        WeaponDataSO weaponData = _localPlayer.CurrentEquippedWeaponData;
         bool shouldHideBody;
+        bool shouldShowScope = false;
         float alignWeight;
 
         if (_isAdsActive)
         {
             float blendWeight = isBlendingToAds ? brain.ActiveBlend.BlendWeight : 1f;
             shouldHideBody = blendWeight >= BodyHideBlendThreshold;
+            shouldShowScope = weaponData != null && weaponData.UsesScopeOverlay && blendWeight >= scopeOverlayBlendThreshold;
             alignWeight = Mathf.SmoothStep(0f, 1f, blendWeight);
         }
         else if (isBlendingFromAds)
@@ -576,6 +646,8 @@ public class FpsAdsController : MonoBehaviour
         }
 
         SetBodyHidden(shouldHideBody);
+        SetHandsHidden(shouldShowScope);
+        SetScopeOverlayVisible(shouldShowScope);
 
         if (alignWeight <= 0.0001f) return;
 
@@ -583,7 +655,6 @@ public class FpsAdsController : MonoBehaviour
         Transform adsAnchor = _localPlayerAnim != null ? _localPlayerAnim.CurrentAdsCameraAnchor : null;
         if (aimPivot == null || adsAnchor == null) return;
 
-        WeaponDataSO weaponData = _localPlayer.CurrentEquippedWeaponData;
         Vector3 localOffset = weaponData != null ? weaponData.AdsAnchorLocalOffset : Vector3.zero;
         Vector3 localRotOffset = weaponData != null ? weaponData.AdsAnchorLocalRotationOffset : Vector3.zero;
 
@@ -635,6 +706,70 @@ public class FpsAdsController : MonoBehaviour
             record.Renderer.shadowCastingMode = hidden
                 ? ShadowCastingMode.ShadowsOnly
                 : record.OriginalShadowMode;
+        }
+    }
+
+    /// <summary>스코프 정조준 중 1인칭 손·장착 무기 렌더러의 <see cref="ShadowCastingMode"/>를 숨김 또는 원본으로 전환한다.</summary>
+    private void SetHandsHidden(bool hidden)
+    {
+        if (_isHandsHidden == hidden) return;
+        _isHandsHidden = hidden;
+
+        if (hidden)
+        {
+            _handsRenderers.Clear();
+            Transform handsRoot = _localPlayerAnim != null && _localPlayerAnim.HandScript != null
+                ? _localPlayerAnim.HandScript.transform
+                : null;
+            if (handsRoot == null) return;
+
+            Renderer[] renderers = handsRoot.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer r = renderers[i];
+                if (r == null) continue;
+
+                _handsRenderers.Add(new BodyRendererRecord
+                {
+                    Renderer = r,
+                    OriginalShadowMode = r.shadowCastingMode
+                });
+                r.shadowCastingMode = ShadowCastingMode.ShadowsOnly;
+            }
+            return;
+        }
+
+        for (int i = 0; i < _handsRenderers.Count; i++)
+        {
+            BodyRendererRecord record = _handsRenderers[i];
+            if (record.Renderer == null) continue;
+
+            record.Renderer.shadowCastingMode = record.OriginalShadowMode;
+        }
+        _handsRenderers.Clear();
+    }
+
+    /// <summary>스코프 UI 오버레이 루트 오브젝트의 활성 상태를 전환한다.</summary>
+    private void SetScopeOverlayVisible(bool visible)
+    {
+        _isScopeOverlayActive = visible;
+        if (scopeOverlayObject != null && scopeOverlayObject.activeSelf != visible)
+        {
+            scopeOverlayObject.SetActive(visible);
+        }
+    }
+
+    /// <summary>1인칭 카메라 입력 축 감도에 <paramref name="multiplier"/> 배율을 적용한다.</summary>
+    private void ApplyFpsSensitivityMultiplier(float multiplier)
+    {
+        if (_fpsInputAxisController == null || _baseFpsAxisGains == null) return;
+
+        var controllers = _fpsInputAxisController.Controllers;
+        int count = Mathf.Min(controllers.Count, _baseFpsAxisGains.Length);
+        float safeScale = Mathf.Clamp(multiplier, 0.05f, 1f);
+        for (int i = 0; i < count; i++)
+        {
+            controllers[i].Input.Gain = _baseFpsAxisGains[i] * safeScale;
         }
     }
 }

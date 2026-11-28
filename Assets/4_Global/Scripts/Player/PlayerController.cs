@@ -231,7 +231,8 @@ public class PlayerController : PropControllerBase
             {
                 Vector3 localMuzzle = aimPitchTarget.InverseTransformPoint(restMuzzlePos);
                 float forwardLength = Mathf.Max(0f, localMuzzle.z);
-                Vector3 alignedStart = aimPitchTarget.TransformPoint(new Vector3(localMuzzle.x, localMuzzle.y, 0f));
+                float safeLocalY = Mathf.Max(0f, localMuzzle.y);
+                Vector3 alignedStart = aimPitchTarget.TransformPoint(new Vector3(localMuzzle.x, safeLocalY, 0f));
                 Vector3 lateralDelta = alignedStart - restPivotPos;
                 float lateralDist = lateralDelta.magnitude;
 
@@ -257,7 +258,8 @@ public class PlayerController : PropControllerBase
                 }
                 else
                 {
-                    Vector3 pivotToMuzzle = restMuzzlePos - restPivotPos;
+                    Vector3 safeMuzzlePos = aimPitchTarget.TransformPoint(new Vector3(localMuzzle.x, safeLocalY, forwardLength));
+                    Vector3 pivotToMuzzle = safeMuzzlePos - restPivotPos;
                     barrelLength = pivotToMuzzle.magnitude;
                     castOrigin = restPivotPos;
                     castDir = barrelLength > 0.001f ? pivotToMuzzle / barrelLength : aimPitchTarget.forward;
@@ -1080,6 +1082,7 @@ public class PlayerController : PropControllerBase
         {
             RaycastHit hit = _aimHits[i];
             if (hit.collider == null || hit.transform == null || hit.transform.IsChildOf(transform)) continue;
+            if (hit.collider.GetComponentInParent<DroppedMagazine>() != null) continue;
 
             if (hit.distance < closestDistance)
             {

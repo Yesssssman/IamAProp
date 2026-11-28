@@ -1,0 +1,113 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f442477cb8ae1434884e5bb207e1a747, type: 3}
+  m_Name: Weapon_M107
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponDataSO
+  weaponId: m107
+  weaponName: M107
+  weaponType: 3
+  slotType: 3
+  category: 0
+  weaponIcon: {fileID: 0}
+  equippedPrefab: {fileID: 4016333886107171262, guid: 554696ad0a4fa4616814ef7a221166f7, type: 3}
+  worldVisualPrefab: {fileID: 0}
+  weaponAnimController: {fileID: 9100000, guid: da9d130f470684c4586ec9ae80a0c7ad, type: 2}
+  gripPosition: {x: -0.0281, y: 0.0422, z: -0.0111}
+  gripRotation: {x: 274.81683, y: 50.157497, z: 353.8978}
+  gripScale: {x: 1, y: 1, z: 1}
+  shellGripPosition: {x: 0, y: 0, z: 0}
+  shellGripRotation: {x: 0, y: 0, z: 0}
+  shellGripScale: {x: 1, y: 1, z: 1}
+  worldPickupScale: {x: 1, y: 1, z: 1}
+  worldPickupColliders:
+  - center: {x: 0.02, y: 0.02, z: 0.28}
+    size: {x: 0.11, y: 0.2, z: 1.45}
+    rotation: {x: 0, y: 0, z: 0}
+  - center: {x: 0, y: 0.01, z: 0.16}
+    size: {x: 0.07, y: 0.33, z: 0.42}
+    rotation: {x: 0, y: 0, z: 0}
+  usesAimLocomotion: 1
+  handDrawClip: {fileID: -5359800108445291145, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handIdleClip: {fileID: 1878172033929608615, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handAttackClip: {fileID: -967976613161289078, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handSecondaryAttackClip: {fileID: 0}
+  handReloadClip: {fileID: -8069262028255036122, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handReloadStartClip: {fileID: 0}
+  handReloadLoopClip: {fileID: 0}
+  handReloadFinishClip: {fileID: 0}
+  handGrenadeAimClip: {fileID: 0}
+  handShotFrames: 27
+  weaponShotFrames: 13
+  handReloadTotalFrames: 196
+  weaponReloadStartFrame: 0
+  weaponReloadTotalFrames: 185
+  handDrawTotalFrames: 87
+  weaponDrawStartFrame: 0
+  weaponDrawTotalFrames: 76
+  damage: 85
+  fireRate: 1.1
+  isAutomatic: 0
+  range: 200
+  meleeCastRadius: 0
+  shotSphereRadiusOverride: 0.03
+  damageFalloff:
+    enableDamageFalloff: 0
+    useLinearFalloff: 0
+    level2Distance: 60
+    level3Distance: 110
+    level4Distance: 160
+    level2To3Damage: 85
+    level3To4Damage: 85
+    minDamage: 85
+  pelletsPerShot: 1
+  spreadPresets: []
+  adsSpreadMultiplier: 1
+  usesAmmo: 1
+  maxAmmo: 5
+  maxReserveAmmo: 25
+  reloadTime: 3.27
+  isShellReload: 0
+  shellReloadStartDuration: 0
+  shellInsertInterval: 0.55
+  shotClip: {fileID: 8300000, guid: 1b3da99a4d4b747e599e88572809d344, type: 3}
+  reloadClips:
+  - {fileID: 8300000, guid: aece61f4651184bc78afcc002981c9a4, type: 3}
+  - {fileID: 8300000, guid: 91c3f457d7fe349c7b6f9b1c66de2109, type: 3}
+  - {fileID: 8300000, guid: a7ee3098a9ccb48e692b0b5b4ec74efe, type: 3}
+  shotVolume: 1
+  reloadVolume: 1
+  recoilPitch: 4.5
+  recoilYawMin: -0.8
+  recoilYawMax: 0.8
+  recoilSnappiness: 22
+  recoilReturnSpeed: 7
+  maxRecoilYaw: 3
+  shakeIntensity: 1.4
+  shakeDuration: 0.08
+  adsFovOverride: 12
+  adsAnchorLocalOffset: {x: 0, y: 0, z: 0}
+  adsAnchorLocalRotationOffset: {x: 0, y: 0, z: 0}
+  adsKickbackZOverride: 0.03
+  usesScopeOverlay: 1
+  scopeOverlaySprite: {fileID: 21300000, guid: f499250ed160e44a695a62129984fa49, type: 3}
+  scopeSensitivityMultiplier: 0.4
+  casingPrefab: {fileID: 8350478129863413746, guid: 360215af182874b12b92e0b838944146, type: 3}
+  grenadePrefab: {fileID: 0}
+  throwForce: 14
+  throwUpwardBias: 0.25
+  throwRandomTorque: 8
+  grenadeFuseTime: 3
+  explosionRadius: 5
+  explosionMinDamage: 25
+  throwSpawnForwardOffset: 0.45
+  throwSpawnRightOffset: 0.15
+  throwSpawnUpOffset: 0.1

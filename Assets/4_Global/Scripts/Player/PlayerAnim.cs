@@ -20,6 +20,11 @@ public class PlayerAnim : PropAnimBase
     // Fields
     // ***************************************************************
 
+    /// <summary>로컬 소유자 탄피 오브젝트 풀의 최대 크기.</summary>
+    [Header("탄피 풀 설정")]
+    [Min(1)]
+    [SerializeField] private int casingPoolSize = 30;
+
     /// <summary>무기 보유 현황과 현재 장착 상태를 제공하는 인벤토리 컴포넌트.</summary>
     private PlayerWeaponInventory _weaponInventory;
 
@@ -62,11 +67,14 @@ public class PlayerAnim : PropAnimBase
     /// <summary>현재 장착 무기 프리팹의 탄피 배출 기준 트랜스폼.</summary>
     private Transform _currentCasingEjectPoint;
 
-    /// <summary>현재 <see cref="_localCasingSystem"/>을 생성한 원본 탄피 파티클 프리팹.</summary>
-    private ParticleSystem _localCasingPrefabSource;
+    /// <summary>로컬 소유자 화면에서만 재사용하는 물리 탄피 링 버퍼 풀.</summary>
+    private EjectedCasing[] _casingPool;
 
-    /// <summary>로컬 소유자 화면에서만 탄피를 배출하는 재사용 <see cref="ParticleSystem"/> 인스턴스.</summary>
-    private ParticleSystem _localCasingSystem;
+    /// <summary>현재 <see cref="_casingPool"/>을 프리워밍한 원본 탄피 프리팹.</summary>
+    private EjectedCasing _casingPoolPrefab;
+
+    /// <summary>다음 탄피를 꺼낼 <see cref="_casingPool"/> 링 버퍼 인덱스.</summary>
+    private int _casingPoolCursor;
 
     /// <summary>무기 교체 애니메이션 진입 직후 <c>isWeaponSwap</c>을 초기화하기 위한 대기 플래그.</summary>
     private bool _pendingWeaponSwapReset;
@@ -432,7 +440,7 @@ public class PlayerAnim : PropAnimBase
 
     protected override void OnDestroy()
     {
-        ClearLocalCasingSystem();
+        ClearLocalCasingPool();
         base.OnDestroy();
     }
 
@@ -483,9 +491,17 @@ public class PlayerAnim : PropAnimBase
         _isDeadVisualApplied = false;
     }
 
+    public override void OnStartClient()
+    {
+        if (IsOwner && _appliedWeaponData != null && _appliedWeaponData.CasingPrefab != null)
+        {
+            EnsureLocalCasingPool(_appliedWeaponData.CasingPrefab);
+        }
+    }
+
     public override void OnStopClient()
     {
-        ClearLocalCasingSystem();
+        ClearLocalCasingPool();
     }
 
     // ***************************************************************
@@ -557,30 +573,36 @@ public class PlayerAnim : PropAnimBase
         }
     }
 
-    /// <summary>로컬 소유자 클라이언트에서만 현재 장착 무기의 <c>CasingEjectPoint</c>에서 탄피 1개를 배출한다.</summary>
+    /// <summary>로컬 소유자 탄피 오브젝트 풀의 최대 크기.</summary>
+    public int CasingPoolSize
+    {
+        get => casingPoolSize;
+        set => casingPoolSize = Mathf.Max(1, value);
+    }
+
+    /// <summary>로컬 소유자 클라이언트에서만 현재 장착 무기의 <c>CasingEjectPoint</c>에서 물리 탄피 1개를 배출한다.</summary>
     public void EmitWeaponCasing()
     {
         if (!IsOwner || _isDeadVisualApplied || _currentCasingEjectPoint == null || _appliedWeaponData == null) return;
 
-        ParticleSystem prefab = _appliedWeaponData.CasingParticlePrefab;
+        EjectedCasing prefab = _appliedWeaponData.CasingPrefab;
         if (prefab == null) return;
 
-        if (_localCasingSystem == null || _localCasingPrefabSource != prefab)
-        {
-            if (_localCasingSystem != null)
-            {
-                float remainingLife = _localCasingSystem.main.startLifetime.constantMax + 0.1f;
-                Destroy(_localCasingSystem.gameObject, remainingLife);
-            }
+        EnsureLocalCasingPool(prefab);
+        if (_casingPool == null || _casingPool.Length == 0) return;
 
-            _localCasingSystem = Instantiate(prefab);
-            _localCasingPrefabSource = prefab;
+        int slot = _casingPoolCursor;
+        _casingPoolCursor = (_casingPoolCursor + 1) % _casingPool.Length;
+
+        EjectedCasing casing = _casingPool[slot];
+        if (casing == null)
+        {
+            casing = Instantiate(prefab);
+            casing.gameObject.SetActive(false);
+            _casingPool[slot] = casing;
         }
 
-        _localCasingSystem.transform.SetPositionAndRotation(
-            _currentCasingEjectPoint.position,
-            _currentCasingEjectPoint.rotation);
-        _localCasingSystem.Emit(1);
+        casing.Launch(_currentCasingEjectPoint.position, _currentCasingEjectPoint.rotation);
     }
 
     /// <inheritdoc/>
@@ -1014,6 +1036,11 @@ public class PlayerAnim : PropAnimBase
                 _currentMuzzlePoint = weaponObject.transform.Find("MuzzlePoint");
                 _currentCasingEjectPoint = weaponObject.transform.Find("CasingEjectPoint");
 
+                if (IsOwner && weaponData.CasingPrefab != null)
+                {
+                    EnsureLocalCasingPool(weaponData.CasingPrefab);
+                }
+
                 GunScript gun = weaponObject.GetComponent<GunScript>();
                 if (gun != null && weaponData.HandReloadClip != null)
                 {
@@ -1103,6 +1130,12 @@ public class PlayerAnim : PropAnimBase
         }
         else
         {
+            // Unity Animator는 상태 진입 첫 프레임의 0초 이벤트(GripWithLeftHand 등)를 새 본 포즈 적용 전에 발화할 수 있어 드로우 0프레임 포즈를 선반영한다.
+            if (handScript != null && weaponData != null && weaponData.HandDrawClip != null)
+            {
+                weaponData.HandDrawClip.SampleAnimation(handScript.gameObject, 0f);
+            }
+
             // 무기 교체 및 줍기 직후 손 드로우 애니메이션 상태로 전이하도록 트리거 플래그를 설정한다.
             if (IsOwner && bodyAnimator != null)
             {
@@ -1151,6 +1184,8 @@ public class PlayerAnim : PropAnimBase
 
         if (handScript == null) return;
 
+        handScript.ResetGrip();
+
         GameObject prevLeft = handScript.GetLeftHandItem();
         if (prevLeft != null)
         {
@@ -1166,14 +1201,44 @@ public class PlayerAnim : PropAnimBase
         }
     }
 
-    /// <summary>로컬 소유자용 탄피 <see cref="ParticleSystem"/> 인스턴스를 정리한다.</summary>
-    private void ClearLocalCasingSystem()
+    /// <summary>로컬 소유자용 물리 탄피 풀을 <see cref="casingPoolSize"/>만큼 비활성 상태로 미리 생성한다.</summary>
+    private void EnsureLocalCasingPool(EjectedCasing prefab)
     {
-        if (_localCasingSystem != null)
+        int targetSize = Mathf.Max(1, casingPoolSize);
+        if (_casingPool != null && _casingPool.Length == targetSize && _casingPoolPrefab == prefab)
         {
-            Destroy(_localCasingSystem.gameObject);
-            _localCasingSystem = null;
+            return;
         }
-        _localCasingPrefabSource = null;
+
+        ClearLocalCasingPool();
+        _casingPool = new EjectedCasing[targetSize];
+        _casingPoolPrefab = prefab;
+        _casingPoolCursor = 0;
+
+        for (int i = 0; i < targetSize; i++)
+        {
+            EjectedCasing instance = Instantiate(prefab);
+            instance.gameObject.SetActive(false);
+            _casingPool[i] = instance;
+        }
+    }
+
+    /// <summary>로컬 소유자용 물리 탄피 오브젝트 풀의 모든 인스턴스를 정리한다.</summary>
+    private void ClearLocalCasingPool()
+    {
+        if (_casingPool != null)
+        {
+            for (int i = 0; i < _casingPool.Length; i++)
+            {
+                if (_casingPool[i] != null)
+                {
+                    Destroy(_casingPool[i].gameObject);
+                    _casingPool[i] = null;
+                }
+            }
+            _casingPool = null;
+        }
+        _casingPoolPrefab = null;
+        _casingPoolCursor = 0;
     }
 }

@@ -523,6 +523,7 @@ MonoBehaviour:
   bodyAnimator: {fileID: 3750648677330133184}
   handAnimator: {fileID: 721627454868746735}
   handScript: {fileID: 2804264384151656367}
+  casingPoolSize: 10
 --- !u!114 &8263648830346335679
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -586,7 +587,7 @@ MonoBehaviour:
   _initializeOrder: 0
   _preventDespawnOnDisconnect: 0
   _defaultDespawnType: 0
-  _initializedTimestamp: -8584058483047660508
+  _initializedTimestamp: -8584057590585286968
 --- !u!114 &1166752771365685723
 MonoBehaviour:
   m_ObjectHideFlags: 0

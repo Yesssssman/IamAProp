@@ -327,9 +327,19 @@ public class WeaponDataSO : ScriptableObject
     [Min(0f)]
     [SerializeField] private float adsKickbackZOverride;
 
-    /// <summary>로컬 소유자 발사 시 배출할 탄피 <see cref="ParticleSystem"/> 프리팹 (비워두면 미사용).</summary>
+    /// <summary>1인칭 정조준 시 스코프 UI 오버레이를 표시하고 1인칭 손·총기 렌더러를 숨길지 여부.</summary>
+    [SerializeField] private bool usesScopeOverlay;
+
+    /// <summary>무기 전용 스코프 레티클 스프라이트 (비워두면 HUD 기본 스코프 이미지 사용).</summary>
+    [SerializeField] private Sprite scopeOverlaySprite;
+
+    /// <summary>스코프 정조준 중 1인칭 카메라 회전 감도에 곱하는 배율.</summary>
+    [Range(0.05f, 1f)]
+    [SerializeField] private float scopeSensitivityMultiplier = 1f;
+
+    /// <summary>로컬 소유자 발사 시 물리 풀에서 배출할 탄피 <see cref="EjectedCasing"/> 프리팹 (비워두면 미사용).</summary>
     [Header("이펙트")]
-    [SerializeField] private ParticleSystem casingParticlePrefab;
+    [SerializeField] private EjectedCasing casingPrefab;
 
     /// <summary>투척 시 서버에서 스폰할 네트워크 수류탄 프리팹.</summary>
     [Header("투척무기 설정")]
@@ -585,8 +595,17 @@ public class WeaponDataSO : ScriptableObject
     /// <summary>1인칭 정조준 발사 시 이 무기 전용 Z축 후퇴 반동 거리 (0 이하면 기본값 사용, 미터).</summary>
     public float AdsKickbackZOverride => adsKickbackZOverride;
 
-    /// <summary>로컬 소유자 발사 시 배출할 탄피 <see cref="ParticleSystem"/> 프리팹.</summary>
-    public ParticleSystem CasingParticlePrefab => casingParticlePrefab;
+    /// <summary>1인칭 정조준 시 스코프 UI 오버레이를 사용하는지 여부.</summary>
+    public bool UsesScopeOverlay => usesScopeOverlay;
+
+    /// <summary>무기 전용 스코프 레티클 스프라이트 (없으면 기본 이미지 사용).</summary>
+    public Sprite ScopeOverlaySprite => scopeOverlaySprite;
+
+    /// <summary>스코프 정조준 중 1인칭 카메라 회전 감도 배율.</summary>
+    public float ScopeSensitivityMultiplier => scopeSensitivityMultiplier;
+
+    /// <summary>로컬 소유자 발사 시 물리 풀에서 배출할 탄피 <see cref="EjectedCasing"/> 프리팹.</summary>
+    public EjectedCasing CasingPrefab => casingPrefab;
 
     /// <summary>투척무기 카테고리 여부.</summary>
     public bool IsThrowable => category == EWeaponCategory.Throwable;

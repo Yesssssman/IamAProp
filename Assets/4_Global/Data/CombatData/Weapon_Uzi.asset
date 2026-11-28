@@ -97,7 +97,10 @@ MonoBehaviour:
   adsAnchorLocalOffset: {x: 0, y: 0, z: 0}
   adsAnchorLocalRotationOffset: {x: 0, y: 0, z: 0}
   adsKickbackZOverride: 0
-  casingParticlePrefab: {fileID: 1978923543376686067, guid: 46cc821cb69994854864f6b70fa1ddd7, type: 3}
+  usesScopeOverlay: 0
+  scopeOverlaySprite: {fileID: 0}
+  scopeSensitivityMultiplier: 1
+  casingPrefab: {fileID: 7041211115514688635, guid: 3e920c2a73e5248f5aee96e6d70add97, type: 3}
   grenadePrefab: {fileID: 0}
   throwForce: 14
   throwUpwardBias: 0.25

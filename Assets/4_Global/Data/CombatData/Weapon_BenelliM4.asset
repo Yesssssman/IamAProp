@@ -44,6 +44,7 @@ MonoBehaviour:
   handReloadStartClip: {fileID: -6130592870536152902, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
   handReloadLoopClip: {fileID: -7710381101483094694, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
   handReloadFinishClip: {fileID: 1319941296771204866, guid: 2c713b7c0ebe9024699dc66a08dfde46, type: 3}
+  handGrenadeAimClip: {fileID: 0}
   handShotFrames: 17
   weaponShotFrames: 9
   handReloadTotalFrames: 0
@@ -161,4 +162,17 @@ MonoBehaviour:
   adsAnchorLocalOffset: {x: 0, y: 0, z: 0}
   adsAnchorLocalRotationOffset: {x: 0, y: 0, z: 0}
   adsKickbackZOverride: 0
-  casingParticlePrefab: {fileID: 1154780140034771171, guid: 8863d1c651c7e4cfcba433c34d07dfa7, type: 3}
+  usesScopeOverlay: 0
+  scopeOverlaySprite: {fileID: 0}
+  scopeSensitivityMultiplier: 1
+  casingPrefab: {fileID: 7741452765835113546, guid: 895f535d030524eb18a3a85d13f60af4, type: 3}
+  grenadePrefab: {fileID: 0}
+  throwForce: 14
+  throwUpwardBias: 0.25
+  throwRandomTorque: 8
+  grenadeFuseTime: 3
+  explosionRadius: 5
+  explosionMinDamage: 25
+  throwSpawnForwardOffset: 0.45
+  throwSpawnRightOffset: 0.15
+  throwSpawnUpOffset: 0.1
